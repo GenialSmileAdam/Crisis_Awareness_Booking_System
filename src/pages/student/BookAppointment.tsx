@@ -1,76 +1,128 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { AppLayout } from "@/components/AppLayout";
 import { mockCounselors, timeSlots } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
+import { ArrowRight, Lightbulb, User } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const BookAppointment = () => {
-  const [date, setDate] = useState<Date | undefined>(undefined);
-  const [selectedCounselor, setSelectedCounselor] = useState<string | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [date, setDate] = useState<Date | undefined>(new Date(2024, 8, 5));
+  const [selectedTime, setSelectedTime] = useState<string>("10:30 AM");
+  const [note, setNote] = useState("");
+  const bookedSlots = ["09:00 AM"];
 
   const handleConfirm = () => {
-    if (!date || !selectedCounselor || !selectedTime) {
-      toast({ title: "Missing info", description: "Please select a date, counselor, and time slot.", variant: "destructive" });
+    if (!date || !selectedTime) {
+      toast({ title: "Missing info", description: "Please select a date and time slot.", variant: "destructive" });
       return;
     }
     toast({ title: "Appointment Booked!", description: `Scheduled for ${date.toLocaleDateString()} at ${selectedTime}.` });
-    setDate(undefined);
-    setSelectedCounselor(null);
-    setSelectedTime(null);
   };
+
+  const formattedDate = date ? date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "";
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-foreground">Book Appointment</h1>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Select Date</CardTitle></CardHeader>
-            <CardContent>
-              <Calendar mode="single" selected={date} onSelect={setDate} className="rounded-md border" />
+      <div className="space-y-6 max-w-5xl">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Book Appointment</h1>
+          <p className="text-muted-foreground mt-1">Select a preferred time for your counseling session.</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Calendar */}
+          <Card className="lg:col-span-3">
+            <CardContent className="p-6">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                className="w-full"
+              />
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Select Counselor</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {mockCounselors.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => setSelectedCounselor(c.id)}
-                  className={`p-3 rounded-lg border cursor-pointer transition ${selectedCounselor === c.id ? "border-primary bg-primary/5" : "hover:border-primary/50"}`}
-                >
-                  <p className="font-medium text-sm">{c.name}</p>
-                  <p className="text-xs text-muted-foreground">{c.specialization}</p>
+          {/* Time slots & booking */}
+          <div className="lg:col-span-2 space-y-4">
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold">Available Slots</h3>
+                  <span className="text-sm text-primary font-medium">{formattedDate}</span>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                <div className="grid grid-cols-2 gap-3">
+                  {timeSlots.map((t) => {
+                    const isBooked = bookedSlots.includes(t);
+                    const isSelected = selectedTime === t;
+                    return (
+                      <button
+                        key={t}
+                        disabled={isBooked}
+                        onClick={() => setSelectedTime(t)}
+                        className={`rounded-xl border-2 p-3 text-center transition-colors ${
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : isBooked
+                            ? "border-border bg-secondary/50 opacity-60"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <p className={`text-sm font-semibold ${isSelected ? "text-primary" : ""}`}>{t}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">
+                          {isBooked ? "Booked" : isSelected ? "Selected" : ""}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Select Time</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2">
-                {timeSlots.map((t) => (
-                  <Button
-                    key={t}
-                    variant={selectedTime === t ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedTime(t)}
-                  >
-                    {t}
-                  </Button>
-                ))}
-              </div>
-              <Button className="w-full mt-4" onClick={handleConfirm} disabled={!date || !selectedCounselor || !selectedTime}>
-                Confirm Booking
-              </Button>
-            </CardContent>
-          </Card>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Add a brief note (Optional)</label>
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Tell us how you're feeling today..."
+                className="bg-secondary/50 border-0"
+                rows={3}
+              />
+            </div>
+
+            {/* Assigned counselor */}
+            <Card className="bg-secondary/50 border-0">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-primary/10 text-primary"><User className="h-5 w-5" /></AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">Assigned Counselor</p>
+                  <p className="text-sm font-bold">Dr. Sarah Jenkins</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Button className="w-full h-12 rounded-xl text-sm font-semibold" onClick={handleConfirm}>
+              Book Now <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+
+            {/* Tip */}
+            <Card className="bg-emerald-50 border-emerald-200">
+              <CardContent className="p-4 flex gap-3">
+                <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                  <Lightbulb className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-emerald-800">Preparation Tip</p>
+                  <p className="text-xs text-emerald-700">Finding a quiet, private space for your virtual session can help you feel more comfortable and focused.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </AppLayout>
