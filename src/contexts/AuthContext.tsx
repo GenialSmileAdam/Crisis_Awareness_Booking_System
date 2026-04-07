@@ -12,10 +12,10 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 export const useAuth = () => useContext(AuthContext);
 
 const roleUsers: Record<UserRole, User> = {
-  student: { id: "s1", name: "Alex Johnson", email: "alex@uni.edu", role: "student" },
-  counselor: { id: "c1", name: "Dr. Emily Carter", email: "ecarter@uni.edu", role: "counselor" },
-  admin: { id: "adm1", name: "Admin User", email: "admin@uni.edu", role: "admin" },
-  family: { id: "f1", name: "Maria Johnson", email: "maria@email.com", role: "family" },
+  student: { id: "s1", name: "Alex Rivera", email: "alex@uni.edu", role: "student", subtitle: "Student ID: 48291" },
+  counselor: { id: "c1", name: "Dr. Sarah Jenkins", email: "sjenkins@uni.edu", role: "counselor", subtitle: "Lead Counselor" },
+  admin: { id: "adm1", name: "Crisis Awareness", email: "admin@uni.edu", role: "admin", subtitle: "System Admin" },
+  family: { id: "f1", name: "Eleanor Henderson", email: "eleanor@email.com", role: "family", subtitle: "Parent" },
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

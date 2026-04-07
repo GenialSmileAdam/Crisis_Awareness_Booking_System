@@ -1,26 +1,25 @@
 import {
-  LayoutDashboard, CalendarPlus, History, Brain, Users, UserCircle, ClipboardList, Home,
+  LayoutDashboard, CalendarPlus, Clock, Brain, Users, UserCircle, Shield,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar, SidebarFooter,
 } from "@/components/ui/sidebar";
 
 const studentLinks = [
   { title: "Dashboard", url: "/student/dashboard", icon: LayoutDashboard },
   { title: "Book Appointment", url: "/student/book-appointment", icon: CalendarPlus },
-  { title: "My Sessions", url: "/student/sessions", icon: History },
-  { title: "AI Summary", url: "/student/ai-summary", icon: Brain },
+  { title: "Sessions", url: "/student/sessions", icon: Clock },
 ];
 
 const counselorLinks = [
   { title: "Dashboard", url: "/counselor/dashboard", icon: LayoutDashboard },
-  { title: "Session History", url: "/counselor/sessions", icon: ClipboardList },
-  { title: "Student List", url: "/counselor/students", icon: Users },
-  { title: "AI Summary", url: "/counselor/ai-summary", icon: Brain },
-  { title: "Family Engagement", url: "/counselor/family-engagement", icon: UserCircle },
+  { title: "Sessions", url: "/counselor/sessions", icon: Clock },
+  { title: "AI Summaries", url: "/counselor/ai-summary", icon: Brain },
+  { title: "Engagement", url: "/counselor/family-engagement", icon: Users },
 ];
 
 const adminLinks = [
@@ -28,7 +27,7 @@ const adminLinks = [
 ];
 
 const familyLinks = [
-  { title: "Dashboard", url: "/family/dashboard", icon: Home },
+  { title: "Dashboard", url: "/family/dashboard", icon: LayoutDashboard },
 ];
 
 export function AppSidebar() {
@@ -42,12 +41,24 @@ export function AppSidebar() {
     : familyLinks;
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarContent>
+    <Sidebar collapsible="icon" className="border-r-0">
+      <SidebarContent className="bg-background pt-2">
+        {/* Logo */}
+        <div className="px-4 py-3 flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+            <Shield className="h-4 w-4 text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <div>
+              <p className="text-sm font-bold text-primary">Crisis Awareness</p>
+              <p className="text-[10px] text-muted-foreground tracking-widest uppercase">
+                {user?.role === "student" ? "Student Management Portal" : "Management Portal"}
+              </p>
+            </div>
+          )}
+        </div>
+
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/60">
-            {!collapsed && "Navigation"}
-          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {links.map((item) => (
@@ -55,10 +66,10 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="hover:bg-sidebar-accent"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary-foreground font-medium"
+                      className="rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                      activeClassName="bg-primary text-primary-foreground font-medium"
                     >
-                      <item.icon className="mr-2 h-4 w-4" />
+                      <item.icon className="mr-3 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
@@ -68,6 +79,31 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {!collapsed && (
+        <SidebarFooter className="bg-background p-4 border-t-0">
+          {user?.role === "counselor" && (
+            <div className="mb-3">
+              <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">Crisis Hotline</p>
+              <p className="text-sm font-semibold text-foreground">+234 8093824230</p>
+              <button className="mt-2 w-full rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground flex items-center justify-center gap-1">
+                📞 DIRECT LIAISON
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-secondary text-xs">
+                {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold truncate">{user?.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{user?.subtitle}</p>
+            </div>
+          </div>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }
