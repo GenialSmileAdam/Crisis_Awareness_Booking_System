@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  subtitle?: string;
 }
 
 export interface Student {
@@ -45,8 +46,10 @@ export interface Session {
   counselorId: string;
   counselorName: string;
   date: string;
+  time?: string;
   type: string;
-  status: "pending" | "completed";
+  status: "pending" | "completed" | "cancelled";
+  duration?: string;
   notes?: string;
   moodRating?: number;
   progressRating?: number;
@@ -67,4 +70,9 @@ export interface AISummary {
   riskFlags: string[];
   recommendations: string[];
   generatedAt: string;
+  sessionTitle?: string;
+  sessionDate?: string;
+  quote?: string;
+  discourse?: string;
+  recommendedActions?: string;
 }
