@@ -8,10 +8,8 @@ import LoginPage from "./pages/LoginPage";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import BookAppointment from "./pages/student/BookAppointment";
 import StudentSessions from "./pages/student/StudentSessions";
-import StudentAISummary from "./pages/student/StudentAISummary";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import CounselorSessions from "./pages/counselor/CounselorSessions";
-import CounselorStudents from "./pages/counselor/CounselorStudents";
 import SessionDetail from "./pages/counselor/SessionDetail";
 import CounselorAISummary from "./pages/counselor/CounselorAISummary";
 import FamilyEngagement from "./pages/counselor/FamilyEngagement";
@@ -39,11 +37,9 @@ const AppRoutes = () => {
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/student/book-appointment" element={<BookAppointment />} />
       <Route path="/student/sessions" element={<StudentSessions />} />
-      <Route path="/student/ai-summary" element={<StudentAISummary />} />
 
       <Route path="/counselor/dashboard" element={<CounselorDashboard />} />
       <Route path="/counselor/sessions" element={<CounselorSessions />} />
-      <Route path="/counselor/students" element={<CounselorStudents />} />
       <Route path="/counselor/session/:id" element={<SessionDetail />} />
       <Route path="/counselor/ai-summary/:studentId" element={<CounselorAISummary />} />
       <Route path="/counselor/ai-summary" element={<CounselorAISummary />} />
