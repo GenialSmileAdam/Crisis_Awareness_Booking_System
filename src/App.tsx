@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import BookAppointment from "./pages/student/BookAppointment";
 import StudentSessions from "./pages/student/StudentSessions";
@@ -25,7 +26,9 @@ const AppRoutes = () => {
   if (!user) {
     return (
       <Routes>
-        <Route path="*" element={<LoginPage />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
@@ -33,6 +36,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<Navigate to={`/${user.role}/dashboard`} replace />} />
+      <Route path="/landing" element={<LandingPage />} />
 
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/student/book-appointment" element={<BookAppointment />} />
