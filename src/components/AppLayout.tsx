@@ -2,10 +2,10 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Bell, LogOut, Search } from "lucide-react";
+import { Search, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 export const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
@@ -48,21 +48,39 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-4 w-4" />
-                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-accent text-[10px] text-accent-foreground flex items-center justify-center">3</span>
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="text-right">
-                  <p className="text-xs font-semibold">{user?.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{user?.subtitle}</p>
-                </div>
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                    {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
+              <HoverCard openDelay={100} closeDelay={150}>
+                <HoverCardTrigger asChild>
+                  <Avatar className="h-9 w-9 cursor-pointer ring-2 ring-transparent hover:ring-primary/40 transition-all">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+                      {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                </HoverCardTrigger>
+                <HoverCardContent align="end" className="w-56 p-0 overflow-hidden">
+                  {/* User info header */}
+                  <div className="px-4 pt-4 pb-3 border-b">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
+                          {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{user?.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{user?.subtitle}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Logout */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors font-medium"
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    Log Out
+                  </button>
+                </HoverCardContent>
+              </HoverCard>
             </div>
           </header>
           <main className="flex-1 p-6 overflow-auto">{children}</main>

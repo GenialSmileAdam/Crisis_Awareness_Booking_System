@@ -1,13 +1,20 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { AppLayout } from "@/components/AppLayout";
-import { mockAppointments } from "@/data/mockData";
-import { ChevronRight, BookOpen, Headphones, Smile } from "lucide-react";
+import { ChevronRight, BookOpen, Headphones, Smile, CalendarCheck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { useBooking } from "@/contexts/BookingContext";
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
+  const { bookedSessions } = useBooking();
+
+  // Get the next upcoming session (earliest future date)
+  const now = new Date();
+  const nextSession = bookedSessions
+    .filter((s) => s.status === "upcoming" && s.date >= now)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
 
   const recentHistory = [
     { date: "Oct 12, 2023", title: "Weekly Check-in Complete", detail: "Mood: Moderate • Energy: High", color: "bg-primary" },
@@ -22,19 +29,17 @@ const StudentDashboard = () => {
         <Card className="overflow-hidden">
           <CardContent className="p-8 flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 border-0 text-xs">😊 Stable</Badge>
-              </div>
               <h1 className="text-3xl font-bold text-foreground mb-2">Hello, Alex Rivera.</h1>
-              <p className="text-muted-foreground mb-6">
-                Your next session is in <span className="text-primary font-semibold">2 days</span>. How are you feeling today?
+              <p className="text-muted-foreground mb-6 max-w-md">
+                Your wellbeing matters. Book a session with a counselor, track your journey, and access support whenever you need it.
               </p>
               <div className="flex gap-3">
                 <Button onClick={() => navigate("/student/book-appointment")} className="rounded-lg">
                   Book a Session
                 </Button>
-                <Button variant="outline" className="rounded-lg">
-                  Check Progress
+                <Button variant="outline" className="rounded-lg" onClick={() => navigate("/student/sessions")}>
+                  <CalendarCheck className="h-4 w-4 mr-2" />
+                  View My Sessions
                 </Button>
               </div>
             </div>
@@ -49,23 +54,44 @@ const StudentDashboard = () => {
                 <h2 className="text-xl font-bold">Upcoming Sessions</h2>
                 <button className="text-sm text-primary font-semibold hover:underline" onClick={() => navigate("/student/sessions")}>View All</button>
               </div>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-primary">24</p>
-                    <p className="text-xs text-primary uppercase">Oct</p>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge className="bg-primary/10 text-primary border-0 text-[10px] uppercase font-semibold">Regular</Badge>
-                      <span className="text-xs text-muted-foreground">10:30 AM — 11:30 AM</span>
+
+              {nextSession ? (
+                <Card
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => navigate("/student/sessions")}
+                >
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="text-center min-w-[40px]">
+                      <p className="text-2xl font-bold text-primary">
+                        {nextSession.date.toLocaleDateString("en-US", { day: "numeric" })}
+                      </p>
+                      <p className="text-xs text-primary uppercase">
+                        {nextSession.date.toLocaleDateString("en-US", { month: "short" })}
+                      </p>
                     </div>
-                    <p className="font-semibold text-sm">Cognitive Behavioral Therapy</p>
-                    <p className="text-xs text-muted-foreground">Dr. Sarah Jenkins</p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </CardContent>
-              </Card>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className="bg-primary/10 text-primary border-0 text-[10px] uppercase font-semibold">Regular</Badge>
+                        <span className="text-xs text-muted-foreground">{nextSession.time}</span>
+                      </div>
+                      <p className="font-semibold text-sm">{nextSession.sessionType}</p>
+                      <p className="text-xs text-muted-foreground">{nextSession.counselorName}</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="p-6 text-center">
+                    <CalendarCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">No upcoming sessions</p>
+                    <p className="text-xs text-muted-foreground mb-4">Book a session to get started on your wellness journey.</p>
+                    <Button size="sm" onClick={() => navigate("/student/book-appointment")}>
+                      Book Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Resources */}

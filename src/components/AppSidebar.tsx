@@ -4,7 +4,7 @@ import {
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar, SidebarFooter,
@@ -51,7 +51,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarContent className="bg-background pt-2">
         {/* Logo */}
-        <div className="px-4 py-3 flex items-center gap-2">
+        <div className={`py-3 flex items-center gap-2 ${collapsed ? "justify-center px-0" : "px-4"}`}>
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
             <Shield className="h-4 w-4 text-primary-foreground" />
           </div>
@@ -88,24 +88,19 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="bg-background border-t border-border/50">
-        {/* Collapsed: show only logout icon */}
         {collapsed ? (
-          <div className="flex flex-col items-center py-3 gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-secondary text-xs">
-                {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
-              </AvatarFallback>
-            </Avatar>
+          /* Collapsed: centered logout icon */
+          <div className="flex flex-col items-center py-3">
             <button
               onClick={handleLogout}
-              title="Logout"
+              title="Log Out"
               className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
             >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         ) : (
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-3">
             {user?.role === "counselor" && (
               <div className="mb-1">
                 <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">Crisis Hotline</p>
@@ -115,20 +110,6 @@ export function AppSidebar() {
                 </button>
               </div>
             )}
-
-            {/* User info */}
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-secondary text-xs">
-                  {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold truncate">{user?.name}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{user?.subtitle}</p>
-              </div>
-            </div>
-
             {/* Logout button */}
             <button
               onClick={handleLogout}

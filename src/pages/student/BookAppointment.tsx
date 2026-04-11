@@ -8,19 +8,37 @@ import { mockCounselors, timeSlots } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
 import { ArrowRight, Lightbulb, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useBooking } from "@/contexts/BookingContext";
+import { useNavigate } from "react-router-dom";
 
 const BookAppointment = () => {
-  const [date, setDate] = useState<Date | undefined>(new Date(2024, 8, 5));
-  const [selectedTime, setSelectedTime] = useState<string>("10:30 AM");
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [selectedTime, setSelectedTime] = useState<string>("");
   const [note, setNote] = useState("");
   const bookedSlots = ["09:00 AM"];
+  const { addBooking } = useBooking();
+  const navigate = useNavigate();
 
   const handleConfirm = () => {
     if (!date || !selectedTime) {
       toast({ title: "Missing info", description: "Please select a date and time slot.", variant: "destructive" });
       return;
     }
-    toast({ title: "Appointment Booked!", description: `Scheduled for ${date.toLocaleDateString()} at ${selectedTime}.` });
+
+    addBooking({
+      date,
+      time: selectedTime,
+      counselorName: "Dr. Sarah Jenkins",
+      sessionType: "Cognitive Behavioral Therapy",
+      note,
+    });
+
+    toast({
+      title: "Appointment Booked!",
+      description: `Scheduled for ${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at ${selectedTime}.`,
+    });
+
+    navigate("/student/sessions");
   };
 
   const formattedDate = date ? date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "";
@@ -42,6 +60,7 @@ const BookAppointment = () => {
                 selected={date}
                 onSelect={setDate}
                 className="w-full"
+                disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
               />
             </CardContent>
           </Card>
@@ -106,7 +125,11 @@ const BookAppointment = () => {
               </CardContent>
             </Card>
 
-            <Button className="w-full h-12 rounded-xl text-sm font-semibold" onClick={handleConfirm}>
+            <Button
+              className="w-full h-12 rounded-xl text-sm font-semibold"
+              onClick={handleConfirm}
+              disabled={!date || !selectedTime}
+            >
               Book Now <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
 
