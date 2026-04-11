@@ -20,8 +20,8 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-secondary/30">
         <AppSidebar />
-        <div className="flex-1 flex flex-col">
-          <header className="h-14 flex items-center justify-between border-b bg-card px-6">
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="h-14 flex items-center justify-between border-b bg-card px-6 sticky top-0 z-50 shadow-sm">
             <div className="flex items-center gap-3 flex-1">
               <SidebarTrigger />
               {user?.role === "counselor" && (
@@ -48,37 +48,43 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <HoverCard openDelay={100} closeDelay={150}>
+              <HoverCard openDelay={0} closeDelay={100}>
                 <HoverCardTrigger asChild>
-                  <Avatar className="h-9 w-9 cursor-pointer ring-2 ring-transparent hover:ring-primary/40 transition-all">
+                  <Avatar className="h-9 w-9 cursor-pointer ring-2 ring-primary/10 hover:ring-primary transition-all">
                     <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                       {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
                     </AvatarFallback>
                   </Avatar>
                 </HoverCardTrigger>
-                <HoverCardContent align="end" className="w-56 p-0 overflow-hidden">
-                  {/* User info header */}
-                  <div className="px-4 pt-4 pb-3 border-b">
+                <HoverCardContent align="end" className="w-64 p-0 shadow-xl border-primary/10">
+                  <div className="bg-primary/5 p-4 border-b border-primary/10">
                     <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
+                      <Avatar className="h-10 w-10 ring-2 ring-primary/20">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                           {user?.name?.split(" ").map(n => n[0]).join("") || "U"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{user?.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{user?.subtitle}</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {user?.name}
+                        </p>
+                        <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+                          {user?.subtitle}
+                        </p>
                       </div>
                     </div>
                   </div>
-                  {/* Logout */}
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors font-medium"
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    Log Out
-                  </button>
+                  <div className="p-2">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-muted-foreground hover:bg-destructive/5 hover:text-destructive rounded-lg transition-all group font-medium"
+                    >
+                      <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center group-hover:bg-destructive/10 transition-colors">
+                        <LogOut className="h-4 w-4" />
+                      </div>
+                      <span>Log Out</span>
+                    </button>
+                  </div>
                 </HoverCardContent>
               </HoverCard>
             </div>

@@ -1,40 +1,69 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/AppLayout";
-import { ChevronRight, BookOpen, Headphones, Smile, CalendarCheck } from "lucide-react";
+import { 
+  ChevronRight, 
+  BookOpen, 
+  Headphones, 
+  Smile, 
+  CalendarCheck, 
+  MoreHorizontal,
+  RefreshCcw,
+  History,
+  FileText,
+  Settings
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useBooking } from "@/contexts/BookingContext";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const { bookedSessions } = useBooking();
+  const { user } = useAuth();
 
-  // Get the next upcoming session (earliest future date)
+  // Get upcoming sessions (future dates)
   const now = new Date();
-  const nextSession = bookedSessions
+  const upcomingSessions = bookedSessions
     .filter((s) => s.status === "upcoming" && s.date >= now)
-    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, 2); // Show top 2 for the dashboard
 
-  const recentHistory = [
-    { date: "Oct 12, 2023", title: "Weekly Check-in Complete", detail: "Mood: Moderate • Energy: High", color: "bg-primary" },
-    { date: "Oct 05, 2023", title: "Monthly Group Workshop", detail: "Topic: Mindfulness at Work", color: "bg-primary" },
-    { date: "Sep 28, 2023", title: "Session with Dr. Jenkins", detail: "Outcome: Cognitive Mapping", color: "bg-emerald-500" },
-  ];
+  // Get up to 3 most recent past sessions
+  const recentHistory = bookedSessions
+    .filter((s) => s.date < now || s.status === "completed")
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 3);
+
+  const handleRefresh = () => {
+    toast.success("Dashboard data updated");
+  };
 
   return (
     <AppLayout>
       <div className="space-y-6 max-w-5xl">
         {/* Hero */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-none bg-gradient-to-br from-primary/5 via-background to-background ring-1 ring-primary/10">
           <CardContent className="p-8 flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">Hello, Alex Rivera.</h1>
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                Hello, {user?.name.split(' ')[0] || "Alex"}.
+              </h1>
               <p className="text-muted-foreground mb-6 max-w-md">
                 Your wellbeing matters. Book a session with a counselor, track your journey, and access support whenever you need it.
               </p>
               <div className="flex gap-3">
-                <Button onClick={() => navigate("/student/book-appointment")} className="rounded-lg">
+                <Button onClick={() => navigate("/student/book-appointment")} className="rounded-lg shadow-sm">
                   Book a Session
                 </Button>
                 <Button variant="outline" className="rounded-lg" onClick={() => navigate("/student/sessions")}>
@@ -43,126 +72,215 @@ const StudentDashboard = () => {
                 </Button>
               </div>
             </div>
+            <div className="hidden md:block h-32 w-32 bg-primary/10 rounded-full blur-2xl absolute -right-10 top-0" />
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Upcoming Sessions */}
-          <div className="lg:col-span-3 space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Upcoming Sessions</h2>
-                <button className="text-sm text-primary font-semibold hover:underline" onClick={() => navigate("/student/sessions")}>View All</button>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+          {/* Upcoming Sessions & Resources */}
+          <div className="lg:col-span-3 flex flex-col space-y-6">
+            <div className="flex flex-col space-y-6 h-full">
+              <div className="flex-none">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">Upcoming Sessions</h2>
+                  <button 
+                    className="text-sm text-primary font-semibold hover:underline" 
+                    onClick={() => navigate("/student/sessions")}
+                  >
+                    View All
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {upcomingSessions.length > 0 ? (
+                    upcomingSessions.map((session) => (
+                      <Card
+                        key={session.id}
+                        className="cursor-pointer hover:shadow-md transition-all border-l-4 border-l-primary"
+                        onClick={() => navigate("/student/sessions")}
+                      >
+                        <CardContent className="p-4 flex items-center gap-4">
+                          <div className="text-center min-w-[40px]">
+                            <p className="text-2xl font-bold text-primary">
+                              {session.date.toLocaleDateString("en-US", { day: "numeric" })}
+                            </p>
+                            <p className="text-xs text-primary uppercase font-bold">
+                              {session.date.toLocaleDateString("en-US", { month: "short" })}
+                            </p>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge className="bg-primary/10 text-primary border-0 text-[10px] uppercase font-bold tracking-tight">
+                                Upcoming
+                              </Badge>
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <RefreshCcw className="h-3 w-3" />
+                                {session.time}
+                              </span>
+                            </div>
+                            <p className="font-bold text-sm">{session.sessionType}</p>
+                            <p className="text-xs text-muted-foreground">{session.counselorName}</p>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <Card className="border-dashed">
+                      <CardContent className="p-8 text-center">
+                        <div className="h-12 w-12 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CalendarCheck className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground mb-1">No upcoming sessions</p>
+                        <p className="text-xs text-muted-foreground mb-6">Book a session to get started on your wellness journey.</p>
+                        <Button size="sm" onClick={() => navigate("/student/book-appointment")} className="rounded-full px-6">
+                          Book Now
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </div>
 
-              {nextSession ? (
-                <Card
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate("/student/sessions")}
-                >
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="text-center min-w-[40px]">
-                      <p className="text-2xl font-bold text-primary">
-                        {nextSession.date.toLocaleDateString("en-US", { day: "numeric" })}
-                      </p>
-                      <p className="text-xs text-primary uppercase">
-                        {nextSession.date.toLocaleDateString("en-US", { month: "short" })}
-                      </p>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className="bg-primary/10 text-primary border-0 text-[10px] uppercase font-semibold">Regular</Badge>
-                        <span className="text-xs text-muted-foreground">{nextSession.time}</span>
+              {/* Resources - now using flex-1 to grow */}
+              <Card className="flex-1 flex flex-col">
+                <CardContent className="p-5 flex-1 flex flex-col">
+                  <h3 className="font-bold mb-4">Mental Health Resources</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50/50 border border-orange-100 cursor-pointer hover:bg-orange-50 transition-colors h-full">
+                      <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+                        <BookOpen className="h-5 w-5 text-orange-600" />
                       </div>
-                      <p className="font-semibold text-sm">{nextSession.sessionType}</p>
-                      <p className="text-xs text-muted-foreground">{nextSession.counselorName}</p>
+                      <div>
+                        <p className="text-sm font-bold">Anxiety Guide</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">4 min read</p>
+                      </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <CalendarCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm font-semibold text-foreground mb-1">No upcoming sessions</p>
-                    <p className="text-xs text-muted-foreground mb-4">Book a session to get started on your wellness journey.</p>
-                    <Button size="sm" onClick={() => navigate("/student/book-appointment")}>
-                      Book Now
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 cursor-pointer hover:bg-emerald-50 transition-colors h-full">
+                      <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                        <Headphones className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Deep Sleep</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">12 min audio</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-sky-50/50 border border-sky-100 cursor-pointer hover:bg-sky-50 transition-colors h-full">
+                      <div className="h-10 w-10 rounded-lg bg-sky-100 flex items-center justify-center shrink-0">
+                        <Headphones className="h-5 w-5 text-sky-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Ease Up</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">5 min audio</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50/50 border border-violet-100 cursor-pointer hover:bg-violet-50 transition-colors h-full">
+                      <div className="h-10 w-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                        <Smile className="h-5 w-5 text-violet-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Mood Log</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">External Tool</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-
-            {/* Resources */}
-            <Card>
-              <CardContent className="p-5">
-                <h3 className="font-semibold mb-4">Mental Health Resources</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                    <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                      <BookOpen className="h-5 w-5 text-orange-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Anxiety Guide</p>
-                      <p className="text-xs text-muted-foreground">4 min read</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                    <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                      <Headphones className="h-5 w-5 text-emerald-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Deep Sleep Meditation</p>
-                      <p className="text-xs text-muted-foreground">12 min audio</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
-          {/* Right column */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Recent History */}
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Recent History</h3>
-                  <button className="text-muted-foreground">•••</button>
+          {/* Recent History & Crisis */}
+          <div className="lg:col-span-2 flex flex-col space-y-6">
+            {/* Recent History - using flex-1 to grow */}
+            <Card className="flex-1 flex flex-col">
+              <CardContent className="p-5 flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-6 flex-none">
+                  <h3 className="font-bold">Recent History</h3>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleRefresh}>
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        <span>Refresh Data</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate("/student/sessions")}>
+                        <History className="mr-2 h-4 w-4" />
+                        <span>Full History</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => toast.info("Report downloading...")}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Export Report</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <div className="space-y-4">
-                  {recentHistory.map((item, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className={`w-1 rounded-full ${item.color} shrink-0`} />
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">{item.date}</p>
-                        <p className="text-sm font-semibold">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.detail}</p>
+                
+                <div className="space-y-5 flex-1">
+                  {recentHistory.length > 0 ? (
+                    recentHistory.map((item, i) => (
+                      <div key={item.id} className="flex gap-4 group">
+                        <div className="relative">
+                          <div className={`w-1 h-full rounded-full bg-primary/20 group-hover:bg-primary transition-colors`} />
+                          {i === 0 && <div className="absolute top-0 left-0 w-1 h-3 rounded-full bg-primary" />}
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            {item.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
+                          <p className="text-sm font-bold">{item.sessionType}</p>
+                          <p className="text-xs text-muted-foreground">Completed with {item.counselorName}</p>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-10 flex-1 flex flex-col justify-center">
+                      <div className="h-10 w-10 bg-secondary rounded-full flex items-center justify-center mx-auto mb-3">
+                        <History className="h-5 w-5 text-muted-foreground opacity-50" />
+                      </div>
+                      <p className="text-xs text-muted-foreground px-4">
+                        Your session history will appear here once interactions are completed.
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
-                <Button variant="outline" className="w-full mt-4 text-primary text-sm">
-                  Download Full Report
-                </Button>
+                
+                {recentHistory.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-6 text-primary text-xs font-bold h-9 flex-none"
+                    onClick={() => navigate("/student/sessions")}
+                  >
+                    View All History
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
-            {/* Crisis card */}
-            <Card className="bg-accent text-accent-foreground overflow-hidden">
-              <CardContent className="p-5">
+            {/* Crisis card - flex-none to keep its size */}
+            <Card className="bg-accent text-accent-foreground overflow-hidden relative group flex-none">
+              <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <CardContent className="p-5 relative">
                 <div className="h-8 w-8 rounded-lg bg-accent-foreground/20 flex items-center justify-center mb-3">
                   <Smile className="h-4 w-4" />
                 </div>
                 <h3 className="font-bold text-lg mb-1">Are you having a Crisis?</h3>
-                <p className="text-xs text-accent-foreground/80 mb-4">
-                  If you or someone else is in immediate danger, please press this button if you are for immediate help.
+                <p className="text-xs text-accent-foreground/80 mb-4 leading-relaxed">
+                  If you or someone else is in immediate danger, please press this button for immediate help.
                 </p>
-                <div className="bg-accent-foreground/10 rounded-xl p-3 flex items-center justify-between">
+                <a 
+                  href="tel:+23480174890"
+                  className="bg-accent-foreground/10 hover:bg-accent-foreground/20 transition-colors rounded-xl p-3 flex items-center justify-between no-underline"
+                >
                   <span className="font-bold text-sm text-accent-foreground">Call +23480174890</span>
-                  <span>📞</span>
-                </div>
+                  <span className="text-lg">📞</span>
+                </a>
               </CardContent>
             </Card>
           </div>

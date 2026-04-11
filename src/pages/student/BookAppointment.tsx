@@ -51,101 +51,120 @@ const BookAppointment = () => {
           <p className="text-muted-foreground mt-1">Select a preferred time for your counseling session.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Calendar */}
-          <Card className="lg:col-span-3">
-            <CardContent className="p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          {/* Left Column: Calendar & Additional Info */}
+          <div className="space-y-6">
+            <div className="w-full relative z-10">
               <Calendar
                 mode="single"
                 selected={date}
                 onSelect={setDate}
-                className="w-full"
+                className="w-full p-2 bg-transparent border-0"
+                classNames={{
+                  months: "w-full",
+                  month: "w-full space-y-4",
+                  table: "w-full border-collapse",
+                  head_row: "flex w-full justify-between mb-2",
+                  head_cell: "text-muted-foreground w-full font-bold text-[0.8rem] uppercase",
+                  row: "flex w-full mt-2 justify-between gap-1",
+                  cell: "h-10 sm:h-12 w-full text-center text-sm p-0 relative focus-within:relative focus-within:z-20 flex justify-center items-center",
+                  day: "h-10 w-10 sm:h-12 sm:w-12 p-0 font-normal aria-selected:opacity-100 rounded-full mx-auto hover:bg-accent hover:text-accent-foreground transition-colors",
+                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground font-bold shadow-md shadow-primary/20 scale-[1.05]",
+                  day_today: "bg-secondary text-secondary-foreground font-bold",
+                  day_outside: "text-muted-foreground opacity-50",
+                  day_disabled: "text-muted-foreground opacity-30",
+                }}
                 disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Time slots & booking */}
-          <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold">Available Slots</h3>
-                  <span className="text-sm text-primary font-medium">{formattedDate}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {timeSlots.map((t) => {
-                    const isBooked = bookedSlots.includes(t);
-                    const isSelected = selectedTime === t;
-                    return (
-                      <button
-                        key={t}
-                        disabled={isBooked}
-                        onClick={() => setSelectedTime(t)}
-                        className={`rounded-xl border-2 p-3 text-center transition-colors ${
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : isBooked
-                            ? "border-border bg-secondary/50 opacity-60"
-                            : "border-border hover:border-primary/50"
-                        }`}
-                      >
-                        <p className={`text-sm font-semibold ${isSelected ? "text-primary" : ""}`}>{t}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase">
-                          {isBooked ? "Booked" : isSelected ? "Selected" : ""}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Add a brief note (Optional)</label>
-              <Textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Tell us how you're feeling today..."
-                className="bg-secondary/50 border-0"
-                rows={3}
               />
             </div>
 
-            {/* Assigned counselor */}
-            <Card className="bg-secondary/50 border-0">
-              <CardContent className="p-4 flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-primary/10 text-primary"><User className="h-5 w-5" /></AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-primary font-semibold">Assigned Counselor</p>
-                  <p className="text-sm font-bold">Dr. Sarah Jenkins</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Button
-              className="w-full h-12 rounded-xl text-sm font-semibold"
-              onClick={handleConfirm}
-              disabled={!date || !selectedTime}
-            >
-              Book Now <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-
-            {/* Tip */}
-            <Card className="bg-emerald-50 border-emerald-200">
-              <CardContent className="p-4 flex gap-3">
-                <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                  <Lightbulb className="h-4 w-4 text-primary-foreground" />
+            {/* Preparation Tip moved here for visual balance */}
+            <Card className="bg-emerald-50 border-emerald-200 shadow-sm">
+              <CardContent className="p-5 flex gap-4">
+                <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 shadow-sm">
+                  <Lightbulb className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-emerald-800">Preparation Tip</p>
-                  <p className="text-xs text-emerald-700">Finding a quiet, private space for your virtual session can help you feel more comfortable and focused.</p>
+                  <p className="font-bold text-emerald-800 mb-1">Preparation Tip</p>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    Finding a quiet, private space for your virtual session can help you feel more comfortable and focused. Check your internet connection 5 minutes prior.
+                  </p>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Right Column: Time slots & booking details combined into one Card */}
+          <Card className="shadow-none border-0 bg-transparent lg:bg-card lg:border lg:shadow-sm lg:rounded-2xl">
+            <CardContent className="p-0 lg:p-6 space-y-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">Select a Time</h3>
+                <span className="text-sm text-primary font-semibold py-1 px-3 bg-primary/10 rounded-full">
+                  {formattedDate || "No date selected"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {timeSlots.map((t) => {
+                  const isBooked = bookedSlots.includes(t);
+                  const isSelected = selectedTime === t;
+                  return (
+                    <button
+                      key={t}
+                      disabled={isBooked}
+                      onClick={() => setSelectedTime(t)}
+                      className={`rounded-xl border-2 p-2.5 text-center transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary shadow-[0_0_0_3px_rgba(var(--primary),0.2)] text-primary-foreground scale-[1.02]"
+                          : isBooked
+                          ? "border-border bg-secondary/30 opacity-50 cursor-not-allowed"
+                          : "border-border hover:border-primary/40 hover:bg-primary/5"
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${isSelected ? "text-primary-foreground" : "text-foreground"}`}>{t}</p>
+                      <p className={`text-[9px] uppercase font-bold mt-0.5 ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        {isBooked ? "Booked" : isSelected ? "Selected" : "Available"}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Note & Counselor Container */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Note (Optional)</label>
+                  <Textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Focus for today..."
+                    className="bg-secondary/30 resize-none rounded-xl text-sm"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5 shrink-0">Assigned To</label>
+                  <div className="bg-primary/5 rounded-xl p-3 flex items-center gap-3 border border-primary/10 flex-1">
+                    <Avatar className="h-10 w-10 border-2 border-primary/20">
+                      <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs">SJ</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-bold text-foreground text-sm">Dr. Sarah Jenkins</p>
+                      <p className="text-[10px] text-primary font-bold">Counselor</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                className="w-full h-12 rounded-xl text-base font-bold shadow-md hover:shadow-lg transition-all"
+                onClick={handleConfirm}
+                disabled={!date || !selectedTime}
+              >
+                Confirm Appointment <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </AppLayout>

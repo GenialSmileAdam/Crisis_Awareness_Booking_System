@@ -317,12 +317,6 @@ const StudentSessions = () => {
           </CardContent>
         </Card>
 
-        {/* SOS Button */}
-        <div className="fixed bottom-6 right-6">
-          <button className="h-14 w-14 rounded-full bg-accent text-accent-foreground font-bold text-sm shadow-lg hover:shadow-xl transition">
-            SOS
-          </button>
-        </div>
       </div>
 
       {/* Session Detail Modal */}
