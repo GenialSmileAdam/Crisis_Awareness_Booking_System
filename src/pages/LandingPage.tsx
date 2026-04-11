@@ -6,13 +6,11 @@ const LandingPage = () => {
   const navigate = useNavigate();
 
   const schedule = [
-    { day: "Mon", open: "9 am", close: "8 pm" },
-    { day: "Tue", open: "9 am", close: "8 pm" },
-    { day: "Wed", open: "9 am", close: "8 pm" },
-    { day: "Thu", open: "9 am", close: "8 pm" },
-    { day: "Fri", open: "9 am", close: "8 pm" },
-    { day: "Sat", open: "-", close: "-" },
-    { day: "Sun", open: "-", close: "-" },
+    { day: "Mon", open: "9:00 am", close: "5:30 pm" },
+    { day: "Tue", open: "9:00 am", close: "5:30 pm" },
+    { day: "Wed", open: "9:00 am", close: "5:30 pm" },
+    { day: "Thu", open: "9:00 am", close: "5:30 pm" },
+    { day: "Fri", open: "9:00 am", close: "5:30 pm" },
   ];
 
   const contactInfo = [
@@ -87,7 +85,7 @@ const LandingPage = () => {
               <h2 className="text-2xl font-bold tracking-tight">Psychologist Availability</h2>
             </div>
 
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-5 gap-3">
               {schedule.map((item) => (
                 <div
                   key={item.day}
