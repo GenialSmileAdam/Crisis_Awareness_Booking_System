@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole } from "@/types";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,12 @@ const roleRoutes: Record<UserRole, string> = {
 };
 
 const LoginPage = () => {
+  const location = useLocation();
+  const queryRole = new URLSearchParams(location.search).get("role") as UserRole | null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState<UserRole>("counselor");
+  const [role, setRole] = useState<UserRole>(queryRole && ["student", "counselor", "admin", "family"].includes(queryRole) ? queryRole : "student");
   const [error, setError] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -96,7 +98,7 @@ const LoginPage = () => {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="email"
-                  placeholder="counselor@crisisaware.org"
+                  placeholder="student@crisisaware.org"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(""); }}
                   className="pl-9 bg-secondary/50 border-0 h-11"

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Shield background -->
+  <path
+    d="M16 2L4 7v8c0 7.18 5.18 13.9 12 15.5C22.82 28.9 28 22.18 28 15V7L16 2z"
+    fill="#2563eb"
+  />
+  <!-- Inner shield highlight -->
+  <path
+    d="M16 5L7 9.2V15c0 5.56 4.02 10.78 9 12.28V5z"
+    fill="#3b82f6"
+    opacity="0.4"
+  />
+  <!-- Shield check / cross mark -->
+  <path
+    d="M11 16l3.5 3.5L21 12"
+    stroke="white"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

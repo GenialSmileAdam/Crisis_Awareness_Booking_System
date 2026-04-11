@@ -37,7 +37,7 @@ const LandingPage = () => {
             </span>
           </div>
           <Button
-            onClick={() => navigate("/login")}
+          onClick={() => navigate("/login?role=student")}
             className="rounded-full px-6 font-semibold"
           >
             Login
@@ -64,7 +64,7 @@ const LandingPage = () => {
           <Button
             size="lg"
             className="rounded-full px-12 h-14 text-base font-bold shadow-xl hover:-translate-y-0.5 transition-transform"
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/login?role=student")}
           >
             Book Your Appointment
           </Button>
