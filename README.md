@@ -51,6 +51,23 @@ The Psychology Unit currently operates without any digital system. Scheduling is
 - **Week 3:** AI & Analytics – Whisper transcription, GPT-4o summaries, progress reports, analytics dashboard
 - **Week 4:** Refinement & Demo – UI polish, bug fixes, end-to-end testing, stakeholder demo
 
+## Project Structure
+
+```
+/
+├── frontend/          # React + Vite frontend application
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── ...
+├── backend/           # Python / FastAPI backend
+│   ├── app/
+│   ├── migrations/
+│   └── requirements.txt
+├── .gitignore
+└── README.md
+```
+
 ## Setup Instructions
 
 ### Prerequisites
