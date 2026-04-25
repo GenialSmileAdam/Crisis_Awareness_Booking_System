@@ -65,9 +65,11 @@ class AuthService:
                     detail="Student ID already exists",
                 )
 
+        temporary_password = data.password or security.generate_temporary_password()
+
         user = User(
             email=data.email,
-            password_hash=security.hash_password(data.password),
+            password_hash=security.hash_password(temporary_password),
             full_name=data.full_name,
             role=UserRole(data.user_type),
             is_admin=False,
@@ -104,6 +106,7 @@ class AuthService:
             "id": str(user.id),
             "email": user.email,
             "full_name": user.full_name,
+            "temporary_password": temporary_password,
             "user_type": user.role.value,
             "is_admin": user.is_admin,
             "effective_role": security.determine_effective_role(

@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.py[cod]
+test/
 
 #Ignore audio files
 *.ogg
@@ -19,5 +20,6 @@ Thumbs.db
 env/
 reqs.txt
 *.docx
-scripts/   
+scripts/
+Others/
 

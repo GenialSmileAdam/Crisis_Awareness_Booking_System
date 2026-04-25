@@ -22,7 +22,7 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: str
-    password: str
+    password: Optional[str] = None
     full_name: str
     user_type: Literal["staff", "student"]
     staff_id: Optional[str] = None
