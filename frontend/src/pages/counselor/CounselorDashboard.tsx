@@ -347,7 +347,7 @@ export default function CounselorDashboard() {
                 <h2 className="font-display text-base md:text-2xl font-bold">Upcoming Sessions</h2>
                 <p className="text-sm text-muted-foreground mt-1">Manage your schedule and appointments</p>
               </div>
-              <Button onClick={() => setCurrentView("dashboard")} variant="outline" size="sm">
+              <Button onClick={() => navigate("/counselor")} variant="outline" size="sm">
                 &larr; Back to Dashboard
               </Button>
             </div>
