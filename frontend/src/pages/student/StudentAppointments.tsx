@@ -89,7 +89,7 @@ export default function StudentAppointments() {
   return (
     <AppShell items={studentSidebarItems}>
       {/* Top bar */}
-      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1">
           <div className="font-display font-bold text-xl md:text-2xl">My Appointments</div>
           <div className="text-xs text-muted-foreground mt-0.5">Book and manage your wellness sessions</div>

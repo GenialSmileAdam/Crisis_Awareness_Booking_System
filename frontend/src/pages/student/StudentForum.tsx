@@ -72,7 +72,7 @@ export default function StudentForum() {
 
   return (
     <AppShell items={studentSidebarItems}>
-      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1 pr-2">
           <h1 className="font-display text-xl font-bold">Wellness Forum</h1>
           <p className="text-xs text-muted-foreground mt-0.5">Anonymous peer support — your identity is never revealed.</p>

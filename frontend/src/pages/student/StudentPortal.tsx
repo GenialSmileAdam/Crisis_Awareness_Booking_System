@@ -208,7 +208,7 @@ export default function StudentPortal() {
 
   return (
     <AppShell items={portalItems}>
-      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1">
           <h1 className="font-display text-xl md:text-2xl font-bold">{greeting} 👋</h1>
           <p className="text-xs text-muted-foreground mt-0.5">

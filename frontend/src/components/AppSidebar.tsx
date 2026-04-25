@@ -127,13 +127,16 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
 
 export function AppShell({ items, children }: { items: SidebarItem[]; children: ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full bg-background pb-[calc(env(safe-area-inset-bottom)+60px)] md:pb-0">
+    <div className="flex min-h-screen w-full bg-background pb-[calc(env(safe-area-inset-bottom)+60px)] md:pb-0 overflow-x-hidden">
       <AppSidebar items={items} />
       <main className="flex-1 min-w-0">{children}</main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar border-t border-border pb-safe flex">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#1A1A1A] border-t border-border/10 pb-safe flex">
         {items.map((it) => {
+          const { user } = useAuth();
+          const activeColor = user?.role === "student" ? "text-primary" : "text-[#8b5cf6]";
+          
           const inner = (active: boolean) => (
             <div
               className={cn(
@@ -141,7 +144,7 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
                 it.disabled
                   ? "opacity-50"
                   : active
-                  ? "text-primary"
+                  ? activeColor
                   : "text-muted-foreground"
               )}
             >

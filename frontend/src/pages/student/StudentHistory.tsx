@@ -18,7 +18,7 @@ export default function StudentHistory() {
 
   return (
     <AppShell items={studentSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-4 md:px-8 border-b border-border">
+      <div className="flex items-center justify-between h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-2 md:gap-3">
           <Link to="/student"><Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button></Link>
           <h1 className="font-display text-lg md:text-xl font-bold">My check-in history</h1>

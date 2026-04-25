@@ -85,7 +85,7 @@ export default function SessionReviewer() {
 
   return (
     <AppShell items={counselorSidebarItems}>
-      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-2 md:gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/counselor")} className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button>
           <div>

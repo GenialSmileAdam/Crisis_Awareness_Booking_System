@@ -91,9 +91,14 @@ export default function CounselorDashboard() {
     setOverrideModal(null);
   };
 
+  const sidebarItems: SidebarItem[] = [
+    ...counselorSidebarItems,
+    { icon: LogOut, label: "Logout", onClick: () => { logout(); navigate("/login"); } }
+  ];
+
   return (
-    <AppShell items={counselorSidebarItems}>
-      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+    <AppShell items={sidebarItems}>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <DropdownMenu>
@@ -120,7 +125,7 @@ export default function CounselorDashboard() {
 
       <div className="p-4 md:p-8 space-y-6">
         {/* KPIs — full width 4 cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {kpis.map((k) => {
             const Icon = k.icon;
             return (
@@ -128,22 +133,22 @@ export default function CounselorDashboard() {
                 key={k.label}
                 onClick={k.action}
                 className={cn(
-                  "surface-card surface-card-hover p-5 text-left transition",
+                  "surface-card surface-card-hover p-4 md:p-5 text-left transition",
                   k.danger && "border-destructive/30"
                 )}
               >
                 <div className="flex items-start justify-between">
                   <div className={cn(
-                    "h-10 w-10 rounded-xl flex items-center justify-center",
+                    "h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl flex items-center justify-center",
                     k.danger ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"
                   )}>
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-4 w-4 md:h-5 md:w-5" />
                   </div>
                 </div>
-                <div className={cn("font-display text-3xl font-bold mt-3 tabular-nums", k.danger && "text-destructive")}>
+                <div className={cn("font-display text-2xl md:text-3xl font-bold mt-2 md:mt-3 tabular-nums", k.danger && "text-destructive")}>
                   {k.value}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">{k.label}</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">{k.label}</div>
               </button>
             );
           })}
@@ -152,29 +157,29 @@ export default function CounselorDashboard() {
         {currentView === "dashboard" ? (
           <div className="grid lg:grid-cols-12 gap-6 animate-fade-in">
             {/* Left col — Risk table */}
-            <div className="lg:col-span-8 surface-card p-6">
+            <div className="lg:col-span-8 surface-card p-4 md:p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div>
-                  <h2 className="font-display text-xl font-bold">Risk roster</h2>
-                  <p className="text-xs text-muted-foreground">Sorted by WRS, highest risk first</p>
+                  <h2 className="font-display text-base md:text-xl font-bold">Risk roster</h2>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">Sorted by WRS, highest risk first</p>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="relative">
+                <div className="flex items-center gap-3 flex-col sm:flex-row w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       value={search}
                       onChange={(e) => { setSearch(e.target.value); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                       placeholder="Search student..."
-                      className="pl-9 h-9 w-56"
+                      className="pl-9 h-9 w-full sm:w-56"
                     />
                   </div>
-                  <div className="flex gap-1 p-1 rounded-full bg-muted">
+                  <div className="flex overflow-x-auto scrollbar-none gap-1 p-1 rounded-full bg-muted w-full sm:w-auto whitespace-nowrap">
                     {TIERS.map((t) => (
                       <button
                         key={t}
                         onClick={() => { setFilter(t); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                         className={cn(
-                          "px-3 py-1 text-xs font-semibold rounded-full transition",
+                          "px-4 py-1 text-xs font-semibold rounded-full transition text-center",
                           filter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                         )}
                       >
@@ -200,16 +205,16 @@ export default function CounselorDashboard() {
                   <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                     <tr className="border-b border-border">
                       <th className="text-left p-3">Student</th>
-                      <th className="text-left p-3">Level</th>
-                      <th className="text-left p-3">Faculty</th>
+                      <th className="hidden md:table-cell text-left p-3">Level</th>
+                      <th className="hidden md:table-cell text-left p-3">Faculty</th>
                       <th className="text-left p-3">
                         <button onClick={() => setSortDesc(!sortDesc)} className="inline-flex items-center gap-1 hover:text-foreground">
                           WRS <ArrowUpDown className="h-3 w-3" />
                         </button>
                       </th>
                       <th className="text-left p-3">Tier</th>
-                      <th className="text-left p-3">Last Severity</th>
-                      <th className="text-left p-3">Last check-in</th>
+                      <th className="hidden md:table-cell text-left p-3">Last Severity</th>
+                      <th className="hidden md:table-cell text-left p-3">Last check-in</th>
                       <th className="text-right p-3">Action</th>
                     </tr>
                   </thead>
@@ -221,37 +226,37 @@ export default function CounselorDashboard() {
                       const color = colorFromTier(tier);
                       return (
                         <tr key={s.id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
-                          <td className="p-3 font-medium">{s.name}</td>
-                          <td className="p-3 text-muted-foreground">{s.classLevel}</td>
-                          <td className="p-3 text-muted-foreground">{s.faculty}</td>
+                          <td className="p-3 font-medium text-xs md:text-sm">{s.name}</td>
+                          <td className="hidden md:table-cell p-3 text-muted-foreground">{s.classLevel}</td>
+                          <td className="hidden md:table-cell p-3 text-muted-foreground">{s.faculty}</td>
                           <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
                               {s.wrs}
                             </span>
                           </td>
                           <td className="p-3">
                             <div className="flex items-center gap-2">
                               <span
-                                className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
+                                className={cn("text-[10px] md:text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
                                 style={{ backgroundColor: `${color}25`, color }}
                               >
                                 {tier}
                               </span>
                               {isOverridden && (
-                                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                                   Overridden
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className="p-3 text-muted-foreground text-xs">{s.lastSeverity}</td>
-                          <td className="p-3 text-muted-foreground text-xs font-mono">{s.lastCheckIn}</td>
+                          <td className="hidden md:table-cell p-3 text-muted-foreground text-xs">{s.lastSeverity}</td>
+                          <td className="hidden md:table-cell p-3 text-muted-foreground text-xs font-mono">{s.lastCheckIn}</td>
                           <td className="p-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.id}`)}>
-                                View Session
+                            <div className="flex flex-col sm:flex-row justify-end gap-1.5 md:gap-2">
+                              <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.id}`)} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
+                                View
                               </Button>
-                              <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.id, name: s.name, currentTier: baseTier, newTier: baseTier, justification: "" })}>
+                              <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.id, name: s.name, currentTier: baseTier, newTier: baseTier, justification: "" })} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
                                 Override
                               </Button>
                             </div>
@@ -281,20 +286,19 @@ export default function CounselorDashboard() {
             {/* Right col — charts stacked */}
             <div className="lg:col-span-4 space-y-6">
               {/* Faculty WRS bar chart */}
-              <div className="surface-card p-6">
+              <div className="surface-card p-4 md:p-6">
                 <div className="label-eyebrow mb-1">Faculty WRS</div>
-                <div className="font-display text-base font-bold mb-4">Click bar to filter</div>
+                <div className="font-display text-sm md:text-base font-bold mb-4">Click bar to filter</div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={FACULTY_WRS} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                  <BarChart data={FACULTY_WRS} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
                     <XAxis
                       dataKey="faculty"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={10}
-                      tickFormatter={(v) => v.split(" ")[0].slice(0, 4)}
+                      tick={false}
+                      axisLine={false}
                     />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: { faculty: string }) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
+                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: { faculty: string }) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }} label={{ position: 'top', fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}>
                       {FACULTY_WRS.map((d, i) => (
                         <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
                       ))}
@@ -304,48 +308,48 @@ export default function CounselorDashboard() {
               </div>
 
               {/* At-risk summary donut */}
-              <div className="surface-card p-6">
-                <div className="label-eyebrow mb-1">At-risk summary</div>
-                <div className="font-display text-base font-bold mb-4">Tier distribution</div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <PieChart>
-                    <Pie
-                      data={tierData}
-                      dataKey="value"
-                      innerRadius={45}
-                      outerRadius={75}
-                      paddingAngle={3}
-                      cursor="pointer"
-                      onClick={(d: { name: string }) => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                    >
-                      {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5 mt-2">
-                  {tierData.map((d) => (
-                    <button
-                      key={d.name}
-                      onClick={() => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-muted/50 text-sm transition"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
-                        {d.name}
-                      </span>
-                      <span className="font-mono font-semibold tabular-nums">{d.value}</span>
-                    </button>
-                  ))}
+              <div className="surface-card p-4 md:p-6">
+                <div className="label-eyebrow mb-1 text-[10px] md:text-xs">At-risk summary</div>
+                <div className="font-display text-sm md:text-base font-bold mb-4">Tier distribution</div>
+                <div className="flex flex-col items-center">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={tierData}
+                        dataKey="value"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        cursor="pointer"
+                        onClick={(d: { name: string }) => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
+                      >
+                        {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-4 w-full">
+                    {tierData.map((d) => (
+                      <button
+                        key={d.name}
+                        onClick={() => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 text-[10px] md:text-xs transition"
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                        <span className="text-muted-foreground">{d.name}</span>
+                        <span className="font-mono font-bold tabular-nums">{d.value}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="surface-card p-6 animate-fade-in">
+          <div className="surface-card p-4 md:p-6 animate-fade-in">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
               <div>
-                <h2 className="font-display text-2xl font-bold">Upcoming Sessions</h2>
+                <h2 className="font-display text-base md:text-2xl font-bold">Upcoming Sessions</h2>
                 <p className="text-sm text-muted-foreground mt-1">Manage your schedule and appointments</p>
               </div>
               <Button onClick={() => setCurrentView("dashboard")} variant="outline" size="sm">
