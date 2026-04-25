@@ -14,6 +14,7 @@ import StudentPortal from "./pages/student/StudentPortal";
 import StudentHistory from "./pages/student/StudentHistory";
 import StudentAppointments from "./pages/student/StudentAppointments";
 import StudentResources from "./pages/student/StudentResources";
+import StudentConsent from "./pages/student/StudentConsent";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import SessionReviewer from "./pages/counselor/SessionReviewer";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -36,11 +37,12 @@ const App = () => (
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />
+                <Route path="/student/consent" element={<StudentRoute><StudentConsent /></StudentRoute>} />
                 <Route path="/student/history" element={<StudentRoute><StudentHistory /></StudentRoute>} />
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
-                <Route path="/counselor" element={<ProtectedRoute role="counselor"><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/session/:id" element={<ProtectedRoute role="counselor"><SessionReviewer /></ProtectedRoute>} />
+                <Route path="/counselor" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/settings" element={<ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute>} />

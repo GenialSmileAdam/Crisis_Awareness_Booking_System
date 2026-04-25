@@ -57,10 +57,18 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
+      {/* Crisis Bar */}
+      <div className="fixed top-0 inset-x-0 z-[60] bg-[#B00020] text-white h-10 px-6 flex justify-between items-center text-sm">
+        <div className="font-bold">🆘 Need immediate help?</div>
+        <a href="tel:0800-SAFESPACE" className="font-bold hover:underline cursor-pointer">
+          Call Crisis Hotline: 0800-SAFESPACE
+        </a>
+      </div>
+
       {/* Nav */}
       <nav
         className={cn(
-          "fixed top-0 inset-x-0 z-50 transition-all duration-300",
+          "fixed top-10 inset-x-0 z-50 transition-all duration-300",
           scrolled ? "backdrop-blur-xl bg-background/70 border-b border-border py-3" : "py-5"
         )}
       >

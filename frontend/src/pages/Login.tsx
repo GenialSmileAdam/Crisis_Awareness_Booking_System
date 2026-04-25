@@ -12,19 +12,19 @@ import { WRSRing } from "@/components/WRSRing";
 
 const ROLES: { id: Role; label: string }[] = [
   { id: "student", label: "Student" },
-  { id: "counselor", label: "Counselor" },
+  { id: "psychologist", label: "Counselor" },
   { id: "admin", label: "Admin" },
 ];
 
-const HINTS: Record<Role, { email: string; pwd: string }> = {
-  student: { email: "student@nileuni.edu", pwd: "ChangeMe123!" },
-  counselor: { email: "dr.amara@nileuni.edu", pwd: "counsel123" },
-  admin: { email: "admin@nileuni.edu", pwd: "admin123" },
+const HINTS: Record<Role, { identifier: string; pwd: string }> = {
+  student: { identifier: "Student ID: 241030217", pwd: "ChangeMe123!" },
+  psychologist: { identifier: "dr.amara@nileuni.edu", pwd: "counsel123" },
+  admin: { identifier: "admin@nileuni.edu", pwd: "admin123" },
 };
 
 export default function Login() {
   const [role, setRole] = useState<Role>("student");
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const { login } = useAuth();
@@ -33,9 +33,9 @@ export default function Login() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const ok = login(role, email, password);
+    const ok = login(role, identifier, password);
     if (!ok) return setError("Invalid credentials. Please try again.");
-    navigate(role === "student" ? "/student" : `/${role}`);
+    navigate(role === "student" ? "/student" : role === "psychologist" ? "/counselor" : `/${role}`);
   };
 
   return (
@@ -104,13 +104,13 @@ export default function Login() {
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="identifier">{role === "student" ? "Student ID" : "Email Address"}</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@nileuni.edu"
+                id="identifier"
+                type={role === "student" ? "text" : "email"}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={role === "student" ? "e.g., 241030217" : "you@nileuni.edu"}
                 required
                 className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
               />
@@ -139,7 +139,7 @@ export default function Login() {
           <div className="mt-6 p-3 rounded-xl bg-muted/60 border border-border text-xs">
             <div className="label-eyebrow mb-1.5">Demo credentials</div>
             <div className="font-mono text-[11px] space-y-0.5">
-              <div>{HINTS[role].email}</div>
+              <div>{HINTS[role].identifier}</div>
               <div className="text-muted-foreground">{HINTS[role].pwd}</div>
             </div>
           </div>

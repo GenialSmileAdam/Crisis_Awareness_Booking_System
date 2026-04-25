@@ -14,8 +14,14 @@ export function StudentRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  const consentSigned = localStorage.getItem("consent_signed") === "true";
+
+  if (!consentSigned && pathname !== "/student/consent") {
+    return <Navigate to="/student/consent" replace />;
+  }
+
   // Check-in gate: must complete check-in before navigating away from /student
-  if (!sessionCheckInComplete && pathname !== "/student") {
+  if (consentSigned && !sessionCheckInComplete && pathname !== "/student" && pathname !== "/student/consent") {
     return <Navigate to="/student" replace />;
   }
 

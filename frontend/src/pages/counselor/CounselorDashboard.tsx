@@ -6,6 +6,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import { STUDENTS, FACULTY_WRS, UPCOMING_SESSIONS, tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
 import { cn } from "@/lib/utils";
@@ -22,7 +25,11 @@ export default function CounselorDashboard() {
   const [sortDesc, setSortDesc] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "schedule">("dashboard");
   const [sessions, setSessions] = useState(UPCOMING_SESSIONS);
+  const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
+  const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const navigate = useNavigate();
+
+  const colorFromTier = (t: string) => t === "Green" ? "#A8FF3E" : t === "Amber" ? "#FF8C42" : t === "Red" ? "#FF4560" : "#B00020";
 
   const items: SidebarItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", onClick: () => setCurrentView("dashboard") },
@@ -30,16 +37,20 @@ export default function CounselorDashboard() {
     { icon: Calendar, label: "Schedule", onClick: () => setCurrentView("schedule") },
   ];
 
+  const activeHighRiskCount = useMemo(() => {
+    return STUDENTS.filter(s => tierFromWrs(s.wrs) === "Red" || tierFromWrs(s.wrs) === "Critical").length;
+  }, []);
+
   const kpis = [
-    { label: "Total Students", value: "—", icon: Users, action: () => { setCurrentView("dashboard"); setFilter("All"); setFacultyFilter(null); } },
-    { label: "Active High-Risk Alerts", value: "—", icon: AlertTriangle, danger: true, action: () => { setCurrentView("dashboard"); setFilter("Red"); } },
-    { label: "Sessions This Week", value: "—", icon: CalendarCheck, action: () => setCurrentView("schedule") },
+    { label: "Total Students", value: STUDENTS.length, icon: Users, action: () => { setCurrentView("dashboard"); setFilter("All"); setFacultyFilter(null); } },
+    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { setCurrentView("dashboard"); setFilter("Critical"); } },
+    { label: "Sessions This Week", value: sessions.length, icon: CalendarCheck, action: () => setCurrentView("schedule") },
     { label: "Avg Campus WRS", value: "—", icon: Activity, action: () => toast.info("Data will be available after integration") },
   ];
 
   const rows = useMemo(() => {
     let r = [...STUDENTS];
-    if (filter !== "All") r = r.filter((s) => tierFromWrs(s.wrs) === filter);
+    if (filter !== "All") r = r.filter((s) => (overrides[s.id] || tierFromWrs(s.wrs)) === filter);
     if (facultyFilter) r = r.filter((s) => s.faculty === facultyFilter);
     if (search) r = r.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
     r.sort((a, b) => (sortDesc ? b.wrs - a.wrs : a.wrs - b.wrs));
@@ -66,6 +77,17 @@ export default function CounselorDashboard() {
       setSessions(sessions.map(s => s.id === id ? { ...s, status: "Canceled" } : s));
       toast.success("Session canceled successfully.");
     }
+  };
+
+  const handleOverrideSubmit = () => {
+    if (!overrideModal) return;
+    if (overrideModal.justification.trim().length < 20) {
+      toast.error("Please provide a detailed justification");
+      return;
+    }
+    setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier as RiskTier }));
+    toast.success(`Risk tier overridden for ${overrideModal.name}`);
+    setOverrideModal(null);
   };
 
   return (
@@ -187,30 +209,44 @@ export default function CounselorDashboard() {
                   </thead>
                   <tbody>
                     {rows.map((s, i) => {
-                      const tier = tierFromWrs(s.wrs);
-                      const color = colorFromWrs(s.wrs);
+                      const baseTier = tierFromWrs(s.wrs);
+                      const isOverridden = !!overrides[s.id];
+                      const tier = overrides[s.id] || baseTier;
+                      const color = colorFromTier(tier);
                       return (
                         <tr key={s.id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
                           <td className="p-3 font-medium">{s.name}</td>
                           <td className="p-3 text-muted-foreground">{s.faculty}</td>
                           <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>
+                            <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
                               {s.wrs}
                             </span>
                           </td>
                           <td className="p-3">
-                            <span
-                              className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
-                              style={{ backgroundColor: `${color}25`, color }}
-                            >
-                              {tier}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
+                                style={{ backgroundColor: `${color}25`, color }}
+                              >
+                                {tier}
+                              </span>
+                              {isOverridden && (
+                                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                  Overridden
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3 text-muted-foreground text-xs font-mono">{s.lastCheckIn}</td>
                           <td className="p-3 text-right">
-                            <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.id}`)}>
-                              View Session
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.id}`)}>
+                                View Session
+                              </Button>
+                              <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.id, name: s.name, currentTier: baseTier, newTier: baseTier, justification: "" })}>
+                                Override
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -382,6 +418,59 @@ export default function CounselorDashboard() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!overrideModal} onOpenChange={(open) => !open && setOverrideModal(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Override Risk Tier</DialogTitle>
+          </DialogHeader>
+          {overrideModal && (
+            <div className="grid gap-4 py-4">
+              <div>
+                <div className="text-sm font-medium mb-1">Student</div>
+                <div className="text-sm text-muted-foreground">{overrideModal.name} · Current: <span className="font-semibold" style={{ color: colorFromTier(overrideModal.currentTier) }}>{overrideModal.currentTier}</span></div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">New Tier</div>
+                <Select value={overrideModal.newTier} onValueChange={(v) => setOverrideModal({ ...overrideModal, newTier: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Green">Green</SelectItem>
+                    <SelectItem value="Amber">Amber</SelectItem>
+                    <SelectItem value="Red">Red</SelectItem>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm font-medium">Justification</div>
+                  <div className="text-xs text-muted-foreground">{overrideModal.justification.length} / 20 min</div>
+                </div>
+                <Textarea
+                  placeholder="Provide clinical justification for this override..."
+                  value={overrideModal.justification}
+                  onChange={(e) => setOverrideModal({ ...overrideModal, justification: e.target.value })}
+                  className={cn(overrideModal.justification.length > 0 && overrideModal.justification.length < 20 && "border-destructive focus-visible:ring-destructive")}
+                />
+                {overrideModal.justification.length > 0 && overrideModal.justification.length < 20 && (
+                  <div className="text-xs text-destructive">Please provide a detailed justification</div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => setOverrideModal(null)} className="w-full sm:w-auto">
+              Cancel
+            </Button>
+            <Button onClick={handleOverrideSubmit} className="w-full bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
+              Confirm Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

@@ -62,9 +62,13 @@ export default function AdminDashboard() {
   const pageCount = Math.max(1, Math.ceil(filteredAlerts.length / pageSize));
   const pageRows = filteredAlerts.slice((page - 1) * pageSize, page * pageSize);
 
+  const activeHighRiskCount = useMemo(() => {
+    return alerts.filter(a => tierFromWrs(a.wrs) === "Red" || tierFromWrs(a.wrs) === "Critical").length;
+  }, [alerts]);
+
   const kpis = [
-    { label: "Total Students Monitored", value: "—", icon: Users, scrollTo: "trend" },
-    { label: "Active High-Risk Alerts", value: "—", icon: AlertTriangle, danger: true, scrollTo: "alerts" },
+    { label: "Total Students Monitored", value: STUDENTS.length, icon: Users, scrollTo: "trend" },
+    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, scrollTo: "alerts" },
     { label: "Check-ins This Week", value: "—", icon: ClipboardCheck, scrollTo: "faculty" },
     { label: "Avg Campus WRS", value: "—", icon: Activity, scrollTo: "trend" },
   ];
@@ -72,7 +76,7 @@ export default function AdminDashboard() {
   const handleSidebar = (label: string) => {
     if (label === "Reports") {
       downloadCSV("safespace_report.csv", [
-        ["Student ID", "Faculty", "WRS", "Counselor"],
+        ["Student ID", "Faculty", "WRS", "Psychologist"],
         ...STUDENTS.map((s) => [s.id, s.faculty, String(s.wrs), s.counselor]),
       ]);
       toast.success("Report downloaded");
@@ -232,7 +236,7 @@ export default function AdminDashboard() {
                   <th className="text-left p-3">WRS</th>
                   <th className="text-left p-3">Tier</th>
                   <th className="text-left p-3">Time</th>
-                  <th className="text-left p-3">Counselor</th>
+                  <th className="text-left p-3">Psychologist</th>
                   <th className="text-left p-3">Status</th>
                 </tr>
               </thead>

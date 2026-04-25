@@ -109,7 +109,18 @@ export default function StudentPortal() {
   const studentName = user?.name || "Student";
 
   // Pending survey tracking
-  const [completedSurveys, setCompletedSurveys] = useState<Set<SurveyTab>>(new Set());
+  const [completedSurveys, setCompletedSurveys] = useState<Set<SurveyTab>>(() => {
+    const s = new Set<SurveyTab>();
+    const now = new Date().getTime();
+    const pulseDate = localStorage.getItem("last_pulse");
+    const phq9Date = localStorage.getItem("last_phq9");
+    const gad7Date = localStorage.getItem("last_gad7");
+
+    if (pulseDate && now - new Date(pulseDate).getTime() < 7 * 24 * 60 * 60 * 1000) s.add("pulse");
+    if (phq9Date && now - new Date(phq9Date).getTime() < 30 * 24 * 60 * 60 * 1000) s.add("phq9");
+    if (gad7Date && now - new Date(gad7Date).getTime() < 30 * 24 * 60 * 60 * 1000) s.add("gad7");
+    return s;
+  });
   const pendingSurveys = useMemo(() => {
     const pending: SurveyTab[] = [];
     if (!completedSurveys.has("pulse")) pending.push("pulse");
@@ -125,7 +136,7 @@ export default function StudentPortal() {
   const [hotlineOpen, setHotlineOpen] = useState(false);
   const tier = tierFromWrs(wrs);
 
-  const [hasCompletedRecently, setHasCompletedRecently] = useState(sessionCheckInComplete);
+  const [hasCompletedRecently, setHasCompletedRecently] = useState(() => sessionCheckInComplete || completedSurveys.size === 3);
 
   const handleSubmit = (responses: Record<string, number>) => {
     // Calculate score from responses for WRS
@@ -134,6 +145,8 @@ export default function StudentPortal() {
     const total = values.reduce((a, b) => a + b, 0);
     const score = Math.round((total / maxPossible) * 100);
     setWrs(score);
+
+    localStorage.setItem(`last_${tab}`, new Date().toISOString());
 
     // Mark this survey as complete
     setCompletedSurveys(prev => {
