@@ -153,28 +153,30 @@ export default function CounselorDashboard() {
           <div className="grid lg:grid-cols-12 gap-6 animate-fade-in">
             {/* Left col — Risk table */}
             <div className="lg:col-span-8 surface-card p-4 md:p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                <div>
-                  <h2 className="font-display text-base md:text-xl font-bold">Risk roster</h2>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">Sorted by WRS, highest risk first</p>
+              <div className="mb-6">
+                <div className="mb-4">
+                  <h2 className="font-display text-lg font-bold">Risk Roster</h2>
+                  <p className="text-xs text-muted-foreground">Sorted by WRS, highest risk first</p>
                 </div>
-                <div className="flex items-center gap-3 flex-col sm:flex-row w-full sm:w-auto">
-                  <div className="relative w-full sm:w-auto">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       value={search}
                       onChange={(e) => { setSearch(e.target.value); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                       placeholder="Search student..."
-                      className="pl-9 h-9 w-full sm:w-56"
+                      className="pl-10 h-10 w-full"
                     />
                   </div>
-                  <div className="flex overflow-x-auto scrollbar-none gap-1 p-1 rounded-full bg-muted w-full sm:w-auto whitespace-nowrap">
+                  
+                  <div className="flex overflow-x-auto scrollbar-none gap-1 p-1 rounded-full bg-muted w-full md:w-auto whitespace-nowrap">
                     {TIERS.map((t) => (
                       <button
                         key={t}
                         onClick={() => { setFilter(t); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                         className={cn(
-                          "px-4 py-1 text-xs font-semibold rounded-full transition text-center",
+                          "px-4 py-1.5 text-xs font-semibold rounded-full transition text-center",
                           filter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                         )}
                       >
