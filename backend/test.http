@@ -1,0 +1,37 @@
+### Register a student
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "full_name": "John Doe",
+  "password": "secret123",
+  "user_type": "student",
+  "student_id": "STU001",
+  "class_level": "300L",
+  "emergency_contact": "Jane Doe",
+  "emergency_phone": "08012345678"
+}
+
+### Register a staff
+POST http://localhost:8000/auth/register
+Content-Type: application/json
+
+{
+  "full_name": "Dr Smith",
+  "password": "secret123",
+  "user_type": "staff",
+  "staff_id": "STF001",
+  "staff_type": "counselor"
+}
+
+### Login as student (just the ID, no email)
+POST http://localhost:8000/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=STU001&password=secret123
+
+### Login as staff
+POST http://localhost:8000/auth/login
+Content-Type: application/x-www-form-urlencoded`    
+
+username=STF001&password=secret123

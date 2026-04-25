@@ -13,6 +13,8 @@ from app.models.students import Student
 from app.models.users import UserRole
 from app.schemas.auth import RegisterRequest
 
+NILE_EMAIL_DOMAIN = "@nileuniversity.edu.ng"
+
 
 class AuthService:
     @staticmethod
@@ -39,8 +41,12 @@ class AuthService:
 
     @classmethod
     async def register(cls, db: AsyncSession, data: RegisterRequest) -> dict:
+        # Derive the email from the role-specific ID
+        user_id = data.staff_id if data.user_type == "staff" else data.student_id
+        email = f"{user_id}{NILE_EMAIL_DOMAIN}"
+
         existing = await db.execute(
-            select(User).where(User.email == data.email, User.deleted_at.is_(None))
+            select(User).where(User.email == email, User.deleted_at.is_(None))
         )
         if existing.scalar_one_or_none():
             raise HTTPException(
@@ -66,7 +72,7 @@ class AuthService:
                 )
 
         user = User(
-            email=data.email,
+            email=email,
             password_hash=security.hash_password(data.password),
             full_name=data.full_name,
             role=UserRole(data.user_type),
@@ -115,7 +121,9 @@ class AuthService:
         }
 
     @staticmethod
-    async def login(db: AsyncSession, email: str, password: str) -> Dict[str, str]:
+    async def login(db: AsyncSession, user_id: str, password: str) -> Dict[str, str]:
+        email = f"{user_id}{NILE_EMAIL_DOMAIN}"
+
         stmt = select(User).where(
             User.email == email,
             User.deleted_at.is_(None),
@@ -126,7 +134,7 @@ class AuthService:
         if user is None or not user.password_hash or not security.verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
+                detail="Invalid ID or password",
             )
 
         if not user.is_active:
