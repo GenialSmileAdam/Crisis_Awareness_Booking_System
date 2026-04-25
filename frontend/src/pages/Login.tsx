@@ -17,9 +17,9 @@ const ROLES: { id: Role; label: string }[] = [
 ];
 
 const HINTS: Record<Role, { identifier: string; pwd: string }> = {
-  student: { identifier: "Student ID: 241030217", pwd: "ChangeMe123!" },
+  student: { identifier: "Student ID: 27001011", pwd: "StudentPass123!" },
   psychologist: { identifier: "dr.amara@nileuni.edu", pwd: "counsel123" },
-  admin: { identifier: "admin@nileuni.edu", pwd: "admin123" },
+  admin: { identifier: "thisismymail014@gmail.com", pwd: "PsyUnitAdmin1" },
 };
 
 export default function Login() {
@@ -110,7 +110,7 @@ export default function Login() {
                 type={role === "student" ? "text" : "email"}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={role === "student" ? "e.g., 241030217" : "you@nileuni.edu"}
+                placeholder={role === "student" ? "e.g., 27001011" : "you@nileuni.edu"}
                 required
                 className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
               />

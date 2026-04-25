@@ -14,6 +14,7 @@ const items: SidebarItem[] = [
   { icon: CalendarIcon, label: "Appointments", to: "/student/appointments" },
   { icon: History, label: "History", to: "/student/history" },
   { icon: LifeBuoy, label: "Resources", to: "/student/resources" },
+  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
 ];
 
 const COUNSELORS = [

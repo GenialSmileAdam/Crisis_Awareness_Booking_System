@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { sessionCheckInComplete, setSessionCheckInComplete } from "@/components/StudentRoute";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 type SurveyTab = "pulse" | "phq9" | "gad7";
 
@@ -23,6 +24,7 @@ const baseItems: SidebarItem[] = [
   { icon: Calendar, label: "Appointments", to: "/student/appointments" },
   { icon: History, label: "My History", to: "/student/history" },
   { icon: BookOpen, label: "Resources", to: "/student/resources" },
+  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
 ];
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
@@ -137,6 +139,15 @@ export default function StudentPortal() {
   const tier = tierFromWrs(wrs);
 
   const [hasCompletedRecently, setHasCompletedRecently] = useState(() => sessionCheckInComplete || completedSurveys.size === 3);
+  const [isTriggered, setIsTriggered] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem("crisis_logged")) {
+      setIsTriggered(true);
+      setHasCompletedRecently(false);
+      setTab("pulse");
+    }
+  }, []);
 
   const handleSubmit = (responses: Record<string, number>) => {
     // Calculate score from responses for WRS
@@ -160,6 +171,15 @@ export default function StudentPortal() {
       return next;
     });
 
+    if (isTriggered) {
+      localStorage.removeItem("crisis_logged");
+      setIsTriggered(false);
+      setSessionCheckInComplete(true);
+      setHasCompletedRecently(true);
+      toast.success("Required check-in recorded. Thank you for sharing.");
+      return;
+    }
+
     toast.success(`${tab === "phq9" ? "PHQ-9" : tab === "gad7" ? "GAD-7" : "Pulse Survey"} check-in recorded.`);
 
     // Auto-switch to next pending survey
@@ -172,10 +192,10 @@ export default function StudentPortal() {
   const portalItems = useMemo(() => {
     return baseItems.map(item => ({
       ...item,
-      disabled: !hasCompletedRecently,
-      ...(item.label === "Check-in" && pendingSurveys.length > 0 && !hasCompletedRecently ? { badge: String(pendingSurveys.length) } : {}),
+      disabled: (!hasCompletedRecently && !isTriggered) || isTriggered,
+      ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
-  }, [hasCompletedRecently, pendingSurveys.length]);
+  }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -217,6 +237,24 @@ export default function StudentPortal() {
 
       <CrisisBanner />
       <div className="p-6 lg:p-8 space-y-6 pt-0">
+        {/* Triggered Check-in Modal */}
+        <Dialog open={isTriggered}>
+          <DialogContent className="sm:max-w-[500px] [&>button]:hidden">
+            <div className="flex flex-col items-center text-center space-y-4 py-4">
+              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertTriangle className="h-6 w-6 text-destructive" />
+              </div>
+              <h2 className="font-display text-xl font-bold">Required Check-in</h2>
+              <p className="text-sm text-muted-foreground">
+                We noticed you recently accessed crisis resources. Please complete this quick pulse survey to help us understand how you're feeling right now.
+              </p>
+              <div className="w-full text-left bg-muted/30 p-4 rounded-xl border border-border mt-4">
+                <PulseForm onSubmit={handleSubmit} />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Check-in banner (All Complete State) */}
         {hasCompletedRecently && (
           <div

@@ -13,13 +13,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Row {
-  id: string; first_name: string; last_name: string; email: string; role: "Student" | "Psychologist"; faculty: string; matric: string; date: string; status: "Active" | "Inactive";
+  id: string; first_name: string; last_name: string; email: string; role: "Student" | "Psychologist"; faculty: string; matric: string; date: string; status: "Active" | "Inactive"; classLevel?: string;
 }
 
 const initialUsers: Row[] = [
   ...STUDENTS.map((s, i) => ({
     id: s.id, first_name: s.name.split(" ")[0], last_name: s.name.split(" ")[1], email: s.email, role: "Student" as const, faculty: s.faculty, matric: s.matric,
-    date: s.lastCheckIn, status: i % 5 === 0 ? "Inactive" as const : "Active" as const,
+    date: s.lastCheckIn, status: i % 5 === 0 ? "Inactive" as const : "Active" as const, classLevel: s.classLevel,
   })),
   ...COUNSELORS.map((n, i) => ({
     id: `PSY-${i + 1}`, first_name: n.split(" ")[1], last_name: n.split(" ")[2], email: `${n.split(" ")[1].toLowerCase()}@nileuni.edu`, role: "Psychologist" as const,
@@ -71,7 +71,7 @@ export default function AdminUsers() {
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Faculty</th><th className="text-left p-3">Student ID</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
+                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Level</th><th className="text-left p-3">Faculty</th><th className="text-left p-3">Student ID</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -79,6 +79,7 @@ export default function AdminUsers() {
                   <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                     <td className="p-3 font-medium">{u.first_name} {u.last_name}</td>
                     <td className="p-3 text-muted-foreground font-mono text-xs">{u.email}</td>
+                    <td className="p-3 text-muted-foreground">{u.classLevel}</td>
                     <td className="p-3 text-muted-foreground">{u.faculty}</td>
                     <td className="p-3 font-mono text-xs">{u.matric}</td>
                     <td className="p-3">

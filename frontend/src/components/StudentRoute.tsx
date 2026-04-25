@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { ReactNode } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
 export let sessionCheckInComplete = false;
 export const setSessionCheckInComplete = (v: boolean) => { sessionCheckInComplete = v; };
@@ -8,6 +9,7 @@ export const setSessionCheckInComplete = (v: boolean) => { sessionCheckInComplet
 export function StudentRoute({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { user } = useAuth();
+  useTokenRefresh();
 
   // Not logged in as student → redirect to login
   if (!user || user.role !== "student") {

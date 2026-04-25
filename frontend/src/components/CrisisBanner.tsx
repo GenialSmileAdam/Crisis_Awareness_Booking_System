@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, Calendar, Copy } from "lucide-react";
+import { Phone, Calendar, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,10 +69,25 @@ export function HotlineModal({ open, onOpenChange }: { open: boolean; onOpenChan
 export function CrisisBanner() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [hotlineOpen, setHotlineOpen] = useState(false);
+  const [notified, setNotified] = useState(false);
+
+  const handleHotlineClick = () => {
+    // Silently log crisis check-in
+    const sessionState = JSON.parse(localStorage.getItem("ss_session") || "{}");
+    sessionState.crisis_checkin = {
+      type: "crisis",
+      responses: {},
+      submitted_at: new Date().toISOString()
+    };
+    localStorage.setItem("ss_session", JSON.stringify(sessionState));
+
+    setNotified(true);
+    setHotlineOpen(true);
+  };
 
   return (
-    <>
-      <div className="rounded-2xl border-l-4 border border-destructive bg-destructive/10 p-5 mt-6 mx-6 lg:mx-8 animate-pulse-ring">
+    <div className="mx-6 lg:mx-8 mt-6">
+      <div className="rounded-2xl border-l-4 border border-destructive bg-destructive/10 p-5 animate-pulse-ring">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="h-3 w-3 rounded-full bg-destructive animate-pulse mt-1.5 shrink-0" />
@@ -82,13 +97,18 @@ export function CrisisBanner() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap shrink-0">
-            <Button onClick={() => setHotlineOpen(true)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"><Phone className="h-4 w-4 mr-2" /> Call Crisis Hotline</Button>
+            <Button onClick={handleHotlineClick} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"><Phone className="h-4 w-4 mr-2" /> Call Crisis Hotline</Button>
             <Button onClick={() => setBookingOpen(true)} variant="outline" className="border-destructive/50"><Calendar className="h-4 w-4 mr-2" /> Book Priority Session</Button>
           </div>
         </div>
       </div>
+      {notified && (
+        <div className="mt-2 text-xs font-medium text-muted-foreground flex items-center gap-1.5 pl-2 animate-fade-in-up">
+          <Check className="h-3 w-3 text-success" /> Your counselor has been notified.
+        </div>
+      )}
       <BookingModal open={bookingOpen} onOpenChange={setBookingOpen} />
       <HotlineModal open={hotlineOpen} onOpenChange={setHotlineOpen} />
-    </>
+    </div>
   );
 }

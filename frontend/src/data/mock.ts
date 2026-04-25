@@ -18,6 +18,8 @@ export interface Student {
   counselor: string;
   matric: string;
   email: string;
+  classLevel: string;
+  lastSeverity: string;
 }
 
 const NAMES = [
@@ -41,6 +43,8 @@ export const STUDENTS: Student[] = NAMES.map((name, i) => ({
   counselor: COUNSELORS[i % COUNSELORS.length],
   matric: STUDENT_IDS[i],
   email: `${name.split(" ")[0].toLowerCase()}.${name.split(" ")[1].toLowerCase()}@nileuni.edu`,
+  classLevel: ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level"][i % 5],
+  lastSeverity: ["High", "Critical", "Moderate", "Critical", "High"][i % 5],
 }));
 
 export type RiskTier = "Green" | "Amber" | "Red" | "Critical";
@@ -116,11 +120,11 @@ export function trendData(days: number) {
 }
 
 export const ALERTS = [
-  { studentId: "27001011", faculty: "Engineering", wrs: 92, alertTime: "8:00", counselor: "Dr. Amara Obi", status: "Pending" },
-  { studentId: "27001022", faculty: "Medicine", wrs: 81, alertTime: "9:13", counselor: "Dr. Kelechi Eze", status: "Resolved" },
-  { studentId: "27001033", faculty: "Law", wrs: 72, alertTime: "10:26", counselor: "Dr. Bola Adewale", status: "Pending" },
-  { studentId: "27001044", faculty: "Arts & Social Sciences", wrs: 88, alertTime: "11:39", counselor: "Dr. Amara Obi", status: "Resolved" },
-  { studentId: "27001055", faculty: "Sciences", wrs: 68, alertTime: "12:52", counselor: "Dr. Kelechi Eze", status: "Pending" },
+  { studentId: "27001011", faculty: "Engineering", classLevel: "100 Level", wrs: 92, alertTime: "8:00", counselor: "Dr. Amara Obi", status: "Pending" },
+  { studentId: "27001022", faculty: "Medicine", classLevel: "200 Level", wrs: 81, alertTime: "9:13", counselor: "Dr. Kelechi Eze", status: "Resolved" },
+  { studentId: "27001033", faculty: "Law", classLevel: "300 Level", wrs: 72, alertTime: "10:26", counselor: "Dr. Bola Adewale", status: "Pending" },
+  { studentId: "27001044", faculty: "Arts & Social Sciences", classLevel: "400 Level", wrs: 88, alertTime: "11:39", counselor: "Dr. Amara Obi", status: "Resolved" },
+  { studentId: "27001055", faculty: "Sciences", classLevel: "500 Level", wrs: 68, alertTime: "12:52", counselor: "Dr. Kelechi Eze", status: "Pending" },
 ];
 
 export const MOCK_NOTES_VARIANTS = [
@@ -168,6 +172,6 @@ export function downloadCSV(filename: string, rows: string[][]) {
 }
 
 export const UPCOMING_SESSIONS = [
-  { id: "SESS-001", studentId: STUDENTS[0].id, studentName: STUDENTS[0].name, date: new Date().toISOString().split("T")[0], time: "10:00 AM", type: "Initial Consultation", status: "Scheduled", wrs: STUDENTS[0].wrs },
-  { id: "SESS-002", studentId: STUDENTS[2].id, studentName: STUDENTS[2].name, date: new Date().toISOString().split("T")[0], time: "11:30 AM", type: "Follow-up", status: "In Progress", wrs: STUDENTS[2].wrs },
+  { id: "SESS-001", studentId: STUDENTS[0].id, studentName: STUDENTS[0].name, classLevel: STUDENTS[0].classLevel, date: new Date().toISOString().split("T")[0], time: "10:00 AM", type: "Initial Consultation", status: "Scheduled", wrs: STUDENTS[0].wrs },
+  { id: "SESS-002", studentId: STUDENTS[2].id, studentName: STUDENTS[2].name, classLevel: STUDENTS[2].classLevel, date: new Date().toISOString().split("T")[0], time: "11:30 AM", type: "Follow-up", status: "In Progress", wrs: STUDENTS[2].wrs },
 ];

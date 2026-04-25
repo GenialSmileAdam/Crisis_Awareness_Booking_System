@@ -25,6 +25,8 @@ export default function CounselorDashboard() {
   const [sortDesc, setSortDesc] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "schedule">("dashboard");
   const [sessions, setSessions] = useState(UPCOMING_SESSIONS);
+  const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
+  const [sessionsPagination, setSessionsPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const navigate = useNavigate();
@@ -56,6 +58,9 @@ export default function CounselorDashboard() {
     r.sort((a, b) => (sortDesc ? b.wrs - a.wrs : a.wrs - b.wrs));
     return r;
   }, [filter, facultyFilter, search, sortDesc]);
+
+  const rosterPageRows = rows.slice(rosterPagination.offset, rosterPagination.offset + rosterPagination.limit);
+  const sessionsPageRows = sessions.slice(sessionsPagination.offset, sessionsPagination.offset + sessionsPagination.limit);
 
   const tierData = useMemo(() => {
     const g = STUDENTS.filter((s) => tierFromWrs(s.wrs) === "Green").length;
@@ -159,7 +164,7 @@ export default function CounselorDashboard() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => { setSearch(e.target.value); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                       placeholder="Search student..."
                       className="pl-9 h-9 w-56"
                     />
@@ -168,7 +173,7 @@ export default function CounselorDashboard() {
                     {TIERS.map((t) => (
                       <button
                         key={t}
-                        onClick={() => setFilter(t)}
+                        onClick={() => { setFilter(t); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                         className={cn(
                           "px-3 py-1 text-xs font-semibold rounded-full transition",
                           filter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
@@ -184,7 +189,7 @@ export default function CounselorDashboard() {
                 <div className="mb-3 flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Filtered by:</span>
                   <button
-                    onClick={() => setFacultyFilter(null)}
+                    onClick={() => { setFacultyFilter(null); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                     className="px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium"
                   >
                     {facultyFilter} ✕
@@ -196,6 +201,7 @@ export default function CounselorDashboard() {
                   <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                     <tr className="border-b border-border">
                       <th className="text-left p-3">Student</th>
+                      <th className="text-left p-3">Level</th>
                       <th className="text-left p-3">Faculty</th>
                       <th className="text-left p-3">
                         <button onClick={() => setSortDesc(!sortDesc)} className="inline-flex items-center gap-1 hover:text-foreground">
@@ -203,12 +209,13 @@ export default function CounselorDashboard() {
                         </button>
                       </th>
                       <th className="text-left p-3">Tier</th>
+                      <th className="text-left p-3">Last Severity</th>
                       <th className="text-left p-3">Last check-in</th>
                       <th className="text-right p-3">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((s, i) => {
+                    {rosterPageRows.map((s, i) => {
                       const baseTier = tierFromWrs(s.wrs);
                       const isOverridden = !!overrides[s.id];
                       const tier = overrides[s.id] || baseTier;
@@ -216,6 +223,7 @@ export default function CounselorDashboard() {
                       return (
                         <tr key={s.id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
                           <td className="p-3 font-medium">{s.name}</td>
+                          <td className="p-3 text-muted-foreground">{s.classLevel}</td>
                           <td className="p-3 text-muted-foreground">{s.faculty}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
@@ -237,6 +245,7 @@ export default function CounselorDashboard() {
                               )}
                             </div>
                           </td>
+                          <td className="p-3 text-muted-foreground text-xs">{s.lastSeverity}</td>
                           <td className="p-3 text-muted-foreground text-xs font-mono">{s.lastCheckIn}</td>
                           <td className="p-3 text-right">
                             <div className="flex justify-end gap-2">
@@ -251,12 +260,23 @@ export default function CounselorDashboard() {
                         </tr>
                       );
                     })}
-                    {rows.length === 0 && (
+                    {rosterPageRows.length === 0 && (
                       <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No students match your filters.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {rows.length > rosterPagination.limit && (
+                <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+                  <div>
+                    Showing {rosterPagination.offset + 1}-{Math.min(rosterPagination.offset + rosterPagination.limit, rows.length)} of {rows.length}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={rosterPagination.offset === 0} onClick={() => setRosterPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
+                    <Button size="sm" variant="outline" disabled={rosterPagination.offset + rosterPagination.limit >= rows.length} onClick={() => setRosterPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right col — charts stacked */}
@@ -275,7 +295,7 @@ export default function CounselorDashboard() {
                     />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: { faculty: string }) => setFacultyFilter(d.faculty)}>
+                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: { faculty: string }) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
                       {FACULTY_WRS.map((d, i) => (
                         <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
                       ))}
@@ -297,7 +317,7 @@ export default function CounselorDashboard() {
                       outerRadius={75}
                       paddingAngle={3}
                       cursor="pointer"
-                      onClick={(d: { name: string }) => setFilter(d.name as typeof TIERS[number])}
+                      onClick={(d: { name: string }) => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                     >
                       {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
@@ -308,7 +328,7 @@ export default function CounselorDashboard() {
                   {tierData.map((d) => (
                     <button
                       key={d.name}
-                      onClick={() => setFilter(d.name as typeof TIERS[number])}
+                      onClick={() => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
                       className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-muted/50 text-sm transition"
                     >
                       <span className="flex items-center gap-2">
@@ -340,6 +360,7 @@ export default function CounselorDashboard() {
                   <tr className="border-b border-border">
                     <th className="text-left p-3">Date & Time</th>
                     <th className="text-left p-3">Student</th>
+                    <th className="text-left p-3">Level</th>
                     <th className="text-left p-3">Type</th>
                     <th className="text-left p-3">WRS</th>
                     <th className="text-left p-3">Status</th>
@@ -347,7 +368,7 @@ export default function CounselorDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((s, i) => (
+                  {sessionsPageRows.map((s, i) => (
                     <tr key={s.id} className={cn("border-b border-border/60 last:border-0", i % 2 === 0 && "bg-muted/20")}>
                       <td className="p-3 font-medium">
                         <div className="flex flex-col">
@@ -359,6 +380,7 @@ export default function CounselorDashboard() {
                         {s.studentName}
                         <div className="text-xs text-muted-foreground">{s.studentId}</div>
                       </td>
+                      <td className="p-3 text-muted-foreground">{s.classLevel}</td>
                       <td className="p-3 text-muted-foreground">{s.type}</td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
@@ -409,12 +431,23 @@ export default function CounselorDashboard() {
                       </td>
                     </tr>
                   ))}
-                  {sessions.length === 0 && (
-                    <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No upcoming sessions.</td></tr>
+                  {sessionsPageRows.length === 0 && (
+                    <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No upcoming sessions.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
+            {sessions.length > sessionsPagination.limit && (
+              <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+                <div>
+                  Showing {sessionsPagination.offset + 1}-{Math.min(sessionsPagination.offset + sessionsPagination.limit, sessions.length)} of {sessions.length}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={sessionsPagination.offset === 0} onClick={() => setSessionsPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
+                  <Button size="sm" variant="outline" disabled={sessionsPagination.offset + sessionsPagination.limit >= sessions.length} onClick={() => setSessionsPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

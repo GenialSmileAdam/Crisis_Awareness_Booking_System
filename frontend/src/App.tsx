@@ -15,11 +15,14 @@ import StudentHistory from "./pages/student/StudentHistory";
 import StudentAppointments from "./pages/student/StudentAppointments";
 import StudentResources from "./pages/student/StudentResources";
 import StudentConsent from "./pages/student/StudentConsent";
+import StudentForum from "./pages/student/StudentForum";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import SessionReviewer from "./pages/counselor/SessionReviewer";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminForum from "./pages/admin/AdminForum";
+import AdminResources from "./pages/admin/AdminResources";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,10 +44,13 @@ const App = () => (
                 <Route path="/student/history" element={<StudentRoute><StudentHistory /></StudentRoute>} />
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
+                <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
                 <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin/forum" element={<ProtectedRoute role="admin"><AdminForum /></ProtectedRoute>} />
+                <Route path="/admin/resources" element={<ProtectedRoute role="admin"><AdminResources /></ProtectedRoute>} />
                 <Route path="/admin/settings" element={<ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

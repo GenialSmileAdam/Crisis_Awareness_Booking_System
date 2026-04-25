@@ -1,4 +1,5 @@
-import { Home, ClipboardList, History, BookOpen, Calendar, ChevronLeft } from "lucide-react";
+import { useState } from "react";
+import { Home, ClipboardList, History, BookOpen, Calendar, ChevronLeft, MessageSquare } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -13,9 +14,13 @@ const items: SidebarItem[] = [
   { icon: Calendar, label: "Appointments", to: "/student/appointments" },
   { icon: History, label: "My History", to: "/student/history" },
   { icon: BookOpen, label: "Resources", to: "/student/resources" },
+  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
 ];
 
 export default function StudentHistory() {
+  const [pagination, setPagination] = useState({ total: RECENT_CHECKINS.length, limit: 10, offset: 0, has_next: true });
+  const pageRows = RECENT_CHECKINS.slice(pagination.offset, pagination.offset + pagination.limit);
+
   return (
     <AppShell items={items}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
@@ -37,7 +42,7 @@ export default function StudentHistory() {
               </tr>
             </thead>
             <tbody>
-              {RECENT_CHECKINS.map((c, i) => {
+              {pageRows.map((c, i) => {
                 const color = colorFromWrs(c.wrs);
                 const tier = tierFromWrs(c.wrs);
                 return (
@@ -58,6 +63,17 @@ export default function StudentHistory() {
             </tbody>
           </table>
         </div>
+        {RECENT_CHECKINS.length > pagination.limit && (
+          <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+            <div>
+              Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, RECENT_CHECKINS.length)} of {RECENT_CHECKINS.length}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={pagination.offset === 0} onClick={() => setPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
+              <Button size="sm" variant="outline" disabled={pagination.offset + pagination.limit >= RECENT_CHECKINS.length} onClick={() => setPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
