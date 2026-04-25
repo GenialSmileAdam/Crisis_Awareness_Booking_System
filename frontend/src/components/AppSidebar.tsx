@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { ChevronsLeft, ChevronsRight, LogOut } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, MoreHorizontal, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/context/AuthContext";
@@ -126,17 +126,71 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
 }
 
 export function AppShell({ items, children }: { items: SidebarItem[]; children: ReactNode }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const isStudentOrAdmin = user?.role === "student" || user?.role === "admin";
+  
+  // Truncate for student/admin to 3 items + "More"
+  const visibleItems = isStudentOrAdmin ? items.slice(0, 3) : items;
+  const hiddenItems = isStudentOrAdmin ? items.slice(3) : [];
+  
+  // Add Logout to hidden items
+  const drawerItems = [
+    ...hiddenItems,
+    { icon: LogOut, label: "Logout", onClick: () => { logout(); navigate("/login"); } }
+  ];
+
+  const activeColor = user?.role === "student" ? "text-primary" : "text-[#8b5cf6]";
+
   return (
     <div className="flex min-h-screen w-full bg-background pb-[calc(env(safe-area-inset-bottom)+60px)] md:pb-0 overflow-x-hidden">
       <AppSidebar items={items} />
       <main className="flex-1 min-w-0">{children}</main>
 
+      {/* Drawer Overlay */}
+      {drawerOpen && (
+        <div 
+          className="md:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* Drawer Content */}
+      <div className={cn(
+        "md:hidden fixed bottom-0 inset-x-0 z-[70] bg-[#1A1A1A] border-t border-border/10 rounded-t-3xl transition-transform duration-300 ease-out",
+        drawerOpen ? "translate-y-0" : "translate-y-full"
+      )}>
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-6 px-2">
+            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">More Options</span>
+            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-full hover:bg-white/5 text-muted-foreground">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="space-y-1">
+            {drawerItems.map((it) => (
+              <button
+                key={it.label}
+                onClick={() => {
+                  setDrawerOpen(false);
+                  if (it.onClick) it.onClick();
+                  else if (it.to) navigate(it.to);
+                }}
+                className="w-full flex items-center gap-3 p-4 rounded-2xl hover:bg-white/5 text-foreground transition"
+              >
+                <it.icon className="h-5 w-5 text-muted-foreground" />
+                <span className="font-medium">{it.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#1A1A1A] border-t border-border/10 pb-safe flex">
-        {items.map((it) => {
-          const { user } = useAuth();
-          const activeColor = user?.role === "student" ? "text-primary" : "text-[#8b5cf6]";
-          
+        {visibleItems.map((it) => {
           const inner = (active: boolean) => (
             <div
               className={cn(
@@ -172,6 +226,19 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
             </NavLink>
           );
         })}
+
+        {/* More Button */}
+        {isStudentOrAdmin && (
+          <button 
+            onClick={() => setDrawerOpen(true)}
+            className={cn(
+              "flex-1 flex justify-center items-center h-[60px]",
+              drawerOpen ? activeColor : "text-muted-foreground"
+            )}
+          >
+            <MoreHorizontal className="h-6 w-6" />
+          </button>
+        )}
       </nav>
     </div>
   );
