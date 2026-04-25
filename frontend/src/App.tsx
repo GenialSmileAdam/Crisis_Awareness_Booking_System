@@ -1,77 +1,56 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { BookingProvider } from "@/contexts/BookingContext";
-import LoginPage from "./pages/LoginPage";
-import LandingPage from "./pages/LandingPage";
-import StudentDashboard from "./pages/student/StudentDashboard";
-import BookAppointment from "./pages/student/BookAppointment";
-import StudentSessions from "./pages/student/StudentSessions";
+import { ThemeProvider } from "@/context/ThemeContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { WrsProvider } from "@/context/WrsContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { StudentRoute } from "@/components/StudentRoute";
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import StudentPortal from "./pages/student/StudentPortal";
+import StudentHistory from "./pages/student/StudentHistory";
+import StudentAppointments from "./pages/student/StudentAppointments";
+import StudentResources from "./pages/student/StudentResources";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
-import CounselorSessions from "./pages/counselor/CounselorSessions";
-import SessionDetail from "./pages/counselor/SessionDetail";
-import CounselorAISummary from "./pages/counselor/CounselorAISummary";
-import FamilyEngagement from "./pages/counselor/FamilyEngagement";
+import SessionReviewer from "./pages/counselor/SessionReviewer";
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import FamilyDashboard from "./pages/family/FamilyDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminSettings from "./pages/admin/AdminSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const AppRoutes = () => {
-  const { user } = useAuth();
-
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    );
-  }
-
-  return (
-    <Routes>
-      <Route path="/" element={<Navigate to={`/${user.role}/dashboard`} replace />} />
-      <Route path="/landing" element={<LandingPage />} />
-
-      <Route path="/student/dashboard" element={<StudentDashboard />} />
-      <Route path="/student/book-appointment" element={<BookAppointment />} />
-      <Route path="/student/sessions" element={<StudentSessions />} />
-
-      <Route path="/counselor/dashboard" element={<CounselorDashboard />} />
-      <Route path="/counselor/sessions" element={<CounselorSessions />} />
-      <Route path="/counselor/session/:id" element={<SessionDetail />} />
-      <Route path="/counselor/ai-summary/:studentId" element={<CounselorAISummary />} />
-      <Route path="/counselor/ai-summary" element={<CounselorAISummary />} />
-      <Route path="/counselor/family-engagement" element={<FamilyEngagement />} />
-
-      <Route path="/admin/dashboard" element={<AdminDashboard />} />
-
-      <Route path="/family/dashboard" element={<FamilyDashboard />} />
-
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
+    <ThemeProvider>
       <AuthProvider>
-        <BookingProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </BookingProvider>
+        <WrsProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner position="top-right" />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />
+                <Route path="/student/history" element={<StudentRoute><StudentHistory /></StudentRoute>} />
+                <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
+                <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
+                <Route path="/counselor" element={<ProtectedRoute role="counselor"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/session/:id" element={<ProtectedRoute role="counselor"><SessionReviewer /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+                <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin/settings" element={<ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </WrsProvider>
       </AuthProvider>
-    </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
