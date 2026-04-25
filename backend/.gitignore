@@ -1,8 +1,7 @@
-# Ignore Python bytecode and cache files
+
 __pycache__/
 *.pyc
 *.py[cod]
-test/
 
 #Ignore audio files
 *.ogg
@@ -11,15 +10,6 @@ test/
 *.mp4
 *.m4a
 
-# Ignore system files
-.DS_Store
-Thumbs.db
-
-# Ignore environment variable files
 .env
-env/
-reqs.txt
-*.docx
-scripts/
-Others/
+.ini
 
