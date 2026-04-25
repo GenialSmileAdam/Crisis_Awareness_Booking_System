@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +9,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { WrsProvider } from "@/context/WrsContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { StudentRoute } from "@/components/StudentRoute";
+import { toast } from "sonner";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import StudentPortal from "./pages/student/StudentPortal";
@@ -27,6 +29,31 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+/**
+ * Listens for the "safespace:session-expired" custom event dispatched by
+ * the API client when a 401 refresh fails. Clears all auth state and
+ * redirects the user to the login page with a toast notification.
+ */
+function SessionExpiryListener() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = () => {
+      localStorage.removeItem("safespace_access_token");
+      localStorage.removeItem("safespace_user");
+      localStorage.removeItem("ss_user");
+      localStorage.removeItem("ss_token_expiry");
+      toast.error("Your session has expired. Please sign in again.");
+      navigate("/login", { replace: true });
+    };
+
+    window.addEventListener("safespace:session-expired", handler);
+    return () => window.removeEventListener("safespace:session-expired", handler);
+  }, [navigate]);
+
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -36,6 +63,7 @@ const App = () => (
             <Toaster />
             <Sonner position="top-right" />
             <BrowserRouter>
+              <SessionExpiryListener />
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />

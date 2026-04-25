@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Activity } from "lucide-react";
+import { ArrowRight, Activity, Loader2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { useAuth, Role } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WRSRing } from "@/components/WRSRing";
+import { toast } from "sonner";
+import { loginStudent, loginStaff } from "@/api";
 
 const ROLES: { id: Role; label: string }[] = [
   { id: "student", label: "Student" },
@@ -22,20 +24,114 @@ const HINTS: Record<Role, { identifier: string; pwd: string }> = {
   admin: { identifier: "thisismymail014@gmail.com", pwd: "PsyUnitAdmin1" },
 };
 
+/** Decode the payload segment of a JWT (no validation — server is the authority). */
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const base64 = token.split(".")[1];
+  const json = atob(base64.replace(/-/g, "+").replace(/_/g, "/"));
+  return JSON.parse(json);
+}
+
+/** Simple email-format check */
+function isValidEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
 export default function Login() {
   const [role, setRole] = useState<Role>("student");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  const [fieldErrors, setFieldErrors] = useState<{ identifier?: string; password?: string }>({});
+  const [loading, setLoading] = useState(false);
+  const { setAuthUser } = useAuth();
   const navigate = useNavigate();
 
-  const submit = (e: React.FormEvent) => {
+  const validate = (): boolean => {
+    const errs: { identifier?: string; password?: string } = {};
+    if (role === "student") {
+      if (!identifier.trim()) errs.identifier = "Student ID is required.";
+    } else {
+      if (!identifier.trim()) errs.identifier = "Email is required.";
+      else if (!isValidEmail(identifier.trim())) errs.identifier = "Please enter a valid email address.";
+    }
+    if (!password) errs.password = "Password is required.";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const ok = login(role, identifier, password);
-    if (!ok) return setError("Invalid credentials. Please try again.");
-    navigate(role === "student" ? "/student" : role === "psychologist" ? "/counselor" : `/${role}`);
+    setFieldErrors({});
+
+    if (!validate()) return;
+
+    setLoading(true);
+
+    try {
+      // Call the real API
+      const res =
+        role === "student"
+          ? await loginStudent(identifier.trim(), password)
+          : await loginStaff(identifier.trim(), password);
+
+      // Decode the JWT payload
+      const jwt = decodeJwtPayload(res.access_token);
+
+      // Derive display name and initials from JWT
+      const sub = (jwt.sub as string) || identifier;
+      const fullName = (jwt.full_name as string) || sub;
+      const initials = fullName
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+
+      // Map JWT role to app role
+      const jwtRole = (jwt.role as string) || role;
+      const appRole: Role =
+        jwtRole === "psychologist" ? "psychologist" :
+        jwtRole === "admin" ? "admin" :
+        "student";
+
+      // Persist user in context + localStorage
+      const user = {
+        role: appRole,
+        name: fullName,
+        email: (jwt.email as string) || identifier,
+        initials,
+        jwt,
+      };
+
+      localStorage.setItem("safespace_access_token", res.access_token);
+      localStorage.setItem("safespace_user", JSON.stringify(user));
+      setAuthUser(user);
+
+      toast.success("Welcome back!");
+
+      // Navigate to the correct dashboard
+      navigate(
+        appRole === "student" ? "/student" :
+        appRole === "psychologist" ? "/counselor" :
+        "/admin",
+      );
+    } catch (err: unknown) {
+      const apiErr = err as { message?: string; status?: number };
+      const status = apiErr?.status;
+
+      if (status === 401) {
+        setError("Invalid credentials. Please try again.");
+      } else if (status === 422) {
+        setError("Please check your details and try again.");
+      } else {
+        setError("Something went wrong. Please try again later.");
+      }
+
+      setPassword("");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -109,11 +205,13 @@ export default function Login() {
                 id="identifier"
                 type={role === "student" ? "text" : "email"}
                 value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                onChange={(e) => { setIdentifier(e.target.value); setFieldErrors((f) => ({ ...f, identifier: undefined })); }}
                 placeholder={role === "student" ? "e.g., 27001011" : "you@nileuni.edu"}
-                required
-                className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
+                className={cn("mt-1.5 focus-visible:ring-primary", (error || fieldErrors.identifier) && "border-destructive focus-visible:ring-destructive")}
               />
+              {fieldErrors.identifier && (
+                <p className="text-xs text-destructive mt-1">{fieldErrors.identifier}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
@@ -121,18 +219,28 @@ export default function Login() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
+                onChange={(e) => { setPassword(e.target.value); setFieldErrors((f) => ({ ...f, password: undefined })); }}
+                className={cn("mt-1.5 focus-visible:ring-primary", (error || fieldErrors.password) && "border-destructive focus-visible:ring-destructive")}
               />
+              {fieldErrors.password && (
+                <p className="text-xs text-destructive mt-1">{fieldErrors.password}</p>
+              )}
             </div>
             {error && (
               <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full gradient-primary text-primary-foreground border-0 h-11 group">
-              Sign In <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
+            >
+              {loading ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Signing in…</>
+              ) : (
+                <>Sign In <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" /></>
+              )}
             </Button>
           </form>
 
