@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,8 @@ export default function CounselorDashboard() {
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortDesc, setSortDesc] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "schedule">("dashboard");
+  const location = useLocation();
+  const currentView = location.pathname === "/counselor/sessions" ? "schedule" : "dashboard";
   const [sessions, setSessions] = useState(UPCOMING_SESSIONS);
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
   const [sessionsPagination, setSessionsPagination] = useState({ limit: 10, offset: 0 });
@@ -33,20 +35,14 @@ export default function CounselorDashboard() {
 
   const colorFromTier = (t: string) => t === "Green" ? "#A8FF3E" : t === "Amber" ? "#FF8C42" : t === "Red" ? "#FF4560" : "#B00020";
 
-  const items: SidebarItem[] = [
-    { icon: LayoutDashboard, label: "Dashboard", onClick: () => setCurrentView("dashboard") },
-    { icon: Users, label: "My Students", onClick: () => { setCurrentView("dashboard"); setFilter("All"); setFacultyFilter(null); } },
-    { icon: Calendar, label: "Schedule", onClick: () => setCurrentView("schedule") },
-  ];
-
   const activeHighRiskCount = useMemo(() => {
     return STUDENTS.filter(s => tierFromWrs(s.wrs) === "Red" || tierFromWrs(s.wrs) === "Critical").length;
   }, []);
 
   const kpis = [
-    { label: "Total Students", value: STUDENTS.length, icon: Users, action: () => { setCurrentView("dashboard"); setFilter("All"); setFacultyFilter(null); } },
-    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { setCurrentView("dashboard"); setFilter("Critical"); } },
-    { label: "Sessions This Week", value: sessions.length, icon: CalendarCheck, action: () => setCurrentView("schedule") },
+    { label: "Total Students", value: STUDENTS.length, icon: Users, action: () => { navigate("/counselor/students"); } },
+    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
+    { label: "Sessions This Week", value: sessions.length, icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
     { label: "Avg Campus WRS", value: "—", icon: Activity, action: () => toast.info("Data will be available after integration") },
   ];
 
@@ -96,7 +92,7 @@ export default function CounselorDashboard() {
   };
 
   return (
-    <AppShell items={items}>
+    <AppShell items={counselorSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <h1 className="font-display text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-2">

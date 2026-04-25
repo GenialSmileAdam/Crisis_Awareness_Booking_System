@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "@/components/AppSidebar";
-import { adminItems } from "./AdminDashboard";
+import { adminSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +77,7 @@ export default function AdminForum() {
   };
 
   return (
-    <AppShell items={adminItems}>
+    <AppShell items={adminSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <div>
           <h1 className="font-display text-xl font-bold">Forum Moderation</h1>

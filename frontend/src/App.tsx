@@ -40,12 +40,15 @@ const App = () => (
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />
+                <Route path="/student/checkin" element={<StudentRoute><StudentPortal /></StudentRoute>} />
                 <Route path="/student/consent" element={<StudentRoute><StudentConsent /></StudentRoute>} />
                 <Route path="/student/history" element={<StudentRoute><StudentHistory /></StudentRoute>} />
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
                 <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/students" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/sessions" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
                 <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />

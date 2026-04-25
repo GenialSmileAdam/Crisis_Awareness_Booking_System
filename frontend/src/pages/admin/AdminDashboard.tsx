@@ -10,15 +10,7 @@ import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContaine
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export const adminItems: SidebarItem[] = [
-  { icon: LayoutDashboard, label: "Overview", to: "/admin", end: true },
-  { icon: BarChart3, label: "Faculty Trends", to: "/admin" },
-  { icon: Users, label: "User Management", to: "/admin/users" },
-  { icon: FileText, label: "Reports", to: "/admin" },
-  { icon: MessageSquare, label: "Forum", to: "/admin/forum" },
-  { icon: Library, label: "Resources", to: "/admin/resources" },
-  { icon: Settings, label: "Settings", to: "/admin/settings" },
-];
+import { adminSidebarItems } from "@/data/sidebar";
 
 const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This Semester" } as const;
 type Range = keyof typeof RANGE_LABELS;
@@ -83,17 +75,10 @@ export default function AdminDashboard() {
     }
   };
 
-  // Wrap sidebar items so Reports triggers download
-  const items: SidebarItem[] = adminItems.map((it) =>
-    it.label === "Reports"
-      ? { ...it, to: "/admin", icon: it.icon }
-      : it
-  );
-
   const leaderboard = [...FACULTY_WRS].sort((a, b) => b.avg - a.avg);
 
   return (
-    <AppShell items={items}>
+    <AppShell items={adminSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <div className="flex items-center gap-4">
           <h1 className="font-display text-xl font-bold">University Overview</h1>

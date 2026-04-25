@@ -9,14 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const items: SidebarItem[] = [
-  { icon: Home, label: "Home", to: "/student", end: true },
-  { icon: ClipboardList, label: "Check-in", to: "/student" },
-  { icon: Calendar, label: "Appointments", to: "/student/appointments" },
-  { icon: History, label: "My History", to: "/student/history" },
-  { icon: BookOpen, label: "Resources", to: "/student/resources" },
-  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
-];
+import { studentSidebarItems } from "@/data/sidebar";
 
 interface Post {
   id: string;
@@ -74,7 +67,7 @@ export default function StudentForum() {
   };
 
   return (
-    <AppShell items={items}>
+    <AppShell items={studentSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
         <div>
           <h1 className="font-display text-xl font-bold">Wellness Forum</h1>

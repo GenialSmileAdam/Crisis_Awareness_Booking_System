@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "@/components/AppSidebar";
-import { adminItems } from "./AdminDashboard";
+import { adminSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/context/ThemeContext";
@@ -22,7 +22,7 @@ export default function AdminSettings() {
     });
   };
   return (
-    <AppShell items={adminItems}>
+    <AppShell items={adminSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <h1 className="font-display text-xl font-bold">Settings</h1>
         <ThemeToggle />

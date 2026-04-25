@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -18,14 +19,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 type SurveyTab = "pulse" | "phq9" | "gad7";
 
-const baseItems: SidebarItem[] = [
-  { icon: Home, label: "Home", to: "/student", end: true },
-  { icon: ClipboardList, label: "Check-in", to: "/student" },
-  { icon: Calendar, label: "Appointments", to: "/student/appointments" },
-  { icon: History, label: "My History", to: "/student/history" },
-  { icon: BookOpen, label: "Resources", to: "/student/resources" },
-  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
-];
+import { studentSidebarItems } from "@/data/sidebar";
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
   const [answers, setAnswers] = useState<number[]>(Array(9).fill(-1));
@@ -108,7 +102,11 @@ function PulseForm({ onSubmit }: { onSubmit: (responses: Record<string, number>)
 export default function StudentPortal() {
   const { wrs, setWrs } = useWrs();
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const studentName = user?.name || "Student";
+  
+  const isCheckinView = location.pathname === "/student/checkin";
 
   // Pending survey tracking
   const [completedSurveys, setCompletedSurveys] = useState<Set<SurveyTab>>(() => {
@@ -190,9 +188,9 @@ export default function StudentPortal() {
   };
 
   const portalItems = useMemo(() => {
-    return baseItems.map(item => ({
+    return studentSidebarItems.map(item => ({
       ...item,
-      disabled: (!hasCompletedRecently && !isTriggered) || isTriggered,
+      disabled: ((!hasCompletedRecently && !isTriggered) || isTriggered) && item.label !== "Check-in" && item.label !== "Home",
       ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
   }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
@@ -256,7 +254,7 @@ export default function StudentPortal() {
         </Dialog>
 
         {/* Check-in banner (All Complete State) */}
-        {hasCompletedRecently && (
+        {hasCompletedRecently && !isCheckinView && (
           <div
             className="flex items-center justify-between px-4 h-12 w-full rounded-xl animate-fade-in"
             style={{ backgroundColor: "#A8FF3E15", border: "1px solid #A8FF3E40" }}
@@ -272,8 +270,8 @@ export default function StudentPortal() {
         )}
 
         {/* Check-in component */}
-        {!hasCompletedRecently && (
-          <div className="surface-card surface-card-hover p-6 bg-card flex flex-col w-full">
+        {(isCheckinView || !hasCompletedRecently) && (
+          <div className="surface-card surface-card-hover p-6 bg-card flex flex-col w-full animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3">
               <div>
                 <h2 className="font-display text-xl font-bold">Daily Check-in</h2>
@@ -312,7 +310,7 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {hasCompletedRecently && (
+        {!isCheckinView && hasCompletedRecently && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Book appointment */}
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">

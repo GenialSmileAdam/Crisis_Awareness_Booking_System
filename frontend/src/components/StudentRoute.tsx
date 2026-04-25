@@ -22,9 +22,9 @@ export function StudentRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/student/consent" replace />;
   }
 
-  // Check-in gate: must complete check-in before navigating away from /student
-  if (consentSigned && !sessionCheckInComplete && pathname !== "/student" && pathname !== "/student/consent") {
-    return <Navigate to="/student" replace />;
+  // Check-in gate: must complete check-in before navigating away from /student/checkin
+  if (consentSigned && !sessionCheckInComplete && pathname !== "/student/checkin" && pathname !== "/student/consent") {
+    return <Navigate to="/student/checkin" replace />;
   }
 
   return <>{children}</>;

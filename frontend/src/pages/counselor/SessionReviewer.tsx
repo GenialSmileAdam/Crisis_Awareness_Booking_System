@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2 } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -10,11 +11,7 @@ import { STUDENTS, MOCK_NOTES_VARIANTS, tierFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const items: SidebarItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", to: "/counselor", end: true },
-  { icon: Users, label: "My Students", to: "/counselor" },
-  { icon: Calendar, label: "Schedule", to: "/counselor" },
-];
+
 
 const TIER_LEVELS = ["Green", "Amber", "Red", "Critical"] as const;
 
@@ -86,7 +83,7 @@ export default function SessionReviewer() {
   };
 
   return (
-    <AppShell items={items}>
+    <AppShell items={counselorSidebarItems}>
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/counselor")}><ChevronLeft className="h-4 w-4" /></Button>

@@ -9,13 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CrisisBanner } from "@/components/CrisisBanner";
 
-const items: SidebarItem[] = [
-  { icon: Home, label: "Home", to: "/student", end: true },
-  { icon: CalendarIcon, label: "Appointments", to: "/student/appointments" },
-  { icon: History, label: "History", to: "/student/history" },
-  { icon: LifeBuoy, label: "Resources", to: "/student/resources" },
-  { icon: MessageSquare, label: "Forum", to: "/student/forum" },
-];
+import { studentSidebarItems } from "@/data/sidebar";
 
 const COUNSELORS = [
   { id: "c1", name: "Dr. Amara Obi", title: "Lead Counselor", specialty: "Anxiety & Stress" },
@@ -89,7 +83,7 @@ export default function StudentAppointments() {
   };
 
   return (
-    <AppShell items={items}>
+    <AppShell items={studentSidebarItems}>
       {/* Top bar */}
       <div className="flex items-center justify-between h-16 px-8 border-b border-border">
         <div>
