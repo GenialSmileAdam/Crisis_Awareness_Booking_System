@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 type ResourceType = "Article" | "Video" | "Exercise";
 type Topic = "Anxiety" | "Stress" | "Depression" | "Focus" | "Sleep" | "Motivation";
@@ -34,6 +36,8 @@ const INITIAL_RESOURCES: AdminResource[] = [
 const FILTERS = ["All", "Articles", "Videos", "Exercises"] as const;
 
 export default function AdminResources() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [resources, setResources] = useState<AdminResource[]>(INITIAL_RESOURCES);
   const [filter, setFilter] = useState<typeof FILTERS[number]>("All");
   
@@ -79,21 +83,27 @@ export default function AdminResources() {
 
   return (
     <AppShell items={adminSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div>
-          <h1 className="font-display text-xl font-bold">Resource Library</h1>
-          <p className="text-xs text-muted-foreground">Manage wellness resources available to students.</p>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex-1 pr-2">
+          <h1 className="font-display text-xl md:text-2xl font-bold">Resource Library</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Manage wellness resources available to students.</p>
         </div>
-        <div className="flex items-center gap-4">
-          <Button onClick={() => setOpen(true)} size="sm" className="bg-[#6C3FE8] hover:bg-[#6C3FE8]/90 text-white border-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={() => setOpen(true)} size="sm" className="hidden md:flex bg-[#6C3FE8] hover:bg-[#6C3FE8]/90 text-white border-0">
             <Plus className="h-4 w-4 mr-1.5" /> Add Resource
           </Button>
+          <Button onClick={() => setOpen(true)} size="icon" variant="ghost" className="md:hidden h-9 w-9 bg-[#6C3FE8]/10 text-[#6C3FE8] rounded-full">
+            <Plus className="h-4 w-4" />
+          </Button>
           <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="p-8 space-y-6">
-        <div className="flex gap-1 p-1 rounded-full bg-muted w-fit">
+      <div className="p-4 md:p-8 space-y-6">
+        <div className="flex flex-wrap gap-1 p-1 rounded-xl md:rounded-full bg-muted w-fit">
           {FILTERS.map((f) => (
             <button
               key={f}
@@ -159,7 +169,7 @@ export default function AdminResources() {
               <label className="text-sm font-medium mb-1 block">Title</label>
               <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Resource title" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">Type</label>
                 <Select value={newType} onValueChange={(v: any) => setNewType(v)}>

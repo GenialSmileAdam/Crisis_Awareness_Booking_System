@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2 } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -10,12 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { STUDENTS, MOCK_NOTES_VARIANTS, tierFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
+import { useAuth } from "@/context/AuthContext";
 
 
 const TIER_LEVELS = ["Green", "Amber", "Red", "Critical"] as const;
 
 export default function SessionReviewer() {
+  const { logout } = useAuth();
   const { id } = useParams();
   const student = STUDENTS.find((s) => s.id === id) || STUDENTS[0];
   const navigate = useNavigate();
@@ -84,18 +85,23 @@ export default function SessionReviewer() {
 
   return (
     <AppShell items={counselorSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/counselor")}><ChevronLeft className="h-4 w-4" /></Button>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/counselor")} className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button>
           <div>
-            <div className="font-display font-bold">{student.name}</div>
-            <div className="text-xs text-muted-foreground font-mono">{filename} · {student.lastCheckIn}</div>
+            <div className="font-display text-lg md:text-xl font-bold">{student.name}</div>
+            <div className="text-[10px] md:text-xs text-muted-foreground font-mono truncate max-w-[150px] md:max-w-xs">{filename} · {student.lastCheckIn}</div>
           </div>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="p-8 grid lg:grid-cols-12 gap-6">
+      <div className="p-4 md:p-8 grid lg:grid-cols-12 gap-6">
         {step === 1 && !loadingMsg && (
           <div className="lg:col-span-12 surface-card p-12 flex flex-col items-center justify-center border-dashed border-2 border-border/50 text-center animate-fade-in min-h-[50vh]">
             <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4">

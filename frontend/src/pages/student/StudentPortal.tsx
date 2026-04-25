@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle } from "lucide-react";
+import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle, LogOut } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -34,7 +34,7 @@ function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) 
       {PHQ9_QUESTIONS.map((q, i) => (
         <div key={i} className="space-y-2">
           <div className="text-sm font-medium">{i + 1}. {q}</div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
             {PHQ9_OPTIONS.map((opt) => (
               <button key={opt.value} onClick={() => setAnswers((a) => a.map((v, j) => (j === i ? opt.value : v)))} className={cn("px-3 py-1.5 text-xs rounded-full border transition", answers[i] === opt.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}>
                 {opt.label}
@@ -61,7 +61,7 @@ function GAD7Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) 
       {GAD7_QUESTIONS.map((q, i) => (
         <div key={i} className="space-y-2">
           <div className="text-sm font-medium">{i + 1}. {q}</div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
             {GAD7_OPTIONS.map((opt) => (
               <button key={opt.value} onClick={() => setAnswers((a) => a.map((v, j) => (j === i ? opt.value : v)))} className={cn("px-3 py-1.5 text-xs rounded-full border transition", answers[i] === opt.value ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}>
                 {opt.label}
@@ -101,7 +101,7 @@ function PulseForm({ onSubmit }: { onSubmit: (responses: Record<string, number>)
 
 export default function StudentPortal() {
   const { wrs, setWrs } = useWrs();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const studentName = user?.name || "Student";
@@ -184,6 +184,8 @@ export default function StudentPortal() {
     const remaining = pendingSurveys.filter(s => s !== tab);
     if (remaining.length > 0) {
       setTab(remaining[0]);
+    } else if (location.pathname === "/student/checkin") {
+      navigate("/student");
     }
   };
 
@@ -206,14 +208,14 @@ export default function StudentPortal() {
 
   return (
     <AppShell items={portalItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
-        <div>
-          <h1 className="font-display text-2xl font-bold">{greeting} 👋</h1>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex-1">
+          <h1 className="font-display text-xl md:text-2xl font-bold">{greeting} 👋</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Last check-in: 2 days ago
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full relative">
@@ -230,11 +232,14 @@ export default function StudentPortal() {
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       <CrisisBanner />
-      <div className="p-6 lg:p-8 space-y-6 pt-0">
+      <div className="p-4 md:p-8 space-y-6 pt-0 md:pt-0">
         {/* Triggered Check-in Modal */}
         <Dialog open={isTriggered}>
           <DialogContent className="sm:max-w-[500px] [&>button]:hidden">

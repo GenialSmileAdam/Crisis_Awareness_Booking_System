@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Home, ClipboardList, History, BookOpen, Calendar, ExternalLink, MessageSquare } from "lucide-react";
+import { Home, ClipboardList, History, BookOpen, Calendar, ExternalLink, MessageSquare, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { cn } from "@/lib/utils";
@@ -80,6 +82,8 @@ const topicColors: Record<Topic, string> = {
 };
 
 export default function StudentResources() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<typeof FILTERS[number]>("All");
 
   const filtered = RESOURCES.filter((r) => {
@@ -92,17 +96,22 @@ export default function StudentResources() {
 
   return (
     <AppShell items={studentSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex-1 pr-2">
           <h1 className="font-display text-xl font-bold">Wellness Resources</h1>
-          <p className="text-xs text-muted-foreground">Curated articles, videos and exercises for your wellbeing.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Curated articles, videos and exercises for your wellbeing.</p>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <CrisisBanner />
 
-      <div className="p-8 pt-6 space-y-8">
+      <div className="p-4 md:p-8 pt-4 md:pt-6 space-y-8">
         {/* Recommended Section */}
         <section className="space-y-4">
           <div>

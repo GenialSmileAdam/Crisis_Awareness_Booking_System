@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -45,6 +47,8 @@ function buildMonth(year: number, month: number) {
 }
 
 export default function StudentAppointments() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -85,21 +89,24 @@ export default function StudentAppointments() {
   return (
     <AppShell items={studentSidebarItems}>
       {/* Top bar */}
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div>
-          <div className="font-display font-bold text-xl">My Appointments</div>
-          <div className="text-xs text-muted-foreground">Book and manage your wellness sessions</div>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex-1">
+          <div className="font-display font-bold text-xl md:text-2xl">My Appointments</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Book and manage your wellness sessions</div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={scrollToBooking} className="gradient-primary text-primary-foreground border-0">
-            <Sparkles className="h-4 w-4 mr-2" /> Book New Session
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={scrollToBooking} size="sm" className="hidden md:flex gradient-primary text-primary-foreground border-0">
+            <Sparkles className="h-4 w-4 mr-2" /> Book Session
           </Button>
           <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       <CrisisBanner />
-      <div className="p-8 space-y-8 pt-6">
+      <div className="p-4 md:p-8 space-y-8 pt-4 md:pt-6">
         {/* Booking flow */}
         <section id="booking" className="surface-card p-6 space-y-6">
           {/* Step indicator */}
@@ -114,7 +121,7 @@ export default function StudentAppointments() {
                 >
                   {step > n ? <Check className="h-4 w-4" /> : n}
                 </div>
-                <div className="ml-3 text-sm font-medium">
+                <div className="ml-3 text-sm font-medium hidden md:block">
                   {n === 1 ? "Counselor" : n === 2 ? "Date & Time" : "Confirm"}
                 </div>
                 {i < 2 && (
@@ -132,7 +139,7 @@ export default function StudentAppointments() {
           {/* Step 1 - Counselor selection */}
           <div>
             <div className="label-eyebrow mb-3">Step 1 — Select your counselor</div>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {COUNSELORS.map((c) => {
                 const active = counselorId === c.id;
                 return (
@@ -229,7 +236,7 @@ export default function StudentAppointments() {
                   <div className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <Clock className="h-4 w-4" /> Available times
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 lg:grid-cols-2 gap-2">
                     {TIMES.map((t) => (
                       <button
                         key={t}
@@ -324,7 +331,7 @@ export default function StudentAppointments() {
         {/* Upcoming */}
         <section className="space-y-3">
           <div className="label-eyebrow">Upcoming appointments</div>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {upcoming.map((a) => (
               <div key={a.id} className="surface-card surface-card-hover p-5 space-y-3">
                 <div className="flex items-center gap-3">

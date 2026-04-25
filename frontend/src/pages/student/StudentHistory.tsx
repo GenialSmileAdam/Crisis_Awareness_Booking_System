@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Home, ClipboardList, History, BookOpen, Calendar, ChevronLeft, MessageSquare } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Home, ClipboardList, History, BookOpen, Calendar, ChevronLeft, MessageSquare, LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { RECENT_CHECKINS, colorFromWrs, tierFromWrs } from "@/data/mock";
@@ -10,21 +11,28 @@ import { cn } from "@/lib/utils";
 import { studentSidebarItems } from "@/data/sidebar";
 
 export default function StudentHistory() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [pagination, setPagination] = useState({ total: RECENT_CHECKINS.length, limit: 10, offset: 0, has_next: true });
   const pageRows = RECENT_CHECKINS.slice(pagination.offset, pagination.offset + pagination.limit);
 
   return (
     <AppShell items={studentSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div className="flex items-center gap-3">
-          <Link to="/student"><Button variant="ghost" size="icon"><ChevronLeft className="h-4 w-4" /></Button></Link>
-          <h1 className="font-display text-xl font-bold">My check-in history</h1>
+      <div className="flex items-center justify-between h-16 px-4 md:px-8 border-b border-border">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Link to="/student"><Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button></Link>
+          <h1 className="font-display text-lg md:text-xl font-bold">My check-in history</h1>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <CrisisBanner />
-      <div className="p-8 pt-6">
-        <div className="glass border border-border rounded-3xl overflow-hidden">
+      <div className="p-4 md:p-8 pt-4 md:pt-6">
+        <div className="glass border border-border rounded-3xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>

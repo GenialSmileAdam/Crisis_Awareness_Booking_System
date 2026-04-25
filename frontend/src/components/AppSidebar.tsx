@@ -77,7 +77,7 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
       <aside
         style={{ width }}
         className={cn(
-          "fixed left-0 top-0 h-screen z-40 flex flex-col bg-card border-r border-border transition-[width] duration-300 ease-out"
+          "hidden md:flex fixed left-0 top-0 h-screen z-40 flex-col bg-card border-r border-border transition-[width] duration-300 ease-out"
         )}
       >
         {/* Logo */}
@@ -120,16 +120,56 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
         </div>
       </aside>
       {/* Spacer to offset fixed sidebar */}
-      <div style={{ width }} className="shrink-0 transition-[width] duration-300" aria-hidden />
+      <div style={{ width }} className="hidden md:block shrink-0 transition-[width] duration-300" aria-hidden />
     </TooltipProvider>
   );
 }
 
 export function AppShell({ items, children }: { items: SidebarItem[]; children: ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full bg-background pb-[calc(env(safe-area-inset-bottom)+60px)] md:pb-0">
       <AppSidebar items={items} />
       <main className="flex-1 min-w-0">{children}</main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-sidebar border-t border-border pb-safe flex">
+        {items.map((it) => {
+          const inner = (active: boolean) => (
+            <div
+              className={cn(
+                "flex-1 flex justify-center items-center h-[60px] min-h-[44px] min-w-[44px]",
+                it.disabled
+                  ? "opacity-50"
+                  : active
+                  ? "text-primary"
+                  : "text-muted-foreground"
+              )}
+            >
+              <it.icon className="h-6 w-6" />
+            </div>
+          );
+
+          if (it.disabled) {
+            return (
+              <button key={it.label} onClick={() => toast.info("Please complete your check-in first 🌿")} className="flex-1">
+                {inner(false)}
+              </button>
+            );
+          }
+          if (it.onClick) {
+            return (
+              <button key={it.label} onClick={it.onClick} className="flex-1">
+                {inner(false)}
+              </button>
+            );
+          }
+          return (
+            <NavLink key={it.label} to={it.to!} end={it.end} className="flex-1">
+              {({ isActive }) => inner(isActive && !it.disabled)}
+            </NavLink>
+          );
+        })}
+      </nav>
     </div>
   );
 }

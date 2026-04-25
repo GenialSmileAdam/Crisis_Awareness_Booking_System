@@ -98,8 +98,8 @@ export default function Landing() {
       <section className="relative min-h-screen flex items-center pt-24 pb-12 overflow-hidden">
         <div className="absolute inset-0 gradient-mesh animate-mesh" />
         <div className="absolute inset-0 grain opacity-30 pointer-events-none" />
-        <div className="relative w-full max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-          <div className="space-y-8 animate-fade-in-up">
+        <div className="relative w-full max-w-7xl mx-auto px-6 flex flex-col lg:grid lg:grid-cols-2 gap-12 items-center">
+          <div className="space-y-8 animate-fade-in-up mt-10 lg:mt-0 w-full">
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent text-accent-foreground text-xs font-bold uppercase tracking-wider">
               <Sparkles className="h-3 w-3" /> Nile University × SafeSpace
             </span>
@@ -111,24 +111,24 @@ export default function Landing() {
             <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
               The intelligent wellness platform that detects student distress early and connects them to help before crisis hits.
             </p>
-            <div className="flex flex-wrap gap-3">
-              <Link to="/login">
-                <Button size="lg" className="h-12 px-6">
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <Link to="/login" className="w-full sm:w-auto">
+                <Button size="lg" className="h-12 px-6 w-full sm:w-auto">
                   Sign In (Staff)
                 </Button>
               </Link>
-              <Link to="/login">
-                <Button size="lg" className="gradient-primary text-primary-foreground border-0 h-12 px-6 group flex items-center bg-accent text-accent-foreground hover:bg-accent/90">
+              <Link to="/login" className="w-full sm:w-auto">
+                <Button size="lg" className="gradient-primary text-primary-foreground border-0 h-12 px-6 group flex items-center bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto justify-center">
                   Student Check-in <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition" />
                 </Button>
               </Link>
             </div>
           </div>
 
-          <div className="relative h-[520px] hidden lg:block">
+          <div className="relative h-[320px] md:h-[520px] w-full mt-8 lg:mt-0 flex justify-center items-center">
             <div className="absolute inset-0 animate-blob gradient-primary rounded-full blur-3xl opacity-30" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-              <div className="surface-card p-6 shadow-card glass">
+              <div className="surface-card p-6 shadow-card glass transform scale-75 md:scale-100">
                 <WRSRing value={72} size={200} />
                 <div className="mt-3 flex justify-center">
                   <span className="px-3 py-1 rounded-full bg-destructive/15 text-destructive text-xs font-semibold">🔴 At Risk</span>
@@ -222,7 +222,7 @@ export default function Landing() {
         <h2 className="font-display text-4xl md:text-5xl font-bold mb-16 max-w-2xl">
           From check-in to care, in minutes.
         </h2>
-        <div className="relative grid md:grid-cols-3 gap-8">
+        <div className="relative flex flex-col md:grid md:grid-cols-3 gap-8">
           <div className="hidden md:block absolute top-10 left-[10%] right-[10%] h-px bg-gradient-to-r from-primary via-accent to-destructive animate-draw-line" />
           {[
             { n: "01", title: "Complete your daily check-in", desc: "Students fill a quick PHQ-9 or Pulse Survey in under 90 seconds." },

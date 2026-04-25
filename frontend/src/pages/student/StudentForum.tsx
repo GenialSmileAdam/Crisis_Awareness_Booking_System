@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, Plus } from "lucide-react";
+import { Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, Plus, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +28,8 @@ const INITIAL_MOCK_POSTS: Post[] = [
 ];
 
 export default function StudentForum() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_MOCK_POSTS);
@@ -68,22 +72,28 @@ export default function StudentForum() {
 
   return (
     <AppShell items={studentSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
-        <div>
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <div className="flex-1 pr-2">
           <h1 className="font-display text-xl font-bold">Wellness Forum</h1>
-          <p className="text-xs text-muted-foreground">Anonymous peer support — your identity is never revealed.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Anonymous peer support — your identity is never revealed.</p>
         </div>
-        <div className="flex items-center gap-4">
-          <Button onClick={() => setOpen(true)} size="sm" className="bg-[#6C3FE8] hover:bg-[#6C3FE8]/90 text-white border-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={() => setOpen(true)} size="sm" className="hidden md:flex bg-[#6C3FE8] hover:bg-[#6C3FE8]/90 text-white border-0">
             <Plus className="h-4 w-4 mr-1.5" /> New Post
           </Button>
+          <Button onClick={() => setOpen(true)} size="icon" variant="ghost" className="md:hidden h-9 w-9 bg-[#6C3FE8]/10 text-[#6C3FE8] rounded-full">
+            <Plus className="h-4 w-4" />
+          </Button>
           <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       <CrisisBanner />
 
-      <div className="p-6 lg:p-8 space-y-6 pt-0">
+      <div className="p-4 md:p-6 lg:p-8 space-y-6 pt-0">
         {/* Anonymity Notice Banner */}
         <div className="w-full rounded-xl p-4 flex items-center gap-3 text-sm font-medium" style={{ backgroundColor: "#6C3FE815", border: "1px solid #6C3FE840", color: "var(--foreground)" }}>
           <span className="text-lg">🔒</span>

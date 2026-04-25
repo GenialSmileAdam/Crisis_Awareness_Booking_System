@@ -3,7 +3,19 @@ import { ReactNode } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
-export let sessionCheckInComplete = false;
+const checkSurveysComplete = () => {
+  if (typeof window === "undefined") return false;
+  const now = new Date().getTime();
+  const p = localStorage.getItem("last_pulse");
+  const ph = localStorage.getItem("last_phq9");
+  const g = localStorage.getItem("last_gad7");
+  const pOk = p && now - new Date(p).getTime() < 7 * 24 * 60 * 60 * 1000;
+  const phOk = ph && now - new Date(ph).getTime() < 30 * 24 * 60 * 60 * 1000;
+  const gOk = g && now - new Date(g).getTime() < 30 * 24 * 60 * 60 * 1000;
+  return !!(pOk && phOk && gOk);
+};
+
+export let sessionCheckInComplete = checkSurveysComplete();
 export const setSessionCheckInComplete = (v: boolean) => { sessionCheckInComplete = v; };
 
 export function StudentRoute({ children }: { children: ReactNode }) {

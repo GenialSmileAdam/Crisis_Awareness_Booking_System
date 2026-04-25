@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
 import { adminSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { STUDENTS, COUNSELORS, FACULTIES, downloadCSV } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 interface Row {
   id: string; first_name: string; last_name: string; email: string; role: "Student" | "Psychologist"; faculty: string; matric: string; date: string; status: "Active" | "Inactive"; classLevel?: string;
@@ -28,6 +30,8 @@ const initialUsers: Row[] = [
 ];
 
 export default function AdminUsers() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<Row[]>(initialUsers);
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -43,21 +47,31 @@ export default function AdminUsers() {
 
   return (
     <AppShell items={adminSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div>
-          <h1 className="font-display text-xl font-bold">User Management</h1>
-          <p className="text-xs text-muted-foreground">Manage students and psychologist staff.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..." className="pl-9 h-9 w-64" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30 gap-3 md:gap-0">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div>
+            <h1 className="font-display text-xl font-bold">User Management</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage students and psychologist staff.</p>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2 md:hidden">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="rounded-full h-9 w-9">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="relative flex-1 md:flex-initial">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..." className="pl-9 h-9 w-full md:w-64" />
+          </div>
+          <div className="hidden md:flex">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
-      <div className="p-8 space-y-8 animate-fade-in">
+      <div className="p-4 md:p-8 space-y-8 animate-fade-in">
         {/* Student Directory */}
         <div className="glass border border-border rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -189,12 +203,12 @@ function AddPsychologistModal({ open, onOpenChange, onCreate }: { open: boolean;
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Psychologist</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-3 py-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
           <div><Label>First name</Label><Input value={form.first} onChange={(e) => setForm({ ...form, first: e.target.value })} className="mt-1" /></div>
           <div><Label>Last name</Label><Input value={form.last} onChange={(e) => setForm({ ...form, last: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-2"><Label>Temporary Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-2"><Label>Department</Label><Input value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })} className="mt-1" /></div>
+          <div className="col-span-1 md:col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
+          <div className="col-span-1 md:col-span-2"><Label>Temporary Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1" /></div>
+          <div className="col-span-1 md:col-span-2"><Label>Department</Label><Input value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })} className="mt-1" /></div>
         </div>
         <DialogFooter><Button onClick={submit} className="gradient-primary text-primary-foreground border-0">Add Psychologist</Button></DialogFooter>
       </DialogContent>

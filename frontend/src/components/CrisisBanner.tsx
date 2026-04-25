@@ -87,18 +87,18 @@ export function CrisisBanner() {
 
   return (
     <div className="mx-6 lg:mx-8 mt-6">
-      <div className="rounded-2xl border-l-4 border border-destructive bg-destructive/10 p-5 animate-pulse-ring">
+      <div className="rounded-2xl border-l-4 border border-destructive bg-destructive/10 p-3 md:p-5 animate-pulse-ring">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="h-3 w-3 rounded-full bg-destructive animate-pulse mt-1.5 shrink-0" />
             <div>
-              <div className="font-display text-xl font-bold text-destructive">We're here for you. Please reach out now.</div>
-              <p className="text-sm text-muted-foreground mt-1">Your wellness score indicates you need support today.</p>
+              <div className="font-display text-sm md:text-xl font-bold text-destructive">We're here for you. Please reach out now.</div>
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">Your wellness score indicates you need support today.</p>
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap shrink-0">
-            <Button onClick={handleHotlineClick} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"><Phone className="h-4 w-4 mr-2" /> Call Crisis Hotline</Button>
-            <Button onClick={() => setBookingOpen(true)} variant="outline" className="border-destructive/50"><Calendar className="h-4 w-4 mr-2" /> Book Priority Session</Button>
+          <div className="flex flex-col md:flex-row gap-2 shrink-0">
+            <Button onClick={handleHotlineClick} className="w-full md:w-auto bg-destructive hover:bg-destructive/90 text-destructive-foreground"><Phone className="h-4 w-4 mr-2" /> Call Crisis Hotline</Button>
+            <Button onClick={() => setBookingOpen(true)} variant="outline" className="w-full md:w-auto border-destructive/50"><Calendar className="h-4 w-4 mr-2" /> Book Priority Session</Button>
           </div>
         </div>
       </div>

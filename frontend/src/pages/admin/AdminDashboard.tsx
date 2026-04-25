@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { LayoutDashboard, BarChart3, Users, FileText, Settings, Search, AlertTriangle, ClipboardCheck, Activity, MessageSquare, Library } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { LayoutDashboard, BarChart3, Users, FileText, Settings, Search, AlertTriangle, ClipboardCheck, Activity, MessageSquare, Library, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { ALERTS, FACULTY_WRS, STUDENTS, colorFromWrs, tierFromWrs, downloadCSV, 
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 import { adminSidebarItems } from "@/data/sidebar";
 
@@ -16,6 +18,8 @@ const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This S
 type Range = keyof typeof RANGE_LABELS;
 
 export default function AdminDashboard() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [range, setRange] = useState<Range>("week");
   const [tierFilter, setTierFilter] = useState<string | null>(null);
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
@@ -79,23 +83,34 @@ export default function AdminDashboard() {
 
   return (
     <AppShell items={adminSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <div className="flex items-center gap-4">
-          <h1 className="font-display text-xl font-bold">University Overview</h1>
-          <Select value={range} onValueChange={(v: Range) => setRange(v)}>
-            <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(RANGE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col md:flex-row md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30 gap-3 md:gap-0">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <h1 className="font-display text-xl md:text-xl font-bold">University Overview</h1>
+          <div className="flex items-center gap-2 md:hidden">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="rounded-full h-9 w-9">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleSidebar("Reports")}><FileText className="h-3.5 w-3.5 mr-1.5" /> Export Report</Button>
-          <ThemeToggle />
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex gap-2 items-center">
+            <Select value={range} onValueChange={(v: Range) => setRange(v)}>
+              <SelectTrigger className="w-32 md:w-40 h-9 text-xs md:text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(RANGE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => handleSidebar("Reports")} className="hidden md:flex"><FileText className="h-3.5 w-3.5 mr-1.5" /> Export</Button>
+            <Button variant="outline" size="icon" onClick={() => handleSidebar("Reports")} className="md:hidden h-9 w-9"><FileText className="h-3.5 w-3.5" /></Button>
+          </div>
+          <div className="hidden md:flex">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
-      <div className="p-8 space-y-6">
+      <div className="p-4 md:p-8 space-y-6">
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map((k) => {

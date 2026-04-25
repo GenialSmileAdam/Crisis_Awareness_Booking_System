@@ -59,6 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokenExpiry(expiry);
       localStorage.setItem("ss_user", JSON.stringify(c.user));
       localStorage.setItem("ss_token_expiry", expiry.toString());
+      
+      // Reset check-in state on fresh login
+      localStorage.removeItem("last_pulse");
+      localStorage.removeItem("last_phq9");
+      localStorage.removeItem("last_gad7");
+      
       return true;
     }
     return false;

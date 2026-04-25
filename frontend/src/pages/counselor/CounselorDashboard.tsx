@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -19,7 +19,7 @@ import { toast } from "sonner";
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
 
 export default function CounselorDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [filter, setFilter] = useState<typeof TIERS[number]>("All");
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -93,9 +93,9 @@ export default function CounselorDashboard() {
 
   return (
     <AppShell items={counselorSidebarItems}>
-      <div className="flex items-center justify-between h-16 px-8 border-b border-border">
-        <h1 className="font-display text-xl font-bold">Welcome, {user?.name} 👋</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
+        <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full relative">
@@ -112,10 +112,13 @@ export default function CounselorDashboard() {
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="p-8 space-y-6">
+      <div className="p-4 md:p-8 space-y-6">
         {/* KPIs — full width 4 cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map((k) => {

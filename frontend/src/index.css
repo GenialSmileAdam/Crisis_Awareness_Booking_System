@@ -164,6 +164,24 @@
   }
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { scrollbar-width: none; }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .overflow-x-auto, .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+
+  @media (max-width: 767px) {
+    [role="dialog"] {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      padding: 16px !important;
+      border: none !important;
+    }
+    [role="dialog"] > button:last-child {
+      top: 16px !important;
+      right: 16px !important;
+    }
+  }
 }
 
 @keyframes pulse-ring {

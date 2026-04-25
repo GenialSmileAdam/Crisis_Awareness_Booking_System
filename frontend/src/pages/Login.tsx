@@ -41,7 +41,7 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-background">
       {/* Left — branded */}
-      <div className="relative lg:w-1/2 min-h-[40vh] lg:min-h-screen overflow-hidden bg-[hsl(240_22%_6%)] text-white flex items-center justify-center p-10">
+      <div className="relative lg:w-1/2 min-h-[40vh] lg:min-h-screen overflow-hidden bg-[hsl(240_22%_6%)] text-white hidden lg:flex items-center justify-center p-10">
         <div className="absolute inset-0 gradient-mesh animate-mesh opacity-90" />
         <div className="absolute top-6 left-6"><Logo size="md" /></div>
 
@@ -77,10 +77,10 @@ export default function Login() {
       </div>
 
       {/* Right — form */}
-      <div className="lg:w-1/2 flex items-center justify-center p-6 lg:p-10 relative">
+      <div className="w-full lg:w-1/2 flex items-center justify-center min-h-screen lg:min-h-0 lg:p-10 relative">
         <div className="absolute top-4 right-4"><ThemeToggle /></div>
 
-        <div className="w-full max-w-md surface-card p-8 shadow-card animate-fade-in-up">
+        <div className="w-full max-w-md surface-card p-8 shadow-card animate-fade-in-up rounded-none border-0 lg:rounded-2xl lg:border">
           <h2 className="font-display text-3xl font-bold">Welcome back</h2>
           <p className="text-sm text-muted-foreground mt-1">Sign in to SafeSpace</p>
 
