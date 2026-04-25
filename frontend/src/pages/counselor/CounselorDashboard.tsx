@@ -91,13 +91,8 @@ export default function CounselorDashboard() {
     setOverrideModal(null);
   };
 
-  const sidebarItems: SidebarItem[] = [
-    ...counselorSidebarItems,
-    { icon: LogOut, label: "Logout", onClick: () => { logout(); navigate("/login"); } }
-  ];
-
   return (
-    <AppShell items={sidebarItems}>
+    <AppShell items={counselorSidebarItems}>
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
