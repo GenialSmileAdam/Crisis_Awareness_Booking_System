@@ -2,7 +2,6 @@
 __pycache__/
 *.pyc
 *.py[cod]
-
 #Ignore audio files
 *.ogg
 *.wav
@@ -11,5 +10,5 @@ __pycache__/
 *.m4a
 
 .env
-.ini
+
 
