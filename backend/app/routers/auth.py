@@ -41,10 +41,10 @@ async def login(
         return cached
 
     # ⚠️ Swagger sends "username", map it to email
-    user_id = form_data.username
+    email = form_data.username
     password = form_data.password
 
-    tokens = await AuthService.login(db, user_id, password)
+    tokens = await AuthService.login(db, email, password)
 
     # Set refresh token cookie
     set_refresh_cookie(response, tokens["refresh_token"])

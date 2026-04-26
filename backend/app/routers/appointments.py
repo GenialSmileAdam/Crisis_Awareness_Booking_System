@@ -6,12 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.routers.dependencies import cache_idempotent_response, handle_idempotency, require_roles
-from app.schemas.appointments import AppointmentCreate, AppointmentUpdate
+from app.schemas.appointments import (
+    AppointmentCreate,
+    AppointmentUpdate,
+    StudentAppointmentCreate,
+)
 from app.services.appointment_service import AppointmentService
 from app.utils.response import success
 
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
+
+
+def _serialize_appointment(appointment) -> dict:
+    return {
+        "id": appointment.id,
+        "student_id": appointment.student_id,
+        "psychologist_id": appointment.psychologist_id,
+        "start_time": appointment.start_time,
+        "end_time": appointment.end_time,
+        "status": appointment.status,
+        "is_crisis": appointment.is_crisis,
+        "crisis_note": appointment.crisis_note,
+        "booking_source": appointment.booking_source,
+        "calendar_event_id": appointment.calendar_event_id,
+        "deleted_at": appointment.deleted_at,
+        "created_at": appointment.created_at,
+    }
 
 
 @router.post("", status_code=201)
@@ -33,6 +54,35 @@ async def create_appointment(
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     response = success("Appointment created successfully", result)
+    return cache_idempotent_response(cache_key, response)
+
+
+@router.post("/book")
+async def book_student_appointment(
+    payload: StudentAppointmentCreate,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("student"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        appointment = await AppointmentService.book_student_appointment(
+            db,
+            current_user,
+            payload,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    response = success(
+        "Appointment booked successfully",
+        _serialize_appointment(appointment),
+    )
     return cache_idempotent_response(cache_key, response)
 
 

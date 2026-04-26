@@ -10,7 +10,7 @@ from app.models.staff import StaffType
 
 class UserCreate(BaseModel):
     email: str
-    password: str
+    password: Optional[str] = None
     full_name: str
     phone: Optional[str] = None
     date_of_birth: Optional[date] = None
