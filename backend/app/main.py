@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import students, staff, appointments, auth, users
+from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores
 from app import models
 
 from app.routers import session_ai
@@ -28,6 +28,9 @@ app.include_router(appointments.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(session_ai.router)
+app.include_router(consent.router, prefix="/consent", tags=["Consent"])
+app.include_router(checkins.router, prefix="/checkins", tags=["Check-ins"])
+app.include_router(risk_scores.router, prefix="/risk-scores", tags=["Risk Scores"])
 
 @app.get("/")
 async def root():

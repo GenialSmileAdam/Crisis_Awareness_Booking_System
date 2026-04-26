@@ -65,9 +65,11 @@ class UserService:
                     status_code=status.HTTP_409_CONFLICT, detail="Student ID already exists"
                 )
 
+        temporary_password = data.password or security.generate_temporary_password()
+
         user = User(
             email=data.email,
-            password_hash=security.hash_password(data.password),
+            password_hash=security.hash_password(temporary_password),
             full_name=data.full_name,
             phone=data.phone,
             date_of_birth=data.date_of_birth,
@@ -105,7 +107,9 @@ class UserService:
 
         await db.commit()
         await db.refresh(user)
-        return await cls._serialize_user(db, user)
+        serialized_user = await cls._serialize_user(db, user)
+        serialized_user["temporary_password"] = temporary_password
+        return serialized_user
 
     @classmethod
     async def get_all(

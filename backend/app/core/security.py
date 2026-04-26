@@ -37,6 +37,13 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+def generate_temporary_password(length: int = 18) -> str:
+    """Generate a cryptographically strong temporary password."""
+    if length < 12:
+        raise ValueError("Temporary password length must be at least 12 characters")
+    return secrets.token_urlsafe(length)[:length]
+
+
 def create_access_token(
     user_id: str,
     user_type: str,
