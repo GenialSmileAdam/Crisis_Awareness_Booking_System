@@ -95,8 +95,8 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   navigate("/login");
                 }}
                 className={cn(
@@ -139,7 +139,7 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
   // Add Logout to hidden items
   const drawerItems = [
     ...hiddenItems,
-    { icon: LogOut, label: "Logout", onClick: () => { logout(); navigate("/login"); } }
+    { icon: LogOut, label: "Logout", onClick: async () => { await logout(); navigate("/login"); } }
   ];
 
   const activeColor = user?.role === "student" ? "text-primary" : "text-[#8b5cf6]";

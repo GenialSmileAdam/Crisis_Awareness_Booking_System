@@ -1,5 +1,5 @@
-import { Navigate, useLocation } from "react-router-dom";
-import { ReactNode } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
@@ -21,7 +21,17 @@ export const setSessionCheckInComplete = (v: boolean) => { sessionCheckInComplet
 export function StudentRoute({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   useTokenRefresh();
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      navigate("/login");
+    };
+
+    window.addEventListener("safespace:session-expired", handleSessionExpired as EventListener);
+    return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
+  }, [navigate]);
 
   // Not logged in as student → redirect to login
   if (!user || user.role !== "student") {
