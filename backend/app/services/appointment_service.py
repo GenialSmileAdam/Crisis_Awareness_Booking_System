@@ -6,12 +6,16 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appointments import Appointment, AppointmentStatus
+from app.models.appointments import Appointment, AppointmentStatus, BookingSource
 from app.models.crisis_logs import CrisisLog, SeverityLevel
 from app.models.staff import Staff, StaffType
 from app.models.students import Student
 from app.models.tables import sessions_table, users_table
-from app.schemas.appointments import AppointmentCreate, AppointmentUpdate
+from app.schemas.appointments import (
+    AppointmentCreate,
+    AppointmentUpdate,
+    StudentAppointmentCreate,
+)
 from app.utils.notification_stub import send_crisis_alert
 from app.utils.pagination import paginate
 
@@ -24,6 +28,26 @@ def _paginate_payload(items: list[dict[str, Any]], total: int, limit: int, offse
 
 
 class AppointmentService:
+    @staticmethod
+    async def _get_student_by_user_id(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> Student:
+        student = (
+            await db.execute(
+                select(Student)
+                .join(users_table, users_table.c.id == Student.user_id)
+                .where(
+                    Student.user_id == user_id,
+                    users_table.c.deleted_at.is_(None),
+                    users_table.c.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if not student:
+            raise LookupError("Student not found")
+        return student
+
     @staticmethod
     async def _ensure_psychologist_active(db: AsyncSession, psychologist_id: UUID) -> Staff:
         staff = (
@@ -80,6 +104,83 @@ class AppointmentService:
             ).limit(1)
         )
         return conflict.scalar_one_or_none()
+
+    @staticmethod
+    async def _count_daily_appointments(
+        db: AsyncSession,
+        psychologist_id: UUID,
+        start_time: datetime,
+    ) -> int:
+        day_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        return (
+            await db.execute(
+                select(func.count())
+                .select_from(Appointment)
+                .where(
+                    Appointment.psychologist_id == psychologist_id,
+                    Appointment.deleted_at.is_(None),
+                    Appointment.start_time >= day_start,
+                    Appointment.start_time < day_end,
+                )
+            )
+        ).scalar_one()
+
+    @classmethod
+    async def book_student_appointment(
+        cls,
+        db: AsyncSession,
+        current_user: dict,
+        appointment_data: StudentAppointmentCreate,
+    ) -> Appointment:
+        student = await cls._get_student_by_user_id(db, current_user["id"])
+        staff = await cls._ensure_psychologist_active(db, appointment_data.psychologist_id)
+
+        daily_count = await cls._count_daily_appointments(
+            db,
+            appointment_data.psychologist_id,
+            appointment_data.start_time,
+        )
+        if daily_count >= staff.max_appointments_per_day:
+            raise FileExistsError("Psychologist has reached the maximum appointments for this day")
+
+        if not appointment_data.is_crisis:
+            conflict = await cls._find_conflict(
+                db,
+                appointment_data.psychologist_id,
+                appointment_data.start_time,
+                appointment_data.end_time,
+            )
+            if conflict:
+                raise FileExistsError("Psychologist has a conflicting booking at this time")
+
+        appointment = Appointment(
+            student_id=student.student_id,
+            psychologist_id=appointment_data.psychologist_id,
+            start_time=appointment_data.start_time,
+            end_time=appointment_data.end_time,
+            status=AppointmentStatus.booked,
+            is_crisis=appointment_data.is_crisis,
+            crisis_note=appointment_data.crisis_note,
+            booking_source=BookingSource.student_portal,
+        )
+        db.add(appointment)
+        await db.flush()
+
+        if appointment_data.is_crisis:
+            db.add(
+                CrisisLog(
+                    appointment_id=appointment.id,
+                    student_id=student.student_id,
+                    severity_level=SeverityLevel.high,
+                    action_taken=appointment_data.crisis_note or "Student crisis booking created",
+                    alert_sent_at=datetime.utcnow(),
+                )
+            )
+
+        await db.commit()
+        await db.refresh(appointment)
+        return appointment
 
     @classmethod
     async def create(
