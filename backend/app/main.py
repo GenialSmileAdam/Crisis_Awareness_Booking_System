@@ -8,7 +8,6 @@ from app.routers import session_ai
 from dotenv import load_dotenv
 load_dotenv()
 
-
 app = FastAPI(
     title="PsyUnit API",
     version="1.0.0",
