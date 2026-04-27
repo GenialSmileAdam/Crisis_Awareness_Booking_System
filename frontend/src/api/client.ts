@@ -25,7 +25,7 @@ export async function apiRequest<T>(
 
     const headers: Record<string, string> = {};
 
-    if (token) {
+    if (token && token !== "null" && token !== "undefined" && token.trim() !== "") {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
