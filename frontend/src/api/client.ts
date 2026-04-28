@@ -11,8 +11,8 @@ const TOKEN_KEY = "safespace_access_token";
  * - Attaches Bearer token from localStorage
  * - Handles form-urlencoded (login) vs JSON bodies
  * - Unwraps the backend { success, message, data } envelope
- * - On 401: attempts a single token refresh then retries
- * - Dispatches "safespace:session-expired" if refresh fails
+ * - On 401: attempts a single token refresh ONLY if a token was sent
+ * - Dispatches "safespace:session-expired" only if refresh fails with an existing token
  */
 export async function apiRequest<T>(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
@@ -22,10 +22,11 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const execute = async (retry: boolean): Promise<T> => {
     const token = localStorage.getItem(TOKEN_KEY);
+    const hasToken = token && token !== "null" && token !== "undefined" && token.trim() !== "";
 
     const headers: Record<string, string> = {};
 
-    if (token) {
+    if (hasToken) {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
@@ -50,13 +51,14 @@ export async function apiRequest<T>(
       credentials: "include", // send HTTP-only refresh cookie
     });
 
-    // ── 401 → attempt token refresh once ──
-    if (res.status === 401 && retry) {
+    // ── 401 → attempt token refresh ONLY if we had a token ──
+    if (res.status === 401 && retry && hasToken && path !== "/auth/refresh") {
       const refreshed = await attemptTokenRefresh();
       if (refreshed) {
+        // Token was successfully refreshed, retry the original request
         return execute(false);
       }
-      // refresh failed — expire session
+      // refresh failed with existing token → session has expired
       localStorage.removeItem(TOKEN_KEY);
       window.dispatchEvent(new CustomEvent("safespace:session-expired"));
       throw { message: "Session expired", status: 401 } as ApiError;

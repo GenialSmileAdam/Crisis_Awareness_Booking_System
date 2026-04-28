@@ -4,8 +4,13 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+from app.core.config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+import app.models  # noqa: F401
+
+
+# ── Use settings from config (already validates env vars) ──
+DATABASE_URL = settings.DATABASE_URL
 
 print("DB =", DATABASE_URL)
 print("RAW DB URL:", repr(DATABASE_URL))

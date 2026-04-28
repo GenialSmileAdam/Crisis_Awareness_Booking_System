@@ -5,10 +5,14 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth, Role } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WRSRing } from "@/components/WRSRing";
+import { toast } from "sonner";
+import type { ApiError } from "@/api/client";
+
+type Role = "student" | "psychologist" | "admin";
 
 const ROLES: { id: Role; label: string }[] = [
   { id: "student", label: "Student" },
@@ -17,25 +21,86 @@ const ROLES: { id: Role; label: string }[] = [
 ];
 
 const HINTS: Record<Role, { identifier: string; pwd: string }> = {
-  student: { identifier: "Student ID: 27001011", pwd: "StudentPass123!" },
-  psychologist: { identifier: "dr.amara@nileuni.edu", pwd: "counsel123" },
+  student: { identifier: "Student ID: 27001011", pwd: "ChangeMe123!" },
+  psychologist: { identifier: "dr.amara@nileuni.edu", pwd: "ChangeMe123!" },
   admin: { identifier: "thisismymail014@gmail.com", pwd: "PsyUnitAdmin1" },
 };
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const [role, setRole] = useState<Role>("student");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const submit = (e: React.FormEvent) => {
+  const validateInputs = (): boolean => {
+    if (role === "student") {
+      if (!identifier.trim()) {
+        setError("Student ID is required.");
+        return false;
+      }
+      if (!password) {
+        setError("Password is required.");
+        return false;
+      }
+    } else {
+      if (!emailRegex.test(identifier.trim())) {
+        setError("Please enter a valid email address.");
+        return false;
+      }
+      if (!password) {
+        setError("Password is required.");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const ok = login(role, identifier, password);
-    if (!ok) return setError("Invalid credentials. Please try again.");
-    navigate(role === "student" ? "/student" : role === "psychologist" ? "/counselor" : `/${role}`);
+
+    if (!validateInputs()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await login(role, identifier, password);
+      toast.success("Welcome back!");
+
+      // Navigate based on user role from decoded token
+      if (role === "student") {
+        navigate("/student");
+      } else if (role === "psychologist") {
+        navigate("/counselor");
+      } else if (role === "admin") {
+        navigate("/admin");
+      }
+    } catch (err) {
+      const error = err as ApiError;
+      let message = "Something went wrong. Please try again later.";
+
+      if (error.status === 401) {
+        message = "Invalid credentials. Please try again.";
+      } else if (error.status === 403) {
+        message = "Your account is inactive. Contact your administrator.";
+      } else if (error.status === 422) {
+        message = "Please check your details and try again.";
+      } else if (error.status === 429) {
+        message = "Too many attempts. Please wait a moment and try again.";
+      }
+
+      setError(message);
+      setPassword("");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -131,8 +196,12 @@ export default function Login() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full gradient-primary text-primary-foreground border-0 h-11 group">
-              Sign In <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />
+            <Button
+              type="submit"
+              className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Signing in..." : "Sign In"} {!isSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
             </Button>
           </form>
 

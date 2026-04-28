@@ -1,51 +1,50 @@
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useNavigate, useLocation } from "react-router-dom";
-import { toast } from "sonner";
+import { refreshToken } from "@/api/auth";
+
+// Must match the TOKEN_KEY in auth.ts and client.ts
+const TOKEN_KEY = "safespace_access_token";
+
+// Helper: Decode JWT payload from token
+function decodeJWT(token: string) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const decoded = JSON.parse(atob(parts[1]));
+    return decoded;
+  } catch {
+    return null;
+  }
+}
 
 export function useTokenRefresh() {
-  const { tokenExpiry, setTokenExpiry, logout } = useAuth();
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { accessToken } = useAuth();
 
   useEffect(() => {
-    if (!tokenExpiry) return;
+    if (!accessToken) return;
 
-    const checkToken = async () => {
-      const now = Date.now();
-      const timeUntilExpiry = tokenExpiry - now;
+    // Set up interval to refresh every 4 minutes
+    const interval = setInterval(async () => {
+      if (!accessToken) return;
 
-      // If token is already expired
-      if (timeUntilExpiry <= 0) {
-        toast.error("Your session has expired. Please sign in again.");
-        logout();
-        navigate("/login");
-        return;
-      }
-
-      // If within 1 minute of expiring, mock a refresh
-      if (timeUntilExpiry < 60 * 1000) {
-        try {
-          // In a real app, this would be a fetch call:
-          // await fetch("/auth/refresh", { method: "POST" });
-          
-          // Mock successful refresh: Extend by 14 minutes
-          const newExpiry = Date.now() + 14 * 60 * 1000;
-          setTokenExpiry(newExpiry);
-          localStorage.setItem("ss_token_expiry", newExpiry.toString());
-          // console.log("Token refreshed silently.");
-        } catch (error) {
-          toast.error("Your session has expired. Please sign in again.");
-          logout();
-          navigate("/login");
+      try {
+        const response = await refreshToken();
+        const decoded = decodeJWT(response.access_token);
+        
+        if (decoded) {
+          // Store token in localStorage for API client to use
+          localStorage.setItem(TOKEN_KEY, response.access_token);
+          // Update user display data
+          localStorage.setItem("ss_user", JSON.stringify(decoded));
+        } else {
+          window.dispatchEvent(new CustomEvent("safespace:session-expired"));
         }
+      } catch {
+        // Refresh failed — trigger session expiry
+        window.dispatchEvent(new CustomEvent("safespace:session-expired"));
       }
-    };
+    }, 4 * 60 * 1000); // 4 minutes
 
-    checkToken();
-    
-    // Also set up an interval to check periodically if the user leaves the tab open
-    const interval = setInterval(checkToken, 30 * 1000); // Check every 30s
     return () => clearInterval(interval);
-  }, [tokenExpiry, logout, navigate, setTokenExpiry, pathname]);
+  }, [accessToken]);
 }
