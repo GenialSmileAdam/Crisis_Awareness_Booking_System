@@ -10,7 +10,6 @@ from app import models
 
 from app.routers import session_ai
 
-
 app = FastAPI(
     title="PsyUnit API",
     version="1.0.0",
