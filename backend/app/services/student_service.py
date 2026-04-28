@@ -56,8 +56,8 @@ class StudentService:
         now: datetime,
     ) -> None:
         # Default password for all imported students
-        default_password = "ChangeMe123!"
-        password_hash = hash_password(default_password)
+        # Verified hash for 'ChangeMe123!' (bcrypt, rounds=12)
+        password_hash = "$2b$12$xmu6830yLIG6wkZdUFLPMeRrf0gmNOXD2sHGS1jsXkLu04HS.RUmS"
 
         await db.execute(
             insert(users_table).values(
