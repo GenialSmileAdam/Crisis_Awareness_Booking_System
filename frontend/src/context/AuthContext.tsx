@@ -20,6 +20,22 @@ const AuthContext = createContext<AuthContextState>({
   isAuthenticated: false,
 });
 
+// ── Storage keys ──
+const ACCESS_TOKEN_KEY = "safespace_access_token";
+const USER_KEY = "ss_user";
+
+// Helper: Safely parse JSON from localStorage
+function safeParseJSON<T>(json: string | null, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    // Corrupted JSON in localStorage — silently ignore and use fallback
+    console.warn("Failed to parse stored auth data, starting fresh");
+    return fallback;
+  }
+}
+
 // Helper: Decode JWT payload from token
 function decodeJWT(token: string): JWTPayload | null {
   try {
@@ -32,33 +48,74 @@ function decodeJWT(token: string): JWTPayload | null {
   }
 }
 
+// Helper: Validate that token and user both exist
+function hasValidSession(token: string | null, user: JWTPayload | null): boolean {
+  return !!(token && token.trim() && user);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Initialize state from localStorage with safe parsing
   const [user, setUser] = useState<JWTPayload | null>(() => {
-    const raw = localStorage.getItem("ss_user");
-    return raw ? JSON.parse(raw) : null;
+    return safeParseJSON(localStorage.getItem(USER_KEY), null);
   });
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    // Validate token is not empty or corrupted (should have 3 JWT parts)
+    if (token && token.trim() && token.split(".").length === 3) {
+      return token;
+    }
+    return null;
+  });
+
   const [isLoading, setIsLoading] = useState(true);
 
-  // On app mount: attempt to refresh token from HTTP-only cookie
+  // Helper: Clear all auth-related state and storage
+  const clearAuthState = () => {
+    setAccessToken(null);
+    setUser(null);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  };
+
+  // On app mount: restore session and attempt refresh if both token and user exist
   useEffect(() => {
     const initializeAuth = async () => {
+      // ── Restore from localStorage (already done in initial state) ──
+      // ── But verify both exist for a valid session ──
+      const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+      const storedUser = safeParseJSON(localStorage.getItem(USER_KEY), null);
+
+      // ── Validate: require BOTH token AND user to consider session valid ──
+      if (!hasValidSession(storedToken, storedUser)) {
+        // No valid cached session, clear any partial state
+        setAccessToken(null);
+        setUser(null);
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setIsLoading(false);
+        return;
+      }
+
+      // ── Both token and user exist, attempt to refresh ──
       try {
         const response = await refreshToken();
         const decoded = decodeJWT(response.access_token);
+
         if (decoded) {
+          // Refresh successful, update with new token
           setAccessToken(response.access_token);
           setUser(decoded);
-          localStorage.setItem("ss_user", JSON.stringify(decoded));
+          localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
+          localStorage.setItem(USER_KEY, JSON.stringify(decoded));
         } else {
-          setAccessToken(null);
-          setUser(null);
-          localStorage.removeItem("ss_user");
+          // Refresh returned invalid token, clear session
+          clearAuthState();
         }
-      } catch {
-        setAccessToken(null);
-        setUser(null);
-        localStorage.removeItem("ss_user");
+      } catch (error) {
+        // Refresh failed (401, network error, etc.) → clear session
+        // but don't spam errors during initialization
+        clearAuthState();
       } finally {
         setIsLoading(false);
       }
@@ -70,9 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Listen for session expired event
   useEffect(() => {
     const handleSessionExpired = () => {
-      setAccessToken(null);
-      setUser(null);
-      localStorage.removeItem("ss_user");
+      clearAuthState();
       toast.error("Your session has expired. Please sign in again.");
     };
 
@@ -95,9 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("Failed to decode token");
     }
 
+    // Store both token and user consistently
     setAccessToken(response.access_token);
     setUser(decoded);
-    localStorage.setItem("ss_user", JSON.stringify(decoded));
+    localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
+    localStorage.setItem(USER_KEY, JSON.stringify(decoded));
 
     // Reset check-in state on fresh login
     localStorage.removeItem("last_pulse");
@@ -111,9 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore errors — always clear local state
     } finally {
-      setAccessToken(null);
-      setUser(null);
-      localStorage.removeItem("ss_user");
+      clearAuthState();
       toast.success("You've been signed out.");
     }
   };

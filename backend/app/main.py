@@ -1,12 +1,14 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 
 from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores
 from app import models
 
 from app.routers import session_ai
-from dotenv import load_dotenv
-load_dotenv()
 
 
 app = FastAPI(
@@ -17,11 +19,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8080",
-        "http://localhost:5173",
-        "https://crisis-awareness-booking-system.vercel.app",
-        "https://www.crisis-awareness-booking-system.vercel.app",
-    ],
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "https://crisis-awareness-booking-system.vercel.app",
+    "https://www.crisis-awareness-booking-system.vercel.app",
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

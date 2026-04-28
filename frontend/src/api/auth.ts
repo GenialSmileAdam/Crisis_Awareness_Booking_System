@@ -59,6 +59,12 @@ export async function loginStaff(
 
 /**
  * Refresh the access token using the HTTP-only refresh cookie.
+ *
+ * IMPORTANT: This should only be called when a user session likely exists
+ * (i.e., when localStorage has cached user data). Calling this without a valid
+ * refresh cookie will cause a 401, which is treated as session expiry.
+ *
+ * @throws ApiError if refresh fails (e.g., cookie invalid, expired, or missing)
  */
 export async function refreshToken(): Promise<{ access_token: string }> {
   return apiRequest<{ access_token: string }>("POST", "/auth/refresh");
