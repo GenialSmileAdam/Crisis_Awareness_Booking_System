@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import { STUDENTS, FACULTY_WRS, UPCOMING_SESSIONS, tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
+import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
+import { listStudents } from "@/api/students";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -32,44 +34,114 @@ export default function CounselorDashboard() {
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const navigate = useNavigate();
+  
+  // Real API data
+  const [students, setStudents] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [alertsOffset, setAlertsOffset] = useState(0);
+  const [alertsPagination, setAlertsPagination] = useState<any>(null);
+
+  // Fetch all data on component mount
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [studentsData, alertsData] = await Promise.all([
+          listStudents(10, 0),
+          getRiskAlerts(10, 0)
+        ]);
+        setStudents(studentsData.data || []);
+        setTotalStudents(studentsData.pagination?.total || 0);
+        setAlerts(alertsData.data || []);
+        setAlertsPagination(alertsData.pagination || {});
+      } catch (err) {
+        setError("Failed to load dashboard data");
+        console.error("Dashboard data fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
 
   const colorFromTier = (t: string) => t === "Green" ? "#A8FF3E" : t === "Amber" ? "#FF8C42" : t === "Red" ? "#FF4560" : "#B00020";
 
   const activeHighRiskCount = useMemo(() => {
-    return STUDENTS.filter(s => tierFromWrs(s.wrs) === "Red" || tierFromWrs(s.wrs) === "Critical").length;
-  }, []);
+    return alerts.filter(a => {
+      const tier = a.tier?.toLowerCase();
+      return tier === "red" || tier === "critical";
+    }).length;
+  }, [alerts]);
+
+  const avgCampusWrs = useMemo(() => {
+    if (alerts.length === 0) return "—";
+    const sum = alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0);
+    return (sum / alerts.length).toFixed(1);
+  }, [alerts]);
 
   const kpis = [
-    { label: "Total Students", value: STUDENTS.length, icon: Users, action: () => { navigate("/counselor/students"); } },
-    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
+    { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
+    { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
     { label: "Sessions This Week", value: sessions.length, icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
-    { label: "Avg Campus WRS", value: "—", icon: Activity, action: () => toast.info("Data will be available after integration") },
+    { label: "Avg Campus WRS", value: loading ? "—" : avgCampusWrs, icon: Activity, action: () => toast.info("Data will be available after integration") },
   ];
 
   const rows = useMemo(() => {
-    let r = [...STUDENTS];
-    if (filter !== "All") r = r.filter((s) => (overrides[s.id] || tierFromWrs(s.wrs)) === filter);
+    let r = [...students];
+    if (filter !== "All") {
+      r = r.filter((s) => {
+        const matchingAlert = alerts.find((a) => a.student_id === s.student_id);
+        const tier = matchingAlert?.tier?.toLowerCase() || "green";
+        return tier === filter.toLowerCase();
+      });
+    }
     if (facultyFilter) r = r.filter((s) => s.faculty === facultyFilter);
-    if (search) r = r.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
-    r.sort((a, b) => (sortDesc ? b.wrs - a.wrs : a.wrs - b.wrs));
+    if (search) {
+      r = r.filter((s) => 
+        (s.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        String(s.student_id || "").toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    r.sort((a, b) => {
+      const aAlert = alerts.find((al) => al.student_id === a.student_id);
+      const bAlert = alerts.find((al) => al.student_id === b.student_id);
+      const aWrs = aAlert?.wrs_score || 0;
+      const bWrs = bAlert?.wrs_score || 0;
+      return sortDesc ? bWrs - aWrs : aWrs - bWrs;
+    });
     return r;
-  }, [filter, facultyFilter, search, sortDesc]);
+  }, [filter, facultyFilter, search, sortDesc, students, alerts]);
 
   const rosterPageRows = rows.slice(rosterPagination.offset, rosterPagination.offset + rosterPagination.limit);
   const sessionsPageRows = sessions.slice(sessionsPagination.offset, sessionsPagination.offset + sessionsPagination.limit);
 
   const tierData = useMemo(() => {
-    const g = STUDENTS.filter((s) => tierFromWrs(s.wrs) === "Green").length;
-    const a = STUDENTS.filter((s) => tierFromWrs(s.wrs) === "Amber").length;
-    const r = STUDENTS.filter((s) => tierFromWrs(s.wrs) === "Red").length;
-    const c = STUDENTS.filter((s) => tierFromWrs(s.wrs) === "Critical").length;
+    const tierCounts: { [key: string]: number } = {
+      Green: 0,
+      Amber: 0,
+      Red: 0,
+      Critical: 0
+    };
+    
+    alerts.forEach((alert) => {
+      const tier = alert.tier?.toLowerCase();
+      if (tier === "green") tierCounts.Green++;
+      else if (tier === "amber") tierCounts.Amber++;
+      else if (tier === "red") tierCounts.Red++;
+      else if (tier === "critical") tierCounts.Critical++;
+    });
+    
     return [
-      { name: "Green", value: g, color: "#A8FF3E" },
-      { name: "Amber", value: a, color: "#FF8C42" },
-      { name: "Red", value: r, color: "#FF4560" },
-      { name: "Critical", value: c, color: "#B00020" },
+      { name: "Green", value: tierCounts.Green, color: "#A8FF3E" },
+      { name: "Amber", value: tierCounts.Amber, color: "#FF8C42" },
+      { name: "Red", value: tierCounts.Red, color: "#FF4560" },
+      { name: "Critical", value: tierCounts.Critical, color: "#B00020" },
     ];
-  }, []);
+  }, [alerts]);
 
   const handleAction = (id: string, actionName: string) => {
     if (actionName === "join") toast.success("Opening secure video meeting...");
@@ -80,19 +152,36 @@ export default function CounselorDashboard() {
     }
   };
 
-  const handleOverrideSubmit = () => {
+  const handleOverrideSubmit = async () => {
     if (!overrideModal) return;
     if (overrideModal.justification.trim().length < 20) {
       toast.error("Please provide a detailed justification");
       return;
     }
-    setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier as RiskTier }));
-    toast.success(`Risk tier overridden for ${overrideModal.name}`);
-    setOverrideModal(null);
+    
+    try {
+      await overrideRiskTier(overrideModal.id, {
+        override_tier: overrideModal.newTier,
+        justification: overrideModal.justification
+      });
+      setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier as RiskTier }));
+      toast.success(`Risk tier overridden for ${overrideModal.name}`);
+      setOverrideModal(null);
+    } catch (err) {
+      toast.error("Failed to override risk tier. Please try again.");
+      console.error("Override error:", err);
+    }
   };
 
   return (
     <AppShell items={counselorSidebarItems}>
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30">
+          Failed to load data. Please refresh.
+        </div>
+      )}
+      
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -140,9 +229,13 @@ export default function CounselorDashboard() {
                     <Icon className="h-4 w-4 md:h-5 md:w-5" />
                   </div>
                 </div>
-                <div className={cn("font-display text-2xl md:text-3xl font-bold mt-2 md:mt-3 tabular-nums", k.danger && "text-destructive")}>
-                  {k.value}
-                </div>
+                {loading && k.value === "—" ? (
+                  <div className="h-6 bg-muted rounded-lg mt-2 md:mt-3 animate-pulse" />
+                ) : (
+                  <div className={cn("font-display text-2xl md:text-3xl font-bold mt-2 md:mt-3 tabular-nums", k.danger && "text-destructive")}>
+                    {k.value}
+                  </div>
+                )}
                 <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">{k.label}</div>
               </button>
             );
@@ -216,53 +309,65 @@ export default function CounselorDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rosterPageRows.map((s, i) => {
-                      const baseTier = tierFromWrs(s.wrs);
-                      const isOverridden = !!overrides[s.id];
-                      const tier = overrides[s.id] || baseTier;
-                      const color = colorFromTier(tier);
-                      return (
-                        <tr key={s.id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
-                          <td className="p-3 font-medium text-xs md:text-sm">{s.name}</td>
-                          <td className="hidden md:table-cell p-3 text-muted-foreground">{s.classLevel}</td>
-                          <td className="hidden md:table-cell p-3 text-muted-foreground">{s.faculty}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
-                              {s.wrs}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn("text-[10px] md:text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
-                                style={{ backgroundColor: `${color}25`, color }}
-                              >
-                                {tier}
-                              </span>
-                              {isOverridden && (
-                                <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                  Overridden
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="hidden md:table-cell p-3 text-muted-foreground text-xs">{s.lastSeverity}</td>
-                          <td className="hidden md:table-cell p-3 text-muted-foreground text-xs font-mono">{s.lastCheckIn}</td>
-                          <td className="p-3 text-right">
-                            <div className="flex flex-col sm:flex-row justify-end gap-1.5 md:gap-2">
-                              <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.id}`)} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
-                                View
-                              </Button>
-                              <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.id, name: s.name, currentTier: baseTier, newTier: baseTier, justification: "" })} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
-                                Override
-                              </Button>
-                            </div>
+                    {loading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <tr key={i} className="border-b border-border/60 last:border-0">
+                          <td colSpan={8} className="p-3">
+                            <div className="h-6 bg-muted rounded animate-pulse" />
                           </td>
                         </tr>
-                      );
-                    })}
-                    {rosterPageRows.length === 0 && (
-                      <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No students match your filters.</td></tr>
+                      ))
+                    ) : rosterPageRows.length === 0 ? (
+                      <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">No students match your filters.</td></tr>
+                    ) : (
+                      rosterPageRows.map((s, i) => {
+                        const matchingAlert = alerts.find((a) => a.student_id === s.student_id);
+                        const baseTier = matchingAlert?.tier?.charAt(0).toUpperCase() + (matchingAlert?.tier?.slice(1).toLowerCase() || "green") || "Green";
+                        const isOverridden = !!overrides[s.student_id];
+                        const tier = overrides[s.student_id] || baseTier;
+                        const color = colorFromTier(tier);
+                        const wrsScore = matchingAlert?.wrs_score || "—";
+                        
+                        return (
+                          <tr key={s.student_id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
+                            <td className="p-3 font-medium text-xs md:text-sm">{s.full_name}</td>
+                            <td className="hidden md:table-cell p-3 text-muted-foreground">{s.class_level || "—"}</td>
+                            <td className="hidden md:table-cell p-3 text-muted-foreground">—</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono font-semibold" style={{ backgroundColor: typeof wrsScore === "number" ? `${colorFromWrs(wrsScore)}25` : "transparent", color: typeof wrsScore === "number" ? colorFromWrs(wrsScore) : "currentColor" }}>
+                                {wrsScore}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn("text-[10px] md:text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
+                                  style={{ backgroundColor: `${color}25`, color }}
+                                >
+                                  {tier}
+                                </span>
+                                {isOverridden && (
+                                  <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    Overridden
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="hidden md:table-cell p-3 text-muted-foreground text-xs">—</td>
+                            <td className="hidden md:table-cell p-3 text-muted-foreground text-xs font-mono">—</td>
+                            <td className="p-3 text-right">
+                              <div className="flex flex-col sm:flex-row justify-end gap-1.5 md:gap-2">
+                                <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.student_id}`)} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
+                                  View
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.student_id, name: s.full_name, currentTier: baseTier, newTier: baseTier, justification: "" })} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
+                                  Override
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -274,7 +379,27 @@ export default function CounselorDashboard() {
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" disabled={rosterPagination.offset === 0} onClick={() => setRosterPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
-                    <Button size="sm" variant="outline" disabled={rosterPagination.offset + rosterPagination.limit >= rows.length} onClick={() => setRosterPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      disabled={rosterPagination.offset + rosterPagination.limit >= rows.length}
+                      onClick={async () => {
+                        const newOffset = rosterPagination.offset + rosterPagination.limit;
+                        setLoading(true);
+                        try {
+                          const alertsData = await getRiskAlerts(10, newOffset);
+                          setAlerts(alertsData.data || []);
+                          setAlertsPagination(alertsData.pagination || {});
+                          setAlertsOffset(newOffset);
+                        } catch (err) {
+                          setError("Failed to load alerts");
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                    >
+                      Next
+                    </Button>
                   </div>
                 </div>
               )}
