@@ -5,8 +5,12 @@ import { apiRequest } from "./client";
 /**
  * Create a new AI transcription session.
  */
-export async function createAISession(): Promise<{ session_id: string }> {
-  return apiRequest<{ session_id: string }>("POST", "/ai/sessions");
+export async function createAISession(data: {
+  appointment_id: string;
+  client_name: string;
+  notes?: string;
+}): Promise<{ id: string }> {
+  return apiRequest<{ id: string }>("POST", "/ai/sessions", data);
 }
 
 /**
