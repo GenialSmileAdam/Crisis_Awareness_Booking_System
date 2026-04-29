@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { getAppointmentAvailability, bookAppointment } from "@/api/appointments";
+import { listPsychologists } from "@/api/staff";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut } from "lucide-react";
+import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
@@ -10,27 +12,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CrisisBanner } from "@/components/CrisisBanner";
-
 import { studentSidebarItems } from "@/data/sidebar";
 
-const COUNSELORS = [
-  { id: "c1", name: "Dr. Amara Obi", title: "Lead Counselor", specialty: "Anxiety & Stress" },
-  { id: "c2", name: "Dr. Kelechi Eze", title: "Senior Counselor", specialty: "Depression Care" },
-  { id: "c3", name: "Dr. Bola Adewale", title: "Wellness Counselor", specialty: "Academic Pressure" },
-];
-
-const TIMES = ["9:00 AM", "11:00 AM", "2:00 PM", "4:00 PM"];
-
 const UPCOMING_INIT = [
-  { id: "u1", counselor: COUNSELORS[0], date: "Apr 28, 2026", time: "11:00 AM", type: "Virtual", status: "Confirmed" },
-  { id: "u2", counselor: COUNSELORS[1], date: "May 03, 2026", time: "2:00 PM", type: "In-Person", status: "Pending" },
-  { id: "u3", counselor: COUNSELORS[2], date: "May 10, 2026", time: "9:00 AM", type: "Virtual", status: "Confirmed" },
+  { id: "u1", counselor: { name: "Dr. Amara Obi", title: "Lead Counselor" }, date: "Apr 28, 2026", time: "11:00 AM", type: "Virtual", status: "Confirmed" },
+  { id: "u2", counselor: { name: "Dr. Kelechi Eze", title: "Senior Counselor" }, date: "May 03, 2026", time: "2:00 PM", type: "In-Person", status: "Pending" },
+  { id: "u3", counselor: { name: "Dr. Bola Adewale", title: "Wellness Counselor" }, date: "May 10, 2026", time: "9:00 AM", type: "Virtual", status: "Confirmed" },
 ];
 
 const PAST = Array.from({ length: 8 }).map((_, i) => ({
   id: `p${i}`,
   date: `Mar ${28 - i * 3}, 2026`,
-  counselor: COUNSELORS[i % COUNSELORS.length].name,
+  counselor: "Dr. Amara Obi",
   type: i % 2 ? "Virtual" : "In-Person",
   notes: "Discussed exam stress and developed coping strategies. Student showed improved mood at end of session.",
 }));
@@ -47,40 +40,76 @@ function buildMonth(year: number, month: number) {
 }
 
 export default function StudentAppointments() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [counselorId, setCounselorId] = useState<string | null>(null);
-  const [date, setDate] = useState<number | null>(null);
-  const [time, setTime] = useState<string | null>(null);
+  
+  const [psychologists, setPsychologists] = useState<any[]>([]);
+  const [selectedPsychologist, setSelectedPsychologist] = useState<any>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [step, setStep] = useState(1);
+  
   const [mode, setMode] = useState<"In-Person" | "Virtual">("Virtual");
   const [notes, setNotes] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
   const [viewing, setViewing] = useState<typeof PAST[number] | null>(null);
   const [upcoming, setUpcoming] = useState(UPCOMING_INIT);
 
+  useEffect(() => {
+    const fetchPsychologists = async () => {
+      try {
+        const data = await listPsychologists();
+        setPsychologists(data || []);
+      } catch (err) {
+        console.error("Failed to load psychologists");
+      }
+    };
+    fetchPsychologists();
+  }, []);
+
   const cells = useMemo(() => buildMonth(viewYear, viewMonth), [viewYear, viewMonth]);
   const monthName = new Date(viewYear, viewMonth).toLocaleString("default", { month: "long", year: "numeric" });
 
-  const step = confirmed ? 4 : !counselorId ? 1 : !(date && time) ? 2 : 3;
-  const selectedCounselor = COUNSELORS.find((c) => c.id === counselorId);
-
   const reset = () => {
-    setCounselorId(null);
-    setDate(null);
-    setTime(null);
+    setSelectedPsychologist(null);
+    setSelectedDate(null);
+    setSelectedSlot(null);
+    setAvailableSlots([]);
     setNotes("");
     setMode("Virtual");
-    setConfirmed(false);
+    setBookingSuccess(false);
+    setStep(1);
   };
 
-  const confirm = () => {
-    setConfirmed(true);
-    toast.success("Appointment confirmed!");
+  const confirmBooking = async () => {
+    if (!selectedSlot || !selectedPsychologist) return;
+    setLoading(true);
+    try {
+      const [start, end] = selectedSlot.split(" / ");
+      await bookAppointment({
+        psychologist_id: selectedPsychologist.user_id,
+        start_time: start,
+        end_time: end,
+        is_crisis: false,
+        crisis_note: notes || undefined
+      });
+      setBookingSuccess(true);
+      setStep(4); // Success step
+      toast.success("Appointment confirmed!");
+    } catch (err) {
+      toast.error("Failed to book appointment. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
+
 
   const scrollToBooking = () => {
     document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" });
@@ -137,35 +166,40 @@ export default function StudentAppointments() {
           </div>
 
           {/* Step 1 - Counselor selection */}
-          <div>
+          <div className={cn(step !== 1 && "hidden md:block opacity-40 pointer-events-none")}>
             <div className="label-eyebrow mb-3">Step 1 — Select your counselor</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {COUNSELORS.map((c) => {
-                const active = counselorId === c.id;
+              {psychologists.map((p) => {
+                const active = selectedPsychologist?.user_id === p.user_id;
                 return (
                   <button
-                    key={c.id}
-                    onClick={() => setCounselorId(c.id)}
+                    key={p.user_id}
+                    onClick={() => {
+                      setSelectedPsychologist(p);
+                      setStep(2);
+                    }}
                     className={cn(
-                      "text-left p-5 rounded-2xl border transition-all",
+                      "text-left p-5 rounded-2xl border transition-all relative overflow-hidden",
                       active
                         ? "border-primary bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary))]"
                         : "border-border bg-card hover:border-primary/40"
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold">
-                        {c.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                      <div className="h-12 w-12 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">
+                        {p.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
                       </div>
-                      <div>
-                        <div className="font-semibold">{c.name}</div>
-                        <div className="text-xs text-muted-foreground">{c.title}</div>
+                      <div className="overflow-hidden">
+                        <div className="font-semibold truncate">{p.full_name}</div>
+                        <div className="text-xs text-muted-foreground truncate">{p.staff_type}</div>
                       </div>
                     </div>
                     <div className="mt-4 flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">{c.specialty}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-success/15 text-xs" style={{ color: "hsl(var(--success))" }}>
-                        Available today
+                      <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-medium uppercase tracking-wider">
+                        {p.specialization || "General Counseling"}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-success/15 text-[10px] font-medium uppercase tracking-wider text-success">
+                        Available
                       </span>
                     </div>
                   </button>
@@ -175,8 +209,8 @@ export default function StudentAppointments() {
           </div>
 
           {/* Step 2 - Date & time */}
-          {counselorId && (
-            <div className="animate-fade-in-up">
+          {selectedPsychologist && (
+            <div className={cn("animate-fade-in-up", step !== 2 && "hidden md:block opacity-40 pointer-events-none")}>
               <div className="label-eyebrow mb-3">Step 2 — Pick a date & time</div>
               <div className="grid lg:grid-cols-2 gap-6">
                 {/* Calendar */}
@@ -210,13 +244,27 @@ export default function StudentAppointments() {
                   <div className="grid grid-cols-7 gap-1">
                     {cells.map((d, i) => {
                       if (d === null) return <div key={i} />;
-                      const isPast = new Date(viewYear, viewMonth, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                      const active = date === d;
+                      const dateObj = new Date(viewYear, viewMonth, d);
+                      const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                      const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+                      const active = selectedDate === dateStr;
+                      
                       return (
                         <button
                           key={i}
                           disabled={isPast}
-                          onClick={() => setDate(d)}
+                          onClick={async () => {
+                            setSelectedDate(dateStr);
+                            setSlotsLoading(true);
+                            try {
+                              const slots = await getAppointmentAvailability(selectedPsychologist.user_id, dateStr);
+                              setAvailableSlots(slots || []);
+                            } catch (err) {
+                              toast.error("Failed to load availability");
+                            } finally {
+                              setSlotsLoading(false);
+                            }
+                          }}
                           className={cn(
                             "h-9 rounded-lg text-sm font-medium transition",
                             isPast && "text-muted-foreground/40 cursor-not-allowed",
@@ -232,29 +280,56 @@ export default function StudentAppointments() {
                 </div>
 
                 {/* Time slots */}
-                <div className="rounded-2xl border border-border p-4">
+                <div className="rounded-2xl border border-border p-4 min-h-[200px] flex flex-col">
                   <div className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <Clock className="h-4 w-4" /> Available times
                   </div>
-                  <div className="grid grid-cols-3 lg:grid-cols-2 gap-2">
-                    {TIMES.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setTime(t)}
-                        className={cn(
-                          "px-3 py-3 rounded-xl border text-sm font-medium transition",
-                          time === t
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border hover:border-primary/40"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  {date && time && (
-                    <div className="mt-4 text-xs text-muted-foreground">
-                      Selected: {monthName.split(" ")[0]} {date} · {time}
+                  
+                  {slotsLoading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground animate-pulse">
+                      <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                      <div className="text-xs">Loading slots...</div>
+                    </div>
+                  ) : !selectedDate ? (
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs italic">
+                      Select a date to see available times
+                    </div>
+                  ) : availableSlots.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
+                      No available slots for this date
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {availableSlots.map((slot) => {
+                        const [start, end] = slot.split(" / ");
+                        const startTime = new Date(start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                        const endTime = new Date(end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                        const active = selectedSlot === slot;
+                        
+                        return (
+                          <button
+                            key={slot}
+                            onClick={() => {
+                              setSelectedSlot(slot);
+                              setStep(3);
+                            }}
+                            className={cn(
+                              "px-3 py-3 rounded-xl border text-xs font-medium transition",
+                              active
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border hover:border-primary/40"
+                            )}
+                          >
+                            {startTime} - {endTime}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {selectedDate && selectedSlot && (
+                    <div className="mt-auto pt-4 text-[10px] text-muted-foreground font-mono uppercase tracking-widest text-center">
+                      Selected: {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(selectedSlot.split(" / ")[0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </div>
                   )}
                 </div>
@@ -263,17 +338,17 @@ export default function StudentAppointments() {
           )}
 
           {/* Step 3 - Confirm */}
-          {counselorId && date && time && (
-            <div className="animate-fade-in-up">
+          {selectedPsychologist && selectedDate && selectedSlot && (
+            <div className={cn("animate-fade-in-up", step !== 3 && step !== 4 && "hidden md:block opacity-40 pointer-events-none")}>
               <div className="label-eyebrow mb-3">Step 3 — Review & confirm</div>
-              {confirmed ? (
+              {bookingSuccess ? (
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-8 text-center space-y-3">
                   <div className="mx-auto h-14 w-14 rounded-full bg-success flex items-center justify-center">
                     <Check className="h-7 w-7" style={{ color: "hsl(var(--success-foreground))" }} />
                   </div>
                   <div className="font-display font-bold text-xl">Appointment confirmed!</div>
                   <div className="text-sm text-muted-foreground">
-                    {selectedCounselor?.name} · {monthName.split(" ")[0]} {date} · {time} · {mode}
+                    {selectedPsychologist.full_name} · {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {new Date(selectedSlot.split(" / ")[0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {mode}
                   </div>
                   <Button variant="outline" onClick={reset}>
                     <RotateCcw className="h-4 w-4 mr-2" /> Start Over
@@ -285,15 +360,15 @@ export default function StudentAppointments() {
                     <div className="text-sm font-semibold">Summary</div>
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-                        {selectedCounselor?.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                        {selectedPsychologist.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
                       </div>
                       <div>
-                        <div className="font-medium text-sm">{selectedCounselor?.name}</div>
-                        <div className="text-xs text-muted-foreground">{selectedCounselor?.title}</div>
+                        <div className="font-medium text-sm">{selectedPsychologist.full_name}</div>
+                        <div className="text-xs text-muted-foreground">{selectedPsychologist.staff_type}</div>
                       </div>
                     </div>
                     <div className="text-sm flex items-center gap-2 text-muted-foreground">
-                      <CalendarIcon className="h-4 w-4" /> {monthName.split(" ")[0]} {date} at {time}
+                      <CalendarIcon className="h-4 w-4" /> {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(selectedSlot.split(" / ")[0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </div>
                     <div className="flex gap-2 pt-2">
                       {(["In-Person", "Virtual"] as const).map((m) => (
@@ -318,8 +393,12 @@ export default function StudentAppointments() {
                       rows={5}
                       placeholder="Anything you'd like your counselor to know..."
                     />
-                    <Button onClick={confirm} className="w-full gradient-primary text-primary-foreground border-0 h-11">
-                      Confirm Appointment
+                    <Button 
+                      onClick={confirmBooking} 
+                      disabled={loading}
+                      className="w-full gradient-primary text-primary-foreground border-0 h-11"
+                    >
+                      {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Confirming...</> : "Confirm Appointment"}
                     </Button>
                   </div>
                 </div>

@@ -94,3 +94,15 @@ export async function updateAppointment(
 export async function deleteAppointment(id: string): Promise<void> {
   return apiRequest<void>("DELETE", `/appointments/${id}`);
 }
+/**
+ * Book an appointment (student).
+ */
+export async function bookAppointment(payload: {
+  psychologist_id: string;
+  start_time: string;
+  end_time: string;
+  is_crisis: boolean;
+  crisis_note?: string;
+}): Promise<any> {
+  return apiRequest("POST", "/appointments/book", payload);
+}
