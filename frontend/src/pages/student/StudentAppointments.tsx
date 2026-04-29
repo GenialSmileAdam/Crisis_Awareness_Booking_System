@@ -93,16 +93,38 @@ export default function StudentAppointments() {
     setLoading(true);
     try {
       const [start, end] = selectedSlot.split(" / ");
-      await bookAppointment({
+      const response = await bookAppointment({
         psychologist_id: selectedPsychologist.user_id,
         start_time: start,
         end_time: end,
         is_crisis: false,
         crisis_note: notes || undefined
       });
+      
+      const newAppt = {
+        id: response.id,
+        psychologist_full_name: selectedPsychologist.full_name,
+        start_time: start,
+        end_time: end,
+        status: "booked",
+        is_crisis: false,
+        // Compatibility fields for existing UI
+        counselor: { name: selectedPsychologist.full_name, title: selectedPsychologist.staff_type },
+        date: new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time: new Date(start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        type: mode,
+      };
+      
+      setUpcoming(prev => [newAppt, ...prev]);
       setBookingSuccess(true);
       setStep(4); // Success step
       toast.success("Appointment confirmed!");
+      
+      // Reset after 2 seconds
+      setTimeout(() => {
+        reset();
+      }, 2000);
+      
     } catch (err) {
       toast.error("Failed to book appointment. Please try again.");
     } finally {
