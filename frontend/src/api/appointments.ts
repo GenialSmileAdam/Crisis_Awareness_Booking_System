@@ -64,10 +64,11 @@ export async function listAppointments(
  */
 export async function getAppointmentAvailability(
   psychologistId: string,
-): Promise<AvailabilitySlot[]> {
-  return apiRequest<AvailabilitySlot[]>(
+  date: string,
+): Promise<string[]> {
+  return apiRequest<string[]>(
     "GET",
-    `/appointments/availability/${psychologistId}`,
+    `/appointments/availability/${psychologistId}?date=${date}`,
   );
 }
 
