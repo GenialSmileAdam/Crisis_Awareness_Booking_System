@@ -3,15 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Logo } from "@/components/Logo";
+import { submitConsent } from "@/api/consent";
+import { toast } from "sonner";
 
 export default function StudentConsent() {
   const [agreed, setAgreed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleConsent = () => {
-    if (!agreed) return;
-    localStorage.setItem("consent_signed", "true");
-    navigate("/student");
+  const handleConsent = async (monitoringEnabled: boolean) => {
+    if (monitoringEnabled && !agreed) return;
+    
+    setIsLoading(true);
+    try {
+      await submitConsent(monitoringEnabled);
+      navigate("/student");
+    } catch (err) {
+      toast.error("Failed to save consent. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -67,13 +78,24 @@ export default function StudentConsent() {
           </div>
         </div>
 
-        <Button 
-          onClick={handleConsent} 
-          disabled={!agreed} 
-          className="w-full h-12 text-base font-semibold transition-all"
-        >
-          Sign Consent & Continue
-        </Button>
+        <div className="flex flex-col gap-3">
+          <Button 
+            onClick={() => handleConsent(true)} 
+            disabled={!agreed || isLoading} 
+            className="w-full h-12 text-base font-semibold transition-all"
+          >
+            {isLoading ? "Saving..." : "Continue to SafeSpace"}
+          </Button>
+          
+          <Button 
+            variant="ghost"
+            onClick={() => handleConsent(false)} 
+            disabled={isLoading}
+            className="w-full h-12 text-sm font-medium text-muted-foreground hover:text-foreground transition-all"
+          >
+            Continue without monitoring
+          </Button>
+        </div>
       </div>
     </div>
   );
