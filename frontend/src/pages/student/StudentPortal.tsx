@@ -12,13 +12,12 @@ import { useAuth } from "@/context/AuthContext";
 import { tierFromWrs, RECENT_CHECKINS, PHQ9_QUESTIONS, PHQ9_OPTIONS, GAD7_QUESTIONS, GAD7_OPTIONS, PULSE_QUESTIONS, colorFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { sessionCheckInComplete, setSessionCheckInComplete } from "@/components/StudentRoute";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-
 type SurveyTab = "pulse" | "phq9" | "gad7";
-
+import { submitCheckin, getPendingCheckins, CheckinType, PendingCheckin } from "@/api/checkins";
+import { submitConsent, getConsent } from "@/api/consent";
 import { studentSidebarItems } from "@/data/sidebar";
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {

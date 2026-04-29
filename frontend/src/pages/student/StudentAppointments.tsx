@@ -1,5 +1,4 @@
 import { getAppointmentAvailability, bookAppointment } from "@/api/appointments";
-import { listPsychologists } from "@/api/staff";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
@@ -13,6 +12,15 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { studentSidebarItems } from "@/data/sidebar";
+
+const PSYCHOLOGISTS = [
+  {
+    user_id: "22222222-2222-2222-2222-222222222222",
+    full_name: "Dr. Jane Psych",
+    staff_type: "psychologist",
+    specialization: "Student Mental Health"
+  }
+];
 
 const UPCOMING_INIT = [
   { id: "u1", counselor: { name: "Dr. Amara Obi", title: "Lead Counselor" }, date: "Apr 28, 2026", time: "11:00 AM", type: "Virtual", status: "Confirmed" },
@@ -63,15 +71,7 @@ export default function StudentAppointments() {
   const [upcoming, setUpcoming] = useState(UPCOMING_INIT);
 
   useEffect(() => {
-    const fetchPsychologists = async () => {
-      try {
-        const data = await listPsychologists();
-        setPsychologists(data || []);
-      } catch (err) {
-        console.error("Failed to load psychologists");
-      }
-    };
-    fetchPsychologists();
+    setPsychologists(PSYCHOLOGISTS);
   }, []);
 
   const cells = useMemo(() => buildMonth(viewYear, viewMonth), [viewYear, viewMonth]);
