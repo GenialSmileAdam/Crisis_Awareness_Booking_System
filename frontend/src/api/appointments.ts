@@ -7,10 +7,13 @@ export interface Appointment {
   id: string;
   student_id: string;
   psychologist_id: string;
-  scheduled_at: string;
-  session_type: "in_person" | "virtual";
-  status: "pending" | "confirmed" | "cancelled" | "completed";
-  notes: string | null;
+  start_time: string;
+  end_time: string;
+  status: "booked" | "completed" | "cancelled" | "no_show";
+  is_crisis: boolean;
+  crisis_note: string | null;
+  student_full_name: string;
+  session_summary?: string;
   created_at: string;
 }
 

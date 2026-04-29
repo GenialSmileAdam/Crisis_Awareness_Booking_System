@@ -1,7 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
+import { listAppointments, updateAppointment, type Appointment } from "@/api/appointments";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut } from "lucide-react";
-import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
+// ... existing imports ...
+import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -11,31 +13,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { STUDENTS, FACULTY_WRS, UPCOMING_SESSIONS, tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
+import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
 import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
+import type { PaginationInfo } from "@/api/types";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
+const SESSION_FILTERS = ["All", "Upcoming", "Completed", "Cancelled"] as const;
 
 export default function CounselorDashboard() {
   const { user, logout } = useAuth();
   const [filter, setFilter] = useState<typeof TIERS[number]>("All");
+  const [sessionFilter, setSessionFilter] = useState<typeof SESSION_FILTERS[number]>("All");
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortDesc, setSortDesc] = useState(true);
   const location = useLocation();
   const currentView = location.pathname === "/counselor/sessions" ? "schedule" : "dashboard";
-  const [sessions, setSessions] = useState(UPCOMING_SESSIONS);
+  
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [offset, setOffset] = useState(0);
+  
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
-  const [sessionsPagination, setSessionsPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const navigate = useNavigate();
   
-  // Real API data
   const [students, setStudents] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,23 +51,38 @@ export default function CounselorDashboard() {
   const [alertsOffset, setAlertsOffset] = useState(0);
   const [alertsPagination, setAlertsPagination] = useState<any>(null);
 
-  // Fetch all data on component mount
+  const fetchAppointments = async (newOffset: number) => {
+    try {
+      setLoading(true);
+      const data = await listAppointments(10, newOffset);
+      setAppointments(data.data || []);
+      setPagination(data.pagination);
+      setOffset(newOffset);
+    } catch (err) {
+      setError("Failed to load sessions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchAll = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [studentsData, alertsData] = await Promise.all([
+        const [studentsData, alertsData, appointmentsData] = await Promise.all([
           listStudents(10, 0),
-          getRiskAlerts(10, 0)
+          getRiskAlerts(10, 0),
+          listAppointments(10, 0)
         ]);
         setStudents(studentsData.data || []);
         setTotalStudents(studentsData.pagination?.total || 0);
         setAlerts(alertsData.data || []);
         setAlertsPagination(alertsData.pagination || {});
+        setAppointments(appointmentsData.data || []);
+        setPagination(appointmentsData.pagination);
       } catch (err) {
         setError("Failed to load dashboard data");
-        console.error("Dashboard data fetch error:", err);
       } finally {
         setLoading(false);
       }
@@ -86,9 +108,31 @@ export default function CounselorDashboard() {
   const kpis = [
     { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
     { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
-    { label: "Sessions This Week", value: sessions.length, icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
+    { label: "Sessions Total", value: loading ? "—" : (pagination?.total || 0), icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
     { label: "Avg Campus WRS", value: loading ? "—" : avgCampusWrs, icon: Activity, action: () => toast.info("Data will be available after integration") },
   ];
+
+  const filteredAppointments = useMemo(() => {
+    let r = [...appointments];
+    
+    // Status Filter
+    if (sessionFilter === "Upcoming") {
+      r = r.filter(a => a.status === "booked" && new Date(a.start_time) > new Date());
+    } else if (sessionFilter === "Completed") {
+      r = r.filter(a => a.status === "completed");
+    } else if (sessionFilter === "Cancelled") {
+      r = r.filter(a => a.status === "cancelled");
+    }
+
+    // Search Filter
+    if (search) {
+      r = r.filter(a => 
+        (a.student_full_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (a.student_id || "").toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    return r;
+  }, [appointments, sessionFilter, search]);
 
   const rows = useMemo(() => {
     let r = [...students];
@@ -100,7 +144,7 @@ export default function CounselorDashboard() {
       });
     }
     if (facultyFilter) r = r.filter((s) => s.faculty === facultyFilter);
-    if (search) {
+    if (search && currentView === "dashboard") {
       r = r.filter((s) => 
         (s.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
         String(s.student_id || "").toLowerCase().includes(search.toLowerCase())
@@ -114,10 +158,9 @@ export default function CounselorDashboard() {
       return sortDesc ? bWrs - aWrs : aWrs - bWrs;
     });
     return r;
-  }, [filter, facultyFilter, search, sortDesc, students, alerts]);
+  }, [filter, facultyFilter, search, sortDesc, students, alerts, currentView]);
 
   const rosterPageRows = rows.slice(rosterPagination.offset, rosterPagination.offset + rosterPagination.limit);
-  const sessionsPageRows = sessions.slice(sessionsPagination.offset, sessionsPagination.offset + sessionsPagination.limit);
 
   const tierData = useMemo(() => {
     const tierCounts: { [key: string]: number } = {
@@ -143,12 +186,22 @@ export default function CounselorDashboard() {
     ];
   }, [alerts]);
 
-  const handleAction = (id: string, actionName: string) => {
-    if (actionName === "join") toast.success("Opening secure video meeting...");
-    if (actionName === "reschedule") toast.info("Rescheduling dialog opened.");
-    if (actionName === "cancel") {
-      setSessions(sessions.map(s => s.id === id ? { ...s, status: "Canceled" } : s));
-      toast.success("Session canceled successfully.");
+  const handleAction = async (id: string, actionName: string) => {
+    if (actionName === "join") return toast.success("Opening secure video meeting...");
+    
+    try {
+      if (actionName === "complete") {
+        await updateAppointment(id, { status: "completed" });
+        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "completed" } : a));
+        toast.success("Session marked as complete");
+      }
+      if (actionName === "cancel") {
+        await updateAppointment(id, { status: "cancelled" });
+        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "cancelled" } : a));
+        toast.success("Session cancelled");
+      }
+    } catch (err) {
+      toast.error(`Failed to ${actionName} session`);
     }
   };
 
@@ -177,8 +230,8 @@ export default function CounselorDashboard() {
     <AppShell items={counselorSidebarItems}>
       {/* Error Banner */}
       {error && (
-        <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30">
-          Failed to load data. Please refresh.
+        <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" /> {error}
         </div>
       )}
       
@@ -229,7 +282,7 @@ export default function CounselorDashboard() {
                     <Icon className="h-4 w-4 md:h-5 md:w-5" />
                   </div>
                 </div>
-                {loading && k.value === "—" ? (
+                {loading && (k.value === "—" || k.value === 0) ? (
                   <div className="h-6 bg-muted rounded-lg mt-2 md:mt-3 animate-pulse" />
                 ) : (
                   <div className={cn("font-display text-2xl md:text-3xl font-bold mt-2 md:mt-3 tabular-nums", k.danger && "text-destructive")}>
@@ -469,14 +522,37 @@ export default function CounselorDashboard() {
           </div>
         ) : (
           <div className="surface-card p-4 md:p-6 animate-fade-in">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
               <div>
-                <h2 className="font-display text-base md:text-2xl font-bold">Upcoming Sessions</h2>
-                <p className="text-sm text-muted-foreground mt-1">Manage your schedule and appointments</p>
+                <h2 className="font-display text-lg md:text-2xl font-bold">Session Schedule</h2>
+                <p className="text-sm text-muted-foreground mt-1">Manage and track your appointments</p>
               </div>
-              <Button onClick={() => navigate("/counselor")} variant="outline" size="sm">
-                &larr; Back to Dashboard
-              </Button>
+              
+              <div className="flex flex-col md:flex-row items-center gap-3">
+                <div className="flex p-1 rounded-full bg-muted w-full md:w-auto">
+                  {SESSION_FILTERS.map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setSessionFilter(f)}
+                      className={cn(
+                        "px-4 py-1.5 text-xs font-semibold rounded-full transition",
+                        sessionFilter === f ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative w-full md:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search student or ID..."
+                    className="pl-10 h-10 w-full"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -484,92 +560,94 @@ export default function CounselorDashboard() {
                 <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                   <tr className="border-b border-border">
                     <th className="text-left p-3">Date & Time</th>
-                    <th className="text-left p-3">Student</th>
-                    <th className="text-left p-3">Level</th>
-                    <th className="text-left p-3">Type</th>
-                    <th className="text-left p-3">WRS</th>
+                    <th className="text-left p-3">Student Info</th>
                     <th className="text-left p-3">Status</th>
                     <th className="text-right p-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sessionsPageRows.map((s, i) => (
-                    <tr key={s.id} className={cn("border-b border-border/60 last:border-0", i % 2 === 0 && "bg-muted/20")}>
-                      <td className="p-3 font-medium">
-                        <div className="flex flex-col">
-                          <span>{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(s.date))}</span>
-                          <span className="text-xs text-muted-foreground">{s.time}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 font-medium">
-                        {s.studentName}
-                        <div className="text-xs text-muted-foreground">{s.studentId}</div>
-                      </td>
-                      <td className="p-3 text-muted-foreground">{s.classLevel}</td>
-                      <td className="p-3 text-muted-foreground">{s.type}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(s.wrs)}25`, color: colorFromWrs(s.wrs) }}>
-                          {s.wrs}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <span className={cn(
-                          "px-2.5 py-0.5 rounded-full text-xs font-medium",
-                          s.status === "Scheduled" || s.status === "Rescheduled" ? "bg-primary/10 text-primary" :
-                          s.status === "In Progress" ? "bg-success/15 text-success-foreground" :
-                          "bg-muted text-muted-foreground"
-                        )}>
-                          {s.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleAction(s.id, "join")}
-                            disabled={s.status === "Canceled"}
-                            className="bg-primary/10 text-primary hover:bg-primary/20"
-                          >
-                            <Video className="h-4 w-4 mr-1.5" /> Join
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Session Actions</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => navigate(`/counselor/session/${s.studentId}`)}>
-                                <FileText className="h-4 w-4 mr-2" /> View Notes
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleAction(s.id, "reschedule")} disabled={s.status === "Canceled"}>
-                                <Clock className="h-4 w-4 mr-2" /> Reschedule
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleAction(s.id, "cancel")} disabled={s.status === "Canceled"} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                <XCircle className="h-4 w-4 mr-2" /> Cancel Session
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {sessionsPageRows.length === 0 && (
-                    <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No upcoming sessions.</td></tr>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b border-border/60">
+                        <td colSpan={4} className="p-4">
+                          <div className="h-10 bg-muted rounded-xl animate-pulse" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : filteredAppointments.length === 0 ? (
+                    <tr><td colSpan={4} className="p-12 text-center text-muted-foreground">No sessions found matching your criteria.</td></tr>
+                  ) : (
+                    filteredAppointments.map((a, i) => (
+                      <tr key={a.id} className={cn("border-b border-border/60 last:border-0 hover:bg-muted/30 transition", i % 2 === 0 && "bg-muted/10")}>
+                        <td className="p-3">
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{new Date(a.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(a.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(a.end_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{a.student_full_name}</span>
+                              {a.is_crisis && (
+                                <span className="bg-destructive/15 text-destructive text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                                  🔴 Crisis
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground font-mono">{a.student_id}</span>
+                            {a.crisis_note && <span className="text-[10px] text-muted-foreground italic mt-0.5 max-w-xs truncate">{a.crisis_note}</span>}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className={cn(
+                            "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                            a.status === "booked" ? "bg-primary/15 text-primary" :
+                            a.status === "completed" ? "bg-success/15 text-success-foreground" :
+                            a.status === "cancelled" ? "bg-muted text-muted-foreground" :
+                            "bg-warning/15 text-warning-foreground"
+                          )}>
+                            {a.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            {a.status === "booked" && (
+                              <>
+                                <Button size="sm" variant="outline" onClick={() => handleAction(a.id, "complete")} className="h-8 text-xs bg-success/5 hover:bg-success/10 text-success-foreground border-success/20">
+                                  <CheckCircle className="h-3.5 w-3.5 mr-1" /> Mark Complete
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => handleAction(a.id, "cancel")} className="h-8 text-xs text-destructive hover:bg-destructive/10">
+                                  <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel
+                                </Button>
+                              </>
+                            )}
+                            <Button size="sm" variant="secondary" onClick={() => navigate(`/counselor/session/${a.id}`)} className="h-8 text-xs">
+                              View Session
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
-            {sessions.length > sessionsPagination.limit && (
-              <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+            
+            {pagination && pagination.total > 10 && (
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-border/60 text-xs text-muted-foreground">
                 <div>
-                  Showing {sessionsPagination.offset + 1}-{Math.min(sessionsPagination.offset + sessionsPagination.limit, sessions.length)} of {sessions.length}
+                  Showing {offset + 1}-{Math.min(offset + 10, pagination.total)} of {pagination.total} sessions
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={sessionsPagination.offset === 0} onClick={() => setSessionsPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
-                  <Button size="sm" variant="outline" disabled={sessionsPagination.offset + sessionsPagination.limit >= sessions.length} onClick={() => setSessionsPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
+                  <Button size="sm" variant="outline" disabled={offset === 0 || loading} onClick={() => fetchAppointments(offset - 10)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={!pagination.has_next || loading} onClick={() => fetchAppointments(offset + 10)}>
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
                 </div>
               </div>
             )}
@@ -632,3 +710,4 @@ export default function CounselorDashboard() {
     </AppShell>
   );
 }
+
