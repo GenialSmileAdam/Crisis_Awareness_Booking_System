@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
