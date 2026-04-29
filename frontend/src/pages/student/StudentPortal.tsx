@@ -202,7 +202,7 @@ export default function StudentPortal() {
   const portalItems = useMemo(() => {
     return studentSidebarItems.map(item => ({
       ...item,
-      disabled: ((!hasCompletedRecently && !isTriggered) || isTriggered) && item.label !== "Check-in" && item.label !== "Home",
+      disabled: false,
       ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
   }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
@@ -220,7 +220,7 @@ export default function StudentPortal() {
         <div className="flex-1">
           <h1 className="font-display text-xl md:text-2xl font-bold">{greeting} 👋</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {hasCompletedRecently ? "You're all caught up for today" : "Check-in required to view dashboard"}
+            You're all caught up for today
           </p>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -249,7 +249,7 @@ export default function StudentPortal() {
       <CrisisBanner />
       <div className="p-4 md:p-8 space-y-6 pt-0 md:pt-0">
         {/* Triggered Check-in Modal */}
-        <Dialog open={isTriggered}>
+        <Dialog open={false}>
           <DialogContent className="sm:max-w-[500px] [&>button]:hidden">
             <div className="flex flex-col items-center text-center space-y-4 py-4">
               <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
@@ -333,7 +333,7 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {!isCheckinView && hasCompletedRecently && (
+        {!isCheckinView && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Book appointment */}
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
