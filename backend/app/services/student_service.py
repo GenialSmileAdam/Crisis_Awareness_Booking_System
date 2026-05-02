@@ -137,8 +137,6 @@ class StudentService:
             query = query.where(Student.crisis_flag == filters["crisis_flag"])
         if filters.get("assigned_psychologist_id"):
             query = query.where(Student.assigned_psychologist_id == filters["assigned_psychologist_id"])
-        if current_user and current_user.get("role") == "psychologist":
-            query = query.where(Student.assigned_psychologist_id == current_user["id"])
 
         total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
         rows = (await db.execute(query.order_by(Student.created_at.desc()).limit(limit).offset(offset))).all()
@@ -182,8 +180,6 @@ class StudentService:
             .join(users_table, users_table.c.id == Student.user_id)
             .where(Student.student_id == student_id, users_table.c.deleted_at.is_(None))
         )
-        if current_user and current_user.get("role") == "psychologist":
-            query = query.where(Student.assigned_psychologist_id == current_user["id"])
         row = (await db.execute(query)).first()
         if not row:
             raise LookupError("Student not found")
