@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ALERTS, FACULTY_WRS, STUDENTS, colorFromWrs, tierFromWrs, downloadCSV, trendData } from "@/data/mock";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cn } from "@/lib/utils";
+import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { getRiskAlerts, getRiskCohort } from "@/api/riskScores";
@@ -127,16 +127,14 @@ export default function AdminDashboard() {
   }, [alerts]);
 
   const avgCampusWrs = useMemo(() => {
-    if (alerts.length === 0) return "—";
-    const sum = alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0);
-    return (sum / alerts.length).toFixed(1);
-  }, [alerts]);
+    return formatWRS(cohort.reduce((acc, c) => acc + (c.average_wrs_score || 0) * (c.count || 1), 0) / cohort.reduce((acc, c) => acc + (c.count || 1), 0) || 0);
+  }, [cohort]);
 
   const kpis = [
     { label: "Total Students Monitored", value: pagination.total, icon: Users, scrollTo: "trend" },
     { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, scrollTo: "alerts" },
     { label: "Check-ins This Week", value: "—", icon: ClipboardCheck, scrollTo: "faculty" },
-    { label: "Avg Campus WRS", value: avgCampusWrs, icon: Activity, scrollTo: "trend" },
+    { label: "Avg Campus WRS", value: loading ? "..." : avgCampusWrs, icon: Activity, scrollTo: "trend" },
   ];
 
   const handleSidebar = (label: string) => {
@@ -302,7 +300,7 @@ export default function AdminDashboard() {
                   <div key={f.group || i}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium">{i + 1}. {f.group}</span>
-                      <span className="font-mono" style={{ color: colorFromWrs(f.average_wrs_score) }}>{f.average_wrs_score.toFixed(1)}</span>
+                      <span className="font-mono" style={{ color: colorFromWrs(f.average_wrs_score) }}>{formatWRS(f.average_wrs_score)}</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${f.average_wrs_score}%`, background: colorFromWrs(f.average_wrs_score) }} />
@@ -350,9 +348,9 @@ export default function AdminDashboard() {
                   <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">No alerts match your filters.</td></tr>
                 ) : (
                   pageRows.map((a, i) => {
-                    const tier = a.tier?.toLowerCase() || "green";
-                    const tierDisplay = tier.charAt(0).toUpperCase() + tier.slice(1);
-                    const color = colorFromWrs(a.wrs_score || 0);
+                    const baseTier = a.tier;
+                    const tierDisplay = baseTier ? (baseTier.charAt(0).toUpperCase() + baseTier.slice(1).toLowerCase()) : "No Data";
+                    const color = baseTier ? colorFromWrs(a.wrs_score || 0) : "#6B7280";
                     
                     // Format date
                     let formattedTime = "—";
@@ -366,10 +364,10 @@ export default function AdminDashboard() {
                         <td className="p-3 font-medium">{a.student_id}</td>
                         <td className="p-3 text-muted-foreground">—</td>
                         <td className="p-3 text-muted-foreground">{a.faculty || "—"}</td>
-                        <td className="p-3"><span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>{a.wrs_score}</span></td>
+                        <td className="p-3"><span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>{formatWRS(a.wrs_score)}</span></td>
                         <td className="p-3">
                           <span
-                            className={cn("px-2 py-0.5 rounded-full text-xs font-medium", tier === "critical" && "animate-pulse")}
+                            className={cn("px-2 py-0.5 rounded-full text-xs font-medium", baseTier?.toLowerCase() === "critical" && "animate-pulse")}
                             style={{ backgroundColor: `${color}25`, color }}
                           >
                             {tierDisplay}

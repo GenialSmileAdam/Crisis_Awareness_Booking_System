@@ -14,6 +14,7 @@ export const counselorSidebarItems: SidebarItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", to: "/counselor", end: true },
   { icon: Users, label: "My Students", to: "/counselor/students" },
   { icon: Calendar, label: "Sessions", to: "/counselor/sessions" },
+  { icon: MessageSquare, label: "Forum", to: "/counselor/forum" },
 ];
 
 export const adminSidebarItems: SidebarItem[] = [

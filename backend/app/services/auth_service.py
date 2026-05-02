@@ -157,6 +157,7 @@ class AuthService:
         access_token = security.create_access_token(
             str(user.id),
             identity["user_type"],
+            user.full_name,
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],
@@ -224,6 +225,7 @@ class AuthService:
         new_access = security.create_access_token(
             str(user.id),
             identity["user_type"],
+            user.full_name,
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],

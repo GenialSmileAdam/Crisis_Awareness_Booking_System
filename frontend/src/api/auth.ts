@@ -4,6 +4,7 @@ import { apiRequest } from "./client";
 
 export interface JWTPayload {
   sub: string;
+  name: string | null;
   user_type: "student" | "staff";
   role: "student" | "psychologist" | "admin" | "staff";
   is_admin: boolean;

@@ -1,7 +1,7 @@
 import { listAppointments, updateAppointment, type Appointment } from "@/api/appointments";
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 // ... existing imports ...
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
@@ -13,11 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
+import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
 import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
-import { cn } from "@/lib/utils";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { cn, formatWRS } from "@/lib/utils";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
 import type { PaginationInfo } from "@/api/types";
 
@@ -41,10 +41,12 @@ export default function CounselorDashboard() {
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
+  const [refreshingAppointments, setRefreshingAppointments] = useState(false);
   const navigate = useNavigate();
   
   const [students, setStudents] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [cohort, setCohort] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalStudents, setTotalStudents] = useState(0);
@@ -70,10 +72,11 @@ export default function CounselorDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const [studentsData, alertsData, appointmentsData] = await Promise.all([
+        const [studentsData, alertsData, appointmentsData, cohortData] = await Promise.all([
           listStudents(10, 0),
           getRiskAlerts(10, 0),
-          listAppointments(10, 0)
+          listAppointments(10, 0),
+          getRiskCohort()
         ]);
         setStudents(studentsData.data || []);
         setTotalStudents(studentsData.pagination?.total || 0);
@@ -81,6 +84,7 @@ export default function CounselorDashboard() {
         setAlertsPagination(alertsData.pagination || {});
         setAppointments(appointmentsData.data || []);
         setPagination(appointmentsData.pagination);
+        setCohort(cohortData || []);
       } catch (err) {
         setError("Failed to load dashboard data");
       } finally {
@@ -88,7 +92,15 @@ export default function CounselorDashboard() {
       }
     };
     fetchAll();
-  }, []);
+
+    // Auto-refresh appointments every 30 seconds on Sessions page
+    if (currentView === "schedule") {
+      const interval = setInterval(() => {
+        fetchAppointments(offset);
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [currentView, offset]);
 
   const colorFromTier = (t: string) => t === "Green" ? "#A8FF3E" : t === "Amber" ? "#FF8C42" : t === "Red" ? "#FF4560" : "#B00020";
 
@@ -99,16 +111,41 @@ export default function CounselorDashboard() {
     }).length;
   }, [alerts]);
 
+  const trend = useMemo(() => trendData(7), []);
+
+  const tierData = useMemo(() => {
+    // Count alerts by tier
+    const tierCounts: { [key: string]: number } = {
+      Green: 0,
+      Amber: 0,
+      Red: 0,
+      Critical: 0
+    };
+    
+    alerts.forEach((alert) => {
+      const tier = alert.tier?.toLowerCase();
+      if (tier === "green") tierCounts.Green++;
+      else if (tier === "amber") tierCounts.Amber++;
+      else if (tier === "red") tierCounts.Red++;
+      else if (tier === "critical") tierCounts.Critical++;
+    });
+    
+    return [
+      { name: "Green", value: tierCounts.Green, color: "#A8FF3E" },
+      { name: "Amber", value: tierCounts.Amber, color: "#FF8C42" },
+      { name: "Red", value: tierCounts.Red, color: "#FF4560" },
+      { name: "Critical", value: tierCounts.Critical, color: "#B00020" },
+    ];
+  }, [alerts]);
+
   const avgCampusWrs = useMemo(() => {
-    if (alerts.length === 0) return "—";
-    const sum = alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0);
-    return (sum / alerts.length).toFixed(1);
+    return formatWRS(alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0) / (alerts.length || 1));
   }, [alerts]);
 
   const kpis = [
     { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
     { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
-    { label: "Sessions Total", value: loading ? "—" : (pagination?.total || 0), icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
+    { label: "Total Sessions", value: loading ? "—" : (pagination?.total || 0), icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
     { label: "Avg Campus WRS", value: loading ? "—" : avgCampusWrs, icon: Activity, action: () => toast.info("Data will be available after integration") },
   ];
 
@@ -162,29 +199,6 @@ export default function CounselorDashboard() {
 
   const rosterPageRows = rows.slice(rosterPagination.offset, rosterPagination.offset + rosterPagination.limit);
 
-  const tierData = useMemo(() => {
-    const tierCounts: { [key: string]: number } = {
-      Green: 0,
-      Amber: 0,
-      Red: 0,
-      Critical: 0
-    };
-    
-    alerts.forEach((alert) => {
-      const tier = alert.tier?.toLowerCase();
-      if (tier === "green") tierCounts.Green++;
-      else if (tier === "amber") tierCounts.Amber++;
-      else if (tier === "red") tierCounts.Red++;
-      else if (tier === "critical") tierCounts.Critical++;
-    });
-    
-    return [
-      { name: "Green", value: tierCounts.Green, color: "#A8FF3E" },
-      { name: "Amber", value: tierCounts.Amber, color: "#FF8C42" },
-      { name: "Red", value: tierCounts.Red, color: "#FF4560" },
-      { name: "Critical", value: tierCounts.Critical, color: "#B00020" },
-    ];
-  }, [alerts]);
 
   const handleAction = async (id: string, actionName: string) => {
     if (actionName === "join") return toast.success("Opening secure video meeting...");
@@ -236,7 +250,7 @@ export default function CounselorDashboard() {
       )}
       
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
-        <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
+        <h1 className="font-display text-lg md:text-xl font-bold">Welcome, Dr. {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -296,228 +310,15 @@ export default function CounselorDashboard() {
         </div>
 
         {currentView === "dashboard" ? (
-          <div className="grid lg:grid-cols-12 gap-6 animate-fade-in">
-            {/* Left col — Risk table */}
-            <div className="lg:col-span-8 surface-card p-4 md:p-6">
-              <div className="mb-6">
-                <div className="mb-4">
-                  <h2 className="font-display text-lg font-bold">Risk Roster</h2>
-                  <p className="text-xs text-muted-foreground">Sorted by WRS, highest risk first</p>
-                </div>
-                
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="relative w-full md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={search}
-                      onChange={(e) => { setSearch(e.target.value); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                      placeholder="Search student..."
-                      className="pl-10 h-10 w-full"
-                    />
-                  </div>
-                  
-                  <div className="flex overflow-x-auto scrollbar-none gap-1 p-1 rounded-full bg-muted w-full md:w-auto whitespace-nowrap">
-                    {TIERS.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => { setFilter(t); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                        className={cn(
-                          "px-4 py-1.5 text-xs font-semibold rounded-full transition text-center",
-                          filter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+          <div className="animate-fade-in">
+            <div className="surface-card p-12 flex flex-col items-center justify-center text-center bg-primary/5 border-dashed border-2 border-primary/20 rounded-3xl">
+              <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-6">
+                <LayoutDashboard className="h-8 w-8" />
               </div>
-              {facultyFilter && (
-                <div className="mb-3 flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Filtered by:</span>
-                  <button
-                    onClick={() => { setFacultyFilter(null); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                    className="px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium"
-                  >
-                    {facultyFilter} ✕
-                  </button>
-                </div>
-              )}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-muted-foreground">
-                    <tr className="border-b border-border">
-                      <th className="text-left p-3">Student</th>
-                      <th className="hidden md:table-cell text-left p-3">Level</th>
-                      <th className="hidden md:table-cell text-left p-3">Faculty</th>
-                      <th className="text-left p-3">
-                        <button onClick={() => setSortDesc(!sortDesc)} className="inline-flex items-center gap-1 hover:text-foreground">
-                          WRS <ArrowUpDown className="h-3 w-3" />
-                        </button>
-                      </th>
-                      <th className="text-left p-3">Tier</th>
-                      <th className="hidden md:table-cell text-left p-3">Last Severity</th>
-                      <th className="hidden md:table-cell text-left p-3">Last check-in</th>
-                      <th className="text-right p-3">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      Array.from({ length: 5 }).map((_, i) => (
-                        <tr key={i} className="border-b border-border/60 last:border-0">
-                          <td colSpan={8} className="p-3">
-                            <div className="h-6 bg-muted rounded animate-pulse" />
-                          </td>
-                        </tr>
-                      ))
-                    ) : rosterPageRows.length === 0 ? (
-                      <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">No students match your filters.</td></tr>
-                    ) : (
-                      rosterPageRows.map((s, i) => {
-                        const matchingAlert = alerts.find((a) => a.student_id === s.student_id);
-                        const baseTier = matchingAlert?.tier?.charAt(0).toUpperCase() + (matchingAlert?.tier?.slice(1).toLowerCase() || "green") || "Green";
-                        const isOverridden = !!overrides[s.student_id];
-                        const tier = overrides[s.student_id] || baseTier;
-                        const color = colorFromTier(tier);
-                        const wrsScore = matchingAlert?.wrs_score || "—";
-                        
-                        return (
-                          <tr key={s.student_id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
-                            <td className="p-3 font-medium text-xs md:text-sm">{s.full_name}</td>
-                            <td className="hidden md:table-cell p-3 text-muted-foreground">{s.class_level || "—"}</td>
-                            <td className="hidden md:table-cell p-3 text-muted-foreground">—</td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono font-semibold" style={{ backgroundColor: typeof wrsScore === "number" ? `${colorFromWrs(wrsScore)}25` : "transparent", color: typeof wrsScore === "number" ? colorFromWrs(wrsScore) : "currentColor" }}>
-                                {wrsScore}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn("text-[10px] md:text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
-                                  style={{ backgroundColor: `${color}25`, color }}
-                                >
-                                  {tier}
-                                </span>
-                                {isOverridden && (
-                                  <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                    Overridden
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="hidden md:table-cell p-3 text-muted-foreground text-xs">—</td>
-                            <td className="hidden md:table-cell p-3 text-muted-foreground text-xs font-mono">—</td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col sm:flex-row justify-end gap-1.5 md:gap-2">
-                                <Button size="sm" variant="outline" onClick={() => navigate(`/counselor/session/${s.student_id}`)} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
-                                  View
-                                </Button>
-                                <Button size="sm" variant="secondary" onClick={() => setOverrideModal({ id: s.student_id, name: s.full_name, currentTier: baseTier, newTier: baseTier, justification: "" })} className="h-7 text-[10px] md:h-9 md:text-sm px-2">
-                                  Override
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {rows.length > rosterPagination.limit && (
-                <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
-                  <div>
-                    Showing {rosterPagination.offset + 1}-{Math.min(rosterPagination.offset + rosterPagination.limit, rows.length)} of {rows.length}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" disabled={rosterPagination.offset === 0} onClick={() => setRosterPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      disabled={rosterPagination.offset + rosterPagination.limit >= rows.length}
-                      onClick={async () => {
-                        const newOffset = rosterPagination.offset + rosterPagination.limit;
-                        setLoading(true);
-                        try {
-                          const alertsData = await getRiskAlerts(10, newOffset);
-                          setAlerts(alertsData.data || []);
-                          setAlertsPagination(alertsData.pagination || {});
-                          setAlertsOffset(newOffset);
-                        } catch (err) {
-                          setError("Failed to load alerts");
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right col — charts stacked */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Faculty WRS bar chart */}
-              <div className="surface-card p-4 md:p-6">
-                <div className="label-eyebrow mb-1">Faculty WRS</div>
-                <div className="font-display text-sm md:text-base font-bold mb-4">Click bar to filter</div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={FACULTY_WRS} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
-                    <XAxis
-                      dataKey="faculty"
-                      tick={false}
-                      axisLine={false}
-                    />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: { faculty: string }) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }} label={{ position: 'top', fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}>
-                      {FACULTY_WRS.map((d, i) => (
-                        <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* At-risk summary donut */}
-              <div className="surface-card p-4 md:p-6">
-                <div className="label-eyebrow mb-1 text-[10px] md:text-xs">At-risk summary</div>
-                <div className="font-display text-sm md:text-base font-bold mb-4">Tier distribution</div>
-                <div className="flex flex-col items-center">
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie
-                        data={tierData}
-                        dataKey="value"
-                        innerRadius={50}
-                        outerRadius={80}
-                        paddingAngle={3}
-                        cursor="pointer"
-                        onClick={(d: { name: string }) => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                      >
-                        {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-4 w-full">
-                    {tierData.map((d) => (
-                      <button
-                        key={d.name}
-                        onClick={() => { setFilter(d.name as typeof TIERS[number]); setRosterPagination(p => ({ ...p, offset: 0 })); }}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 text-[10px] md:text-xs transition"
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-                        <span className="text-muted-foreground">{d.name}</span>
-                        <span className="font-mono font-bold tabular-nums">{d.value}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <h2 className="font-display text-2xl font-bold mb-3">Psychologist Dashboard</h2>
+              <p className="text-muted-foreground text-sm max-w-md">
+                Select a KPI above to manage students or sessions. Use the sidebar to navigate between your schedule and student roster.
+              </p>
             </div>
           </div>
         ) : (
@@ -529,6 +330,26 @@ export default function CounselorDashboard() {
               </div>
               
               <div className="flex flex-col md:flex-row items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    setRefreshingAppointments(true);
+                    try {
+                      await fetchAppointments(offset);
+                      toast.success("Sessions refreshed");
+                    } catch (err) {
+                      toast.error("Failed to refresh sessions");
+                    } finally {
+                      setRefreshingAppointments(false);
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  disabled={refreshingAppointments}
+                  className="h-10"
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-2", refreshingAppointments && "animate-spin")} />
+                  Refresh
+                </Button>
                 <div className="flex p-1 rounded-full bg-muted w-full md:w-auto">
                   {SESSION_FILTERS.map((f) => (
                     <button
@@ -654,6 +475,92 @@ export default function CounselorDashboard() {
           </div>
         )}
       </div>
+
+      {/* Campus Analytics Section */}
+      {currentView === "dashboard" && (
+        <div className="px-4 md:px-8 pb-12 mt-8 pt-8 border-t border-border">
+          <div className="mb-6">
+            <h2 className="font-display text-2xl font-bold">Campus Analytics</h2>
+            <p className="text-sm text-muted-foreground">Aggregated wellness data across all students.</p>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Chart 1 — Campus WRS Trend (full width) */}
+            <div className="lg:col-span-3 surface-card p-6 bg-card rounded-2xl">
+              <div className="label-eyebrow mb-1">Campus WRS Trend</div>
+              <div className="font-display text-lg font-bold mb-4">Last 7 days</div>
+              {loading ? (
+                <div className="h-64 bg-muted rounded-lg animate-pulse" />
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
+                        <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                    <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Chart 2 — Risk Distribution (half width) */}
+            <div className="surface-card p-6 bg-card rounded-2xl">
+              <div className="label-eyebrow mb-1">Risk distribution</div>
+              <div className="font-display text-lg font-bold mb-4">By tier</div>
+              {loading ? (
+                <div className="h-56 bg-muted rounded-lg animate-pulse" />
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={tierData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                        {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap justify-center gap-2 text-xs mt-3">
+                    {tierData.map((d) => (
+                      <div key={d.name} className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                        <span>{d.name} ({d.value})</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Chart 3 — Check-ins Per Faculty (half width) */}
+            <div className="lg:col-span-2 surface-card p-6 bg-card rounded-2xl">
+              <div className="label-eyebrow mb-1">Check-ins per faculty</div>
+              <div className="font-display text-lg font-bold mb-4">By cohort group</div>
+              {loading ? (
+                <div className="h-56 bg-muted rounded-lg animate-pulse" />
+              ) : cohort.length === 0 ? (
+                <div className="h-56 flex items-center justify-center text-muted-foreground">No cohort data available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={cohort} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                    <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
+                      {cohort.map((d, i) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <Dialog open={!!overrideModal} onOpenChange={(open) => !open && setOverrideModal(null)}>
         <DialogContent className="sm:max-w-[425px]">
