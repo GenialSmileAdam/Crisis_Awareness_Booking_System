@@ -2,10 +2,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-# Resolve .env relative to the backend root (3 levels up from this file:
-# config.py -> core/ -> app/ -> backend/)
-_env_path = Path(__file__).resolve().parents[2] / ".env"
-load_dotenv(dotenv_path=_env_path, override=False)
+_backend_env_path = Path(__file__).resolve().parents[2] / ".env"
+_repo_env_path = Path(__file__).resolve().parents[3] / ".env"
+
+load_dotenv(dotenv_path=_repo_env_path, override=False)
+load_dotenv(dotenv_path=_backend_env_path, override=True)
 
 
 class Settings(BaseSettings):
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     EMAIL_ENABLED: bool = False
 
     class Config:
-        env_file = str(_env_path)
+        env_file = (str(_repo_env_path), str(_backend_env_path))
         env_file_encoding = "utf-8"
 
 
