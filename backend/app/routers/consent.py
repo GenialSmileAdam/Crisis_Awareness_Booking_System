@@ -50,7 +50,7 @@ async def get_consent(
     current_user: dict = Depends(get_current_user),
 ):
     role = current_user["role"]
-    if role not in {"admin", "psychologist", "staff", "student"}:
+    if role not in {"admin", "psychologist", "student"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     if role == "student" and current_user.get("student_id") != student_id:
         raise HTTPException(status_code=403, detail="Insufficient permissions")

@@ -43,6 +43,7 @@ def generate_temporary_password(length: int = 18) -> str:
         raise ValueError("Temporary password length must be at least 12 characters")
     return secrets.token_urlsafe(length)[:length]
 
+
 def create_access_token(
     user_id: str,
     user_type: str,

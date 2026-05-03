@@ -46,7 +46,7 @@ def _serialize_risk_override(risk_override: RiskOverride) -> dict:
 
 
 def _require_admin_or_psychologist(current_user: dict) -> None:
-    if current_user["role"] not in {"admin", "psychologist", "staff"}:
+    if current_user["role"] not in {"admin", "psychologist"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 

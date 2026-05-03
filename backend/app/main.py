@@ -4,8 +4,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-
-from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores, analytics
+from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores
 from app import models
 
 from app.routers import session_ai
