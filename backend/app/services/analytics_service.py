@@ -1,14 +1,14 @@
-import os
 from groq import Groq
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from app.core.config import settings
 from app.models.risk_scores import RiskScore
 from app.models.wellness_checkins import WellnessCheckin, WellnessCheckinType
 from app.models.appointments import Appointment
 from app.models.crisis_logs import CrisisLog
 from datetime import datetime, timedelta
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=settings.GROQ_API_KEY)
 
 async def get_real_chart_data(db: AsyncSession):
     now = datetime.utcnow()
