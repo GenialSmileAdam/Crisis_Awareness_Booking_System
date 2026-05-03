@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, Plus, LogOut, Search, Heart } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
@@ -45,7 +44,6 @@ const INITIAL_MOCK_POSTS: Post[] = [
 
 export default function StudentForum() {
   const { logout } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
@@ -193,7 +191,7 @@ export default function StudentForum() {
             <Plus className="h-4 w-4" />
           </Button>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

@@ -115,7 +115,7 @@ export default function CounselorStudent() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

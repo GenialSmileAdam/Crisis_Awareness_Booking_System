@@ -1,24 +1,27 @@
-import { Navigate, useNavigate } from "react-router-dom";
 import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
+import { SSO_SIGN_IN_URL } from "@/api/auth";
 
 type Role = "student" | "psychologist" | "admin" | "staff";
 
+/**
+ * Route guard for role-protected pages.
+ *
+ * - While session is loading: renders nothing (AuthProvider shows spinner).
+ * - If no user or role mismatch: redirects to Campus One SSO.
+ * - Otherwise: renders children.
+ */
 export function ProtectedRoute({ role, children }: { role: Role; children: ReactNode }) {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  useTokenRefresh();
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    const handleSessionExpired = () => {
-      navigate("/login");
-    };
+    if (!isLoading && (!user || user.role !== role)) {
+      window.location.href = SSO_SIGN_IN_URL;
+    }
+  }, [isLoading, user, role]);
 
-    window.addEventListener("safespace:session-expired", handleSessionExpired as EventListener);
-    return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
-  }, [navigate]);
+  if (isLoading) return null;
+  if (!user || user.role !== role) return null;
 
-  if (!user || user.role !== role) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

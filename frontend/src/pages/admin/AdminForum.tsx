@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Search, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 interface AdminPost {
@@ -29,7 +28,6 @@ const INITIAL_MOCK_POSTS: AdminPost[] = [
 
 export default function AdminForum() {
   const { logout } = useAuth();
-  const navigate = useNavigate();
   const [posts, setPosts] = useState<AdminPost[]>(INITIAL_MOCK_POSTS);
   const [search, setSearch] = useState("");
   
@@ -88,7 +86,7 @@ export default function AdminForum() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

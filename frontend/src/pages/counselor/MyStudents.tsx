@@ -168,7 +168,7 @@ export default function MyStudents() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -331,13 +331,16 @@ export default function MyStudents() {
               <div className="label-eyebrow mb-1">Faculty WRS</div>
               <div className="font-display text-sm font-bold mb-4">Click bar to filter</div>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={FACULTY_WRS} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
-                  <XAxis dataKey="faculty" tick={false} axisLine={false} />
+                <BarChart data={cohort} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
+                  <XAxis dataKey="group" tick={false} axisLine={false} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                  <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
-                    {FACULTY_WRS.map((d, i) => (
-                      <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
+                  <Tooltip 
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))" }} 
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                  />
+                  <Bar dataKey="average_wrs_score" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.group); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
+                    {cohort.map((d, i) => (
+                      <Cell key={i} fill={colorFromWrs(d.average_wrs_score)} opacity={facultyFilter && facultyFilter !== d.group ? 0.3 : 1} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -361,7 +364,10 @@ export default function MyStudents() {
                     >
                       {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex flex-wrap justify-center gap-2 mt-4 w-full">
