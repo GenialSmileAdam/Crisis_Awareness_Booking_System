@@ -3,6 +3,7 @@ logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
@@ -15,12 +16,6 @@ dist-ssr
 frontend/node_modules/
 frontend/dist/
 frontend/.env*
-
-# Backend environment variables
-.env
-.env.*
-backend/.env
-backend/.env.*
 
 # Editor directories and files
 .vscode/*

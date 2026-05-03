@@ -56,8 +56,8 @@ class StudentService:
         now: datetime,
     ) -> None:
         # Default password for all imported students
-        # Verified hash for 'ChangeMe123!' (bcrypt, rounds=12)
-        password_hash = "$2b$12$xmu6830yLIG6wkZdUFLPMeRrf0gmNOXD2sHGS1jsXkLu04HS.RUmS"
+        default_password = "ChangeMe123!"
+        password_hash = hash_password(default_password)
 
         await db.execute(
             insert(users_table).values(
@@ -137,7 +137,7 @@ class StudentService:
             query = query.where(Student.crisis_flag == filters["crisis_flag"])
         if filters.get("assigned_psychologist_id"):
             query = query.where(Student.assigned_psychologist_id == filters["assigned_psychologist_id"])
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Student.assigned_psychologist_id == current_user["id"])
 
         total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
@@ -182,7 +182,7 @@ class StudentService:
             .join(users_table, users_table.c.id == Student.user_id)
             .where(Student.student_id == student_id, users_table.c.deleted_at.is_(None))
         )
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Student.assigned_psychologist_id == current_user["id"])
         row = (await db.execute(query)).first()
         if not row:

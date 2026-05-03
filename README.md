@@ -42,7 +42,7 @@ The Psychology Unit currently operates without any digital system. Scheduling is
 | Backend Developer | Sodiq Abdulwaris |
 | Backend Developer | Ridwan Olateju |
 | Data/AI Engineer | Daniel Olugbule |
-| FrontEnd Developer | Odosa Enarureo |
+| UI/UX Designer | Odosa Enarureo |
 
 ## Development Milestones
 

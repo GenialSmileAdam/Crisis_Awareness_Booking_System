@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from typing import Dict
-import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
@@ -127,21 +126,7 @@ class AuthService:
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
 
-        logger = logging.getLogger(__name__)
-        logger.debug("AuthService.login: lookup completed for email=%s, user_found=%s", email, bool(user))
-
-        # Debug: lookup completed
-
-        if user:
-            logger.debug("AuthService.login: password_hash from DB: %s", user.password_hash)
-            verified = security.verify_password(password, user.password_hash)
-            logger.debug("AuthService.login: verify_password result=%s for email=%s", verified, email)
-        else:
-            verified = False
-
-        if user is None or not user.password_hash or not verified:
-            logger.info("AuthService.login failed for email=%s: user_found=%s verified=%s", email, bool(user), verified)
-            # login failed; info already logged
+        if user is None or not user.password_hash or not security.verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -157,7 +142,6 @@ class AuthService:
         access_token = security.create_access_token(
             str(user.id),
             identity["user_type"],
-            user.full_name,
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],
@@ -225,7 +209,6 @@ class AuthService:
         new_access = security.create_access_token(
             str(user.id),
             identity["user_type"],
-            user.full_name,
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],

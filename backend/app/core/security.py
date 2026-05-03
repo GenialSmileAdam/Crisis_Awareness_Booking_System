@@ -47,7 +47,6 @@ def generate_temporary_password(length: int = 18) -> str:
 def create_access_token(
     user_id: str,
     user_type: str,
-    full_name: str,
     *,
     is_admin: bool = False,
     staff_type: str | None = None,
@@ -60,7 +59,6 @@ def create_access_token(
     payload = {
         "sub": user_id,
         "user_type": user_type,
-        "name": full_name,
         "role": determine_effective_role(user_type, is_admin, staff_type),
         "is_admin": is_admin,
         "staff_type": staff_type,
@@ -118,7 +116,6 @@ async def get_current_user(
 
     return {
         "id": user_id,
-        "name": payload.get("name"),
         "role": role,
         "user_type": user_type,
         "is_admin": bool(payload.get("is_admin", False)),

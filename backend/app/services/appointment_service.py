@@ -77,7 +77,7 @@ class AppointmentService:
             .join(users_table, users_table.c.id == Student.user_id)
             .where(Student.student_id == student_id, users_table.c.deleted_at.is_(None))
         )
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Student.assigned_psychologist_id == current_user["id"])
         student = (await db.execute(query)).scalar_one_or_none()
         if not student:
@@ -261,7 +261,7 @@ class AppointmentService:
                 psychologist_user.c.deleted_at.is_(None),
             )
         )
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Appointment.psychologist_id == current_user["id"])
         if filters.get("psychologist_id"):
             query = query.where(Appointment.psychologist_id == filters["psychologist_id"])
@@ -358,7 +358,7 @@ class AppointmentService:
                 psychologist_user.c.deleted_at.is_(None),
             )
         )
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Appointment.psychologist_id == current_user["id"])
         row = (await db.execute(query)).first()
         if not row:
