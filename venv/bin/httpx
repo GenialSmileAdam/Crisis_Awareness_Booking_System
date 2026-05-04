@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/home/jason/Programming Projects/Crisis_Awareness_Booking_System/venv/bin/python3" "$0" "$@"
+'''exec' "/home/work/Programming Project/Crisis_Awareness_Booking_System/venv/bin/python" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re
