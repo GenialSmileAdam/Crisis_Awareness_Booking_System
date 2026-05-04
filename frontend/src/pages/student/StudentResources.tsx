@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Home, ClipboardList, History, BookOpen, Calendar, ExternalLink, MessageSquare, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
@@ -82,6 +83,7 @@ const topicColors: Record<Topic, string> = {
 
 export default function StudentResources() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<typeof FILTERS[number]>("All");
 
   const filtered = RESOURCES.filter((r) => {
@@ -101,7 +103,7 @@ export default function StudentResources() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { LayoutDashboard, BarChart3, Users, FileText, Settings, Search, AlertTriangle, ClipboardCheck, Activity, MessageSquare, Library, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -20,6 +21,7 @@ type Range = keyof typeof RANGE_LABELS;
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [range, setRange] = useState<Range>("week");
   const [tierFilter, setTierFilter] = useState<string | null>(null);
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
@@ -161,7 +163,7 @@ export default function AdminDashboard() {
           <h1 className="font-display text-xl md:text-xl font-bold">University Overview</h1>
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={() => logout()} className="rounded-full h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="rounded-full h-9 w-9">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -230,7 +232,10 @@ export default function AdminDashboard() {
                 </defs>
                 <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                <Tooltip 
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                  itemStyle={{ color: "hsl(var(--foreground))" }}
+                />
                 <Area type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#wrsg)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -244,7 +249,10 @@ export default function AdminDashboard() {
                 <Pie data={tierData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3} onClick={(d: any) => { setTierFilter(d.name); setPagination(p => ({ ...p, offset: 0 })); }} cursor="pointer">
                   {tierData.map((d, i) => <Cell key={i} fill={d.color} opacity={tierFilter && tierFilter !== d.name ? 0.3 : 1} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                <Tooltip 
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                  itemStyle={{ color: "hsl(var(--foreground))" }}
+                />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-3 text-xs">
@@ -273,7 +281,10 @@ export default function AdminDashboard() {
                 <BarChart data={cohort} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                   <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => String(v).split(" ")[0]} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                  <Tooltip 
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                  />
                   <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="hsl(var(--primary))" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.group); setPagination(p => ({ ...p, offset: 0 })); }}>
                     {cohort.map((d, i) => <Cell key={i} fill="hsl(var(--primary))" opacity={facultyFilter && facultyFilter !== d.group ? 0.3 : 1} />)}
                   </Bar>

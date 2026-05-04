@@ -95,7 +95,10 @@ export function AppSidebar({ items }: { items: SidebarItem[] }) {
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => logout()}
+                onClick={async () => {
+                  await logout();
+                  navigate("/login");
+                }}
                 className={cn(
                   "w-full flex items-center h-11 mx-0 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                 )}
@@ -136,7 +139,7 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
   // Add Logout to hidden items
   const drawerItems = [
     ...hiddenItems,
-    { icon: LogOut, label: "Logout", onClick: () => logout() }
+    { icon: LogOut, label: "Logout", onClick: async () => { await logout(); navigate("/login"); } }
   ];
 
   const activeColor = user?.role === "student" ? "text-primary" : "text-[#8b5cf6]";

@@ -268,7 +268,7 @@ export default function CounselorDashboard() {
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -502,7 +502,10 @@ export default function CounselorDashboard() {
                     </defs>
                     <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
                     <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -522,7 +525,10 @@ export default function CounselorDashboard() {
                       <Pie data={tierData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
                         {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex flex-wrap justify-center gap-2 text-xs mt-3">
@@ -550,7 +556,10 @@ export default function CounselorDashboard() {
                   <BarChart data={cohort} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                     <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
                     <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
                       {cohort.map((d, i) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
                     </Bar>

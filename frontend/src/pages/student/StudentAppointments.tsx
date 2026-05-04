@@ -1,5 +1,6 @@
 import { getAppointmentAvailability, bookAppointment } from "@/api/appointments";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -48,6 +49,7 @@ function buildMonth(year: number, month: number) {
 
 export default function StudentAppointments() {
   const { logout, user } = useAuth();
+  const navigate = useNavigate();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -148,7 +150,7 @@ export default function StudentAppointments() {
             <Sparkles className="h-4 w-4 mr-2" /> Book Session
           </Button>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

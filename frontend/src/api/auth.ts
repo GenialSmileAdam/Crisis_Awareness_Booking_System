@@ -1,8 +1,6 @@
 import { apiRequest } from "./client";
 
-// ── User Profile ──
-// Shape returned by GET /auth/me — mirrors the old JWTPayload fields
-// so that all consumer components require zero changes.
+// ── Interfaces ──
 
 export interface JWTPayload {
   sub: string;
@@ -15,27 +13,71 @@ export interface JWTPayload {
   student_id: string | null;
 }
 
-// ── Campus One SSO URLs ──
-const SSO_BASE = "https://portal.builtbysalih.com";
-const APP_BASE = "https://safespace.builtbysalih.com";
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+}
 
-export const SSO_SIGN_IN_URL = `${SSO_BASE}/sign-in?callbackURL=${encodeURIComponent(`${APP_BASE}/dashboard`)}`;
-export const SSO_SIGN_OUT_URL = `${SSO_BASE}/sign-out?callbackURL=${encodeURIComponent(APP_BASE)}`;
+// ── Helpers ──
+
+const TOKEN_KEY = "safespace_access_token";
+
+function encodeForm(fields: Record<string, string>): string {
+  return Object.entries(fields)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+}
 
 // ── Auth functions ──
 
 /**
- * Fetch the currently authenticated user from the backend.
- * Uses the session cookie (set by Campus One SSO).
- * Returns null if the user is not authenticated (401).
- *
- * NOTE: Requires backend to implement GET /auth/me
- * returning the user profile from the session cookie.
+ * Authenticate a student using their student ID and password.
+ * Stores the access token in localStorage on success.
  */
-export async function getCurrentUser(): Promise<JWTPayload | null> {
+export async function loginStudent(
+  studentId: string,
+  password: string,
+): Promise<AuthResponse> {
+  const body = encodeForm({ username: studentId, password });
+  const res = await apiRequest<AuthResponse>("POST", "/auth/login", body, true);
+  localStorage.setItem(TOKEN_KEY, res.access_token);
+  return res;
+}
+
+/**
+ * Authenticate a staff member using their email and password.
+ * Stores the access token in localStorage on success.
+ */
+export async function loginStaff(
+  email: string,
+  password: string,
+): Promise<AuthResponse> {
+  const body = encodeForm({ username: email, password });
+  const res = await apiRequest<AuthResponse>("POST", "/auth/login", body, true);
+  localStorage.setItem(TOKEN_KEY, res.access_token);
+  return res;
+}
+
+/**
+ * Refresh the access token using the HTTP-only refresh cookie.
+ *
+ * IMPORTANT: This should only be called when a user session likely exists
+ * (i.e., when localStorage has cached user data). Calling this without a valid
+ * refresh cookie will cause a 401, which is treated as session expiry.
+ *
+ * @throws ApiError if refresh fails (e.g., cookie invalid, expired, or missing)
+ */
+export async function refreshToken(): Promise<{ access_token: string }> {
+  return apiRequest<{ access_token: string }>("POST", "/auth/refresh");
+}
+
+/**
+ * Log out — invalidate the session server-side and clear local token.
+ */
+export async function logout(): Promise<void> {
   try {
-    return await apiRequest<JWTPayload>("GET", "/auth/me");
-  } catch {
-    return null;
+    await apiRequest<void>("POST", "/auth/logout");
+  } finally {
+    localStorage.removeItem(TOKEN_KEY);
   }
 }

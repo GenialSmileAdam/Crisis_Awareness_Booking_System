@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
 import { adminSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,6 +17,7 @@ import type { PaginationInfo } from "@/api/types";
 
 export default function AdminUsers() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   
   const [students, setStudents] = useState<Student[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -80,7 +82,7 @@ export default function AdminUsers() {
           </div>
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={() => logout()} className="rounded-full h-9 w-9">
+            <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="rounded-full h-9 w-9">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

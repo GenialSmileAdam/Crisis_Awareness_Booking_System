@@ -7,10 +7,12 @@ import { useTheme } from "@/context/ThemeContext";
 import { toast } from "sonner";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AdminSettings() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const [prefs, setPrefs] = useState({
     redAlerts: true,
@@ -33,7 +35,7 @@ export default function AdminSettings() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

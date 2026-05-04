@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Plus, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 type ResourceType = "Article" | "Video" | "Exercise";
@@ -36,6 +37,7 @@ const FILTERS = ["All", "Articles", "Videos", "Exercises"] as const;
 
 export default function AdminResources() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [resources, setResources] = useState<AdminResource[]>(INITIAL_RESOURCES);
   const [filter, setFilter] = useState<typeof FILTERS[number]>("All");
   
@@ -94,7 +96,7 @@ export default function AdminResources() {
             <Plus className="h-4 w-4" />
           </Button>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => logout()} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
