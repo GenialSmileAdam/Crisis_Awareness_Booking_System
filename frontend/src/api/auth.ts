@@ -59,6 +59,16 @@ export async function loginStaff(
 }
 
 /**
+ * Register a new user.
+ */
+export async function registerUser(
+  payload: Record<string, string>,
+): Promise<any> {
+  const body = encodeForm(payload);
+  return apiRequest<any>("POST", "/auth/register", body, true);
+}
+
+/**
  * Refresh the access token using the HTTP-only refresh cookie.
  *
  * IMPORTANT: This should only be called when a user session likely exists
