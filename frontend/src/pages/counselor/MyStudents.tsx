@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import { FACULTY_WRS, colorFromWrs, RiskTier } from "@/data/mock";
-import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
+import { getRiskAlerts, getRiskCohort, overrideRiskTier, type RiskTier as ApiRiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { cn, formatWRS } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
@@ -44,8 +44,8 @@ export default function MyStudents() {
         setLoading(true);
         setError(null);
         const [studentsData, alertsData, cohortData] = await Promise.all([
-          listStudents(1000, 0), // Fetch more for local filtering/sorting
-          getRiskAlerts(1000, 0),
+          listStudents(100, 0),
+          getRiskAlerts(100, 0),
           getRiskCohort()
         ]);
         setStudents(studentsData.data || []);
@@ -146,7 +146,7 @@ export default function MyStudents() {
     
     try {
       await overrideRiskTier(overrideModal.id, {
-        override_tier: overrideModal.newTier.toLowerCase(),
+        override_tier: overrideModal.newTier.toLowerCase() as ApiRiskTier,
         justification: overrideModal.justification
       });
       setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier.toLowerCase() as RiskTier }));

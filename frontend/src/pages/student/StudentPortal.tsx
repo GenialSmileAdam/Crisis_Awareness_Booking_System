@@ -149,6 +149,7 @@ export default function StudentPortal() {
           }
         } else {
           setHasCompletedRecently(true);
+          localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
         }
       } catch (err) {
         console.error("Failed to fetch student status:", err);
@@ -184,6 +185,7 @@ export default function StudentPortal() {
         setHasCompletedRecently(false);
       } else {
         setHasCompletedRecently(true);
+        localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
         if (location.pathname === "/student/checkin") {
           navigate("/student");
         }
@@ -239,7 +241,7 @@ export default function StudentPortal() {
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { localStorage.removeItem("checkin_gate_passed"); logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

@@ -42,7 +42,7 @@ export interface CheckinRecord {
  * Submit a new check-in (student only).
  */
 export async function submitCheckin(payload: CheckinSubmit): Promise<CheckinResponse> {
-  return apiRequest<CheckinResponse>("POST", "/checkins", payload);
+  return apiRequest<CheckinResponse>("POST", "/checkins/submit", payload);
 }
 
 /**
