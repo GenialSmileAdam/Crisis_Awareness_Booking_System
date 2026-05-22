@@ -23,6 +23,8 @@ app.add_middleware(
     "http://127.0.0.1:5173",
     "https://crisis-awareness-booking-system.vercel.app",
     "https://www.crisis-awareness-booking-system.vercel.app",
+    "https://crisis-awareness-booking-system.onrender.com",
+    "https://www.crisis-awareness-booking-system.onrender.com",
 ],
     allow_credentials=True,
     allow_methods=["*"],
