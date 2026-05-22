@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Activity } from "lucide-react";
+import { ArrowRight, Activity, AlertCircle } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
+import { registerUser } from "@/api/auth";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WRSRing } from "@/components/WRSRing";
@@ -13,11 +15,17 @@ import { toast } from "sonner";
 import type { ApiError } from "@/api/client";
 
 type Role = "student" | "psychologist" | "admin";
+type SignUpRole = "student" | "psychologist";
 
-const ROLES: { id: Role; label: string }[] = [
+const SIGNIN_ROLES: { id: Role; label: string }[] = [
   { id: "student", label: "Student" },
   { id: "psychologist", label: "Counselor" },
   { id: "admin", label: "Admin" },
+];
+
+const SIGNUP_ROLES: { id: SignUpRole; label: string }[] = [
+  { id: "student", label: "Student" },
+  { id: "psychologist", label: "Counselor" },
 ];
 
 const HINTS: Record<Role, { identifier: string; pwd: string }> = {
@@ -27,18 +35,47 @@ const HINTS: Record<Role, { identifier: string; pwd: string }> = {
 };
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const studentIdRegex = /^\d{9}$/;
 
 export default function Login() {
-  const [role, setRole] = useState<Role>("student");
+  // Sign In state
+  const [signInRole, setSignInRole] = useState<Role>("student");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Sign Up state
+  const [signUpRole, setSignUpRole] = useState<SignUpRole>("student");
+  const [signUpError, setSignUpError] = useState("");
+  const [signUpFieldErrors, setSignUpFieldErrors] = useState<Record<string, string>>({});
+  const [isSignUpSubmitting, setIsSignUpSubmitting] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
+  
+  // Student sign up
+  const [studentFullName, setStudentFullName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [studentEmail, setStudentEmail] = useState("");
+  const [studentPassword, setStudentPassword] = useState("");
+  const [studentConfirmPassword, setStudentConfirmPassword] = useState("");
+  const [studentClassLevel, setStudentClassLevel] = useState("");
+  const [studentEmergencyContact, setStudentEmergencyContact] = useState("");
+  const [studentEmergencyPhone, setStudentEmergencyPhone] = useState("");
+  
+  // Psychologist sign up
+  const [psychoFullName, setPsychoFullName] = useState("");
+  const [psychoStaffId, setPsychoStaffId] = useState("");
+  const [psychoEmail, setPsychoEmail] = useState("");
+  const [psychoPassword, setPsychoPassword] = useState("");
+  const [psychoConfirmPassword, setPsychoConfirmPassword] = useState("");
+  
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const validateInputs = (): boolean => {
-    if (role === "student") {
+  // ── SIGN IN LOGIC ──
+
+  const validateSignInInputs = (): boolean => {
+    if (signInRole === "student") {
       if (!identifier.trim()) {
         setError("Student ID is required.");
         return false;
@@ -60,26 +97,25 @@ export default function Login() {
     return true;
   };
 
-  const submit = async (e: React.FormEvent) => {
+  const submitSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!validateInputs()) {
+    if (!validateSignInInputs()) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      await login(role, identifier, password);
+      await login(signInRole, identifier, password);
       toast.success("Welcome back!");
 
-      // Navigate based on user role from decoded token
-      if (role === "student") {
+      if (signInRole === "student") {
         navigate("/student");
-      } else if (role === "psychologist") {
+      } else if (signInRole === "psychologist") {
         navigate("/counselor");
-      } else if (role === "admin") {
+      } else if (signInRole === "admin") {
         navigate("/admin");
       }
     } catch (err) {
@@ -100,6 +136,120 @@ export default function Login() {
       setPassword("");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // ── SIGN UP LOGIC ──
+
+  const validateSignUp = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (signUpRole === "student") {
+      if (!studentFullName.trim()) errors.studentFullName = "Full name is required";
+      if (!studentId.trim()) errors.studentId = "Student ID is required";
+      if (!studentIdRegex.test(studentId.trim())) errors.studentId = "Student ID must be 9 digits";
+      if (!studentEmail.trim()) errors.studentEmail = "Email is required";
+      if (!emailRegex.test(studentEmail.trim())) errors.studentEmail = "Invalid email format";
+      if (!studentPassword) errors.studentPassword = "Password is required";
+      if (studentPassword.length < 8) errors.studentPassword = "Password must be at least 8 characters";
+      if (!studentConfirmPassword) errors.studentConfirmPassword = "Confirm password is required";
+      if (studentPassword !== studentConfirmPassword) {
+        errors.studentConfirmPassword = "Passwords do not match";
+      }
+    } else {
+      if (!psychoFullName.trim()) errors.psychoFullName = "Full name is required";
+      if (!psychoStaffId.trim()) errors.psychoStaffId = "Staff ID is required";
+      if (!psychoEmail.trim()) errors.psychoEmail = "Email is required";
+      if (!emailRegex.test(psychoEmail.trim())) errors.psychoEmail = "Invalid email format";
+      if (!psychoPassword) errors.psychoPassword = "Password is required";
+      if (psychoPassword.length < 8) errors.psychoPassword = "Password must be at least 8 characters";
+      if (!psychoConfirmPassword) errors.psychoConfirmPassword = "Confirm password is required";
+      if (psychoPassword !== psychoConfirmPassword) {
+        errors.psychoConfirmPassword = "Passwords do not match";
+      }
+    }
+
+    setSignUpFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const submitSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignUpError("");
+
+    if (!validateSignUp()) {
+      return;
+    }
+
+    setIsSignUpSubmitting(true);
+
+    try {
+      let payload: Record<string, string>;
+
+      if (signUpRole === "student") {
+        payload = {
+          email: studentEmail.toLowerCase(),
+          password: studentPassword,
+          full_name: studentFullName,
+          user_type: "student",
+          student_id: studentId,
+          class_level: studentClassLevel || "",
+          emergency_contact: studentEmergencyContact || "",
+          emergency_phone: studentEmergencyPhone || "",
+        };
+      } else {
+        payload = {
+          email: psychoEmail.toLowerCase(),
+          password: psychoPassword,
+          full_name: psychoFullName,
+          user_type: "staff",
+          staff_id: psychoStaffId,
+          staff_type: "psychologist",
+        };
+      }
+
+      await registerUser(payload);
+      
+      toast.success("Account created successfully! Please sign in.");
+      setSignUpSuccess(true);
+      
+      // Reset form and switch to sign in tab
+      if (signUpRole === "student") {
+        setIdentifier(studentEmail);
+        setStudentFullName("");
+        setStudentId("");
+        setStudentEmail("");
+        setStudentPassword("");
+        setStudentConfirmPassword("");
+        setStudentClassLevel("");
+        setStudentEmergencyContact("");
+        setStudentEmergencyPhone("");
+      } else {
+        setIdentifier(psychoEmail);
+        setPsychoFullName("");
+        setPsychoStaffId("");
+        setPsychoEmail("");
+        setPsychoPassword("");
+        setPsychoConfirmPassword("");
+      }
+      
+      // Switch to sign in tab after a delay
+      setTimeout(() => {
+        setSignUpSuccess(false);
+      }, 2000);
+    } catch (err) {
+      const error = err as ApiError;
+      let message = "Something went wrong. Please try again.";
+
+      if (error.status === 409) {
+        message = "An account with this email already exists.";
+      } else if (error.status === 422) {
+        message = "Please check your details and try again.";
+      }
+
+      setSignUpError(message);
+    } finally {
+      setIsSignUpSubmitting(false);
     }
   };
 
@@ -146,72 +296,326 @@ export default function Login() {
         <div className="absolute top-4 right-4"><ThemeToggle /></div>
 
         <div className="w-full max-w-md surface-card p-8 shadow-card animate-fade-in-up rounded-none border-0 lg:rounded-2xl lg:border">
-          <h2 className="font-display text-3xl font-bold">Welcome back</h2>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to SafeSpace</p>
+          <h2 className="font-display text-3xl font-bold">Welcome to SafeSpace</h2>
+          <p className="text-sm text-muted-foreground mt-1">Manage your wellness journey</p>
 
-          <div className="mt-6 grid grid-cols-3 gap-1 p-1 rounded-full bg-muted">
-            {ROLES.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setRole(r.id)}
-                className={cn(
-                  "py-2 px-3 text-sm font-medium rounded-full transition-all",
-                  role === r.id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <Tabs defaultValue="signin" className="mt-6 w-full">
+            <TabsList className="grid w-full grid-cols-2 p-1 rounded-full bg-muted">
+              <TabsTrigger value="signin" className="rounded-full">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-full">Sign Up</TabsTrigger>
+            </TabsList>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            <div>
-              <Label htmlFor="identifier">{role === "student" ? "Student ID" : "Email Address"}</Label>
-              <Input
-                id="identifier"
-                type={role === "student" ? "text" : "email"}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={role === "student" ? "e.g., 27001011" : "you@nileuni.edu"}
-                required
-                className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
-              />
-            </div>
-            {error && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-                {error}
+            {/* ── SIGN IN TAB ── */}
+            <TabsContent value="signin" className="mt-6 space-y-4">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-full bg-muted">
+                {SIGNIN_ROLES.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setSignInRole(r.id)}
+                    className={cn(
+                      "py-2 px-3 text-sm font-medium rounded-full transition-all",
+                      signInRole === r.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
               </div>
-            )}
-            <Button
-              type="submit"
-              className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Signing in..." : "Sign In"} {!isSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
-            </Button>
-          </form>
 
-          <div className="mt-6 p-3 rounded-xl bg-muted/60 border border-border text-xs">
-            <div className="label-eyebrow mb-1.5">Demo credentials</div>
-            <div className="font-mono text-[11px] space-y-0.5">
-              <div>{HINTS[role].identifier}</div>
-              <div className="text-muted-foreground">{HINTS[role].pwd}</div>
-            </div>
-          </div>
+              <form onSubmit={submitSignIn} className="space-y-4">
+                <div>
+                  <Label htmlFor="identifier">Email Address</Label>
+                  <Input
+                    id="identifier"
+                    type="email"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder={signInRole === "student" ? "e.g. 241030218@nileuniversity.edu.ng" : "you@nileuni.edu"}
+                    required
+                    className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
+                  />
+                  {signInRole === "student" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use your student ID as your email e.g. 241030218@nileuniversity.edu.ng
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
+                  />
+                </div>
+                {error && (
+                  <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+                    {error}
+                  </div>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Signing in..." : "Sign In"} {!isSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
+                </Button>
+              </form>
+
+              <div className="mt-6 p-3 rounded-xl bg-muted/60 border border-border text-xs">
+                <div className="label-eyebrow mb-1.5">Demo credentials</div>
+                <div className="font-mono text-[11px] space-y-0.5">
+                  <div>{HINTS[signInRole].identifier}</div>
+                  <div className="text-muted-foreground">{HINTS[signInRole].pwd}</div>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* ── SIGN UP TAB ── */}
+            <TabsContent value="signup" className="mt-6 space-y-4">
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-muted">
+                {SIGNUP_ROLES.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setSignUpRole(r.id)}
+                    className={cn(
+                      "py-2 px-3 text-sm font-medium rounded-full transition-all",
+                      signUpRole === r.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+
+              {signUpSuccess && (
+                <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                  <div className="h-4 w-4 rounded-full bg-green-600" />
+                  Account created! Signing in...
+                </div>
+              )}
+
+              {signUpError && (
+                <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  {signUpError}
+                </div>
+              )}
+
+              <form onSubmit={submitSignUp} className="space-y-4">
+                {signUpRole === "student" ? (
+                  <>
+                    {/* Student Sign Up Fields */}
+                    <div>
+                      <Label htmlFor="studentFullName">Full Name</Label>
+                      <Input
+                        id="studentFullName"
+                        type="text"
+                        value={studentFullName}
+                        onChange={(e) => setStudentFullName(e.target.value)}
+                        placeholder="e.g., John Doe"
+                        className={cn("mt-1.5", signUpFieldErrors.studentFullName && "border-destructive")}
+                      />
+                      {signUpFieldErrors.studentFullName && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.studentFullName}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentId">Student ID</Label>
+                      <Input
+                        id="studentId"
+                        type="text"
+                        value={studentId}
+                        onChange={(e) => setStudentId(e.target.value)}
+                        placeholder="e.g. 241030217"
+                        className={cn("mt-1.5", signUpFieldErrors.studentId && "border-destructive")}
+                      />
+                      {signUpFieldErrors.studentId && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.studentId}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentEmail">Email Address</Label>
+                      <Input
+                        id="studentEmail"
+                        type="email"
+                        value={studentEmail}
+                        onChange={(e) => setStudentEmail(e.target.value)}
+                        placeholder="student@nileuni.edu"
+                        className={cn("mt-1.5", signUpFieldErrors.studentEmail && "border-destructive")}
+                      />
+                      {signUpFieldErrors.studentEmail && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.studentEmail}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentPassword">Password</Label>
+                      <Input
+                        id="studentPassword"
+                        type="password"
+                        value={studentPassword}
+                        onChange={(e) => setStudentPassword(e.target.value)}
+                        placeholder="Min 8 characters"
+                        className={cn("mt-1.5", signUpFieldErrors.studentPassword && "border-destructive")}
+                      />
+                      {signUpFieldErrors.studentPassword && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.studentPassword}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentConfirmPassword">Confirm Password</Label>
+                      <Input
+                        id="studentConfirmPassword"
+                        type="password"
+                        value={studentConfirmPassword}
+                        onChange={(e) => setStudentConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        className={cn("mt-1.5", signUpFieldErrors.studentConfirmPassword && "border-destructive")}
+                      />
+                      {signUpFieldErrors.studentConfirmPassword && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.studentConfirmPassword}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentClassLevel">Class Level (Optional)</Label>
+                      <Input
+                        id="studentClassLevel"
+                        type="text"
+                        value={studentClassLevel}
+                        onChange={(e) => setStudentClassLevel(e.target.value)}
+                        placeholder="e.g., 100 Level"
+                        className="mt-1.5"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentEmergencyContact">Emergency Contact Name (Optional)</Label>
+                      <Input
+                        id="studentEmergencyContact"
+                        type="text"
+                        value={studentEmergencyContact}
+                        onChange={(e) => setStudentEmergencyContact(e.target.value)}
+                        placeholder="e.g., Jane Doe"
+                        className="mt-1.5"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="studentEmergencyPhone">Emergency Phone (Optional)</Label>
+                      <Input
+                        id="studentEmergencyPhone"
+                        type="tel"
+                        value={studentEmergencyPhone}
+                        onChange={(e) => setStudentEmergencyPhone(e.target.value)}
+                        placeholder="e.g., +234 XXX XXX XXXX"
+                        className="mt-1.5"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Psychologist Sign Up Fields */}
+                    <div>
+                      <Label htmlFor="psychoFullName">Full Name</Label>
+                      <Input
+                        id="psychoFullName"
+                        type="text"
+                        value={psychoFullName}
+                        onChange={(e) => setPsychoFullName(e.target.value)}
+                        placeholder="e.g., Dr. John Smith"
+                        className={cn("mt-1.5", signUpFieldErrors.psychoFullName && "border-destructive")}
+                      />
+                      {signUpFieldErrors.psychoFullName && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.psychoFullName}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="psychoStaffId">Staff ID</Label>
+                      <Input
+                        id="psychoStaffId"
+                        type="text"
+                        value={psychoStaffId}
+                        onChange={(e) => setPsychoStaffId(e.target.value)}
+                        placeholder="e.g., PSY001"
+                        className={cn("mt-1.5", signUpFieldErrors.psychoStaffId && "border-destructive")}
+                      />
+                      {signUpFieldErrors.psychoStaffId && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.psychoStaffId}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="psychoEmail">Email Address</Label>
+                      <Input
+                        id="psychoEmail"
+                        type="email"
+                        value={psychoEmail}
+                        onChange={(e) => setPsychoEmail(e.target.value)}
+                        placeholder="staff@nileuni.edu"
+                        className={cn("mt-1.5", signUpFieldErrors.psychoEmail && "border-destructive")}
+                      />
+                      {signUpFieldErrors.psychoEmail && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.psychoEmail}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="psychoPassword">Password</Label>
+                      <Input
+                        id="psychoPassword"
+                        type="password"
+                        value={psychoPassword}
+                        onChange={(e) => setPsychoPassword(e.target.value)}
+                        placeholder="Min 8 characters"
+                        className={cn("mt-1.5", signUpFieldErrors.psychoPassword && "border-destructive")}
+                      />
+                      {signUpFieldErrors.psychoPassword && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.psychoPassword}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="psychoConfirmPassword">Confirm Password</Label>
+                      <Input
+                        id="psychoConfirmPassword"
+                        type="password"
+                        value={psychoConfirmPassword}
+                        onChange={(e) => setPsychoConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        className={cn("mt-1.5", signUpFieldErrors.psychoConfirmPassword && "border-destructive")}
+                      />
+                      {signUpFieldErrors.psychoConfirmPassword && (
+                        <p className="text-xs text-destructive mt-1">{signUpFieldErrors.psychoConfirmPassword}</p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
+                  disabled={isSignUpSubmitting}
+                >
+                  {isSignUpSubmitting ? "Creating account..." : "Create Account"} {!isSignUpSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>

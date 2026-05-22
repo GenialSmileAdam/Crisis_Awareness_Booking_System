@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem("checkin_gate_passed");
   };
 
   // On app mount: restore session and attempt refresh if both token and user exist

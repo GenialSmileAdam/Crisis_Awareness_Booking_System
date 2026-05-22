@@ -1,4 +1,5 @@
 import { getAppointmentAvailability, createAppointment } from "@/api/appointments";
+import { listPsychologists } from "@/api/staff";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
@@ -12,15 +13,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { studentSidebarItems } from "@/data/sidebar";
-
-const PSYCHOLOGISTS = [
-  {
-    user_id: "22222222-2222-2222-2222-222222222222",
-    full_name: "Dr. Jane Psych",
-    staff_type: "psychologist",
-    specialization: "Student Mental Health"
-  }
-];
 
 const UPCOMING_INIT = [
   { id: "u1", counselor: { name: "Dr. Amara Obi", title: "Lead Counselor" }, date: "Apr 28, 2026", time: "11:00 AM", type: "Virtual", status: "Confirmed" },
@@ -61,6 +53,8 @@ export default function StudentAppointments() {
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [psychologistsLoading, setPsychologistsLoading] = useState(false);
+  const [psychologistLoadError, setPsychologistLoadError] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
   
@@ -71,7 +65,22 @@ export default function StudentAppointments() {
   const [upcoming, setUpcoming] = useState(UPCOMING_INIT);
 
   useEffect(() => {
-    setPsychologists(PSYCHOLOGISTS);
+    const loadPsychologists = async () => {
+      setPsychologistsLoading(true);
+      setPsychologistLoadError(false);
+      try {
+        const list = await listPsychologists();
+        setPsychologists(list);
+      } catch (err) {
+        console.error("Failed to load psychologists:", err);
+        setPsychologists([]);
+        setPsychologistLoadError(true);
+      } finally {
+        setPsychologistsLoading(false);
+      }
+    };
+
+    loadPsychologists();
   }, []);
 
   const cells = useMemo(() => buildMonth(viewYear, viewMonth), [viewYear, viewMonth]);
@@ -191,42 +200,71 @@ export default function StudentAppointments() {
           <div className={cn(step !== 1 && "hidden md:block opacity-40 pointer-events-none")}>
             <div className="label-eyebrow mb-3">Step 1 — Select your counselor</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {psychologists.map((p) => {
-                const active = selectedPsychologist?.user_id === p.user_id;
-                return (
-                  <button
-                    key={p.user_id}
-                    onClick={() => {
-                      setSelectedPsychologist(p);
-                      setStep(2);
+              {psychologistsLoading ? (
+                <div className="md:col-span-3 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                  Loading counselors...
+                </div>
+              ) : psychologistLoadError ? (
+                <div className="md:col-span-3 rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center">
+                  <div className="font-semibold text-sm text-destructive mb-3">Unable to load counselors. Please try again.</div>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      setPsychologistLoadError(false);
+                      setPsychologistsLoading(true);
+                      try {
+                        const list = await listPsychologists();
+                        setPsychologists(list);
+                      } catch (err) {
+                        console.error("Failed to load psychologists:", err);
+                        setPsychologists([]);
+                        setPsychologistLoadError(true);
+                      } finally {
+                        setPsychologistsLoading(false);
+                      }
                     }}
-                    className={cn(
-                      "text-left p-5 rounded-2xl border transition-all relative overflow-hidden",
-                      active
-                        ? "border-primary bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary))]"
-                        : "border-border bg-card hover:border-primary/40"
-                    )}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">
-                        {p.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                    Retry
+                  </Button>
+                </div>
+              ) : (
+                psychologists.map((p) => {
+                  const active = selectedPsychologist?.user_id === p.user_id;
+                  return (
+                    <button
+                      key={p.user_id}
+                      onClick={() => {
+                        setSelectedPsychologist(p);
+                        setStep(2);
+                      }}
+                      className={cn(
+                        "text-left p-5 rounded-2xl border transition-all relative overflow-hidden",
+                        active
+                          ? "border-primary bg-primary/5 shadow-[0_0_0_1px_hsl(var(--primary))]"
+                          : "border-border bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">
+                          {p.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="font-semibold truncate">{p.full_name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{p.staff_type}</div>
+                        </div>
                       </div>
-                      <div className="overflow-hidden">
-                        <div className="font-semibold truncate">{p.full_name}</div>
-                        <div className="text-xs text-muted-foreground truncate">{p.staff_type}</div>
+                      <div className="mt-4 flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-medium uppercase tracking-wider">
+                          {p.specialization || "General Counseling"}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-success/15 text-[10px] font-medium uppercase tracking-wider text-success">
+                          Available
+                        </span>
                       </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-medium uppercase tracking-wider">
-                        {p.specialization || "General Counseling"}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-success/15 text-[10px] font-medium uppercase tracking-wider text-success">
-                        Available
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
 

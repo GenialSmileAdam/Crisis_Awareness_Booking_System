@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from "react";
-import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Search, AlertCircle, LogOut, ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
 import { adminSidebarItems } from "@/data/sidebar";
@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { listStudents, uploadStudentsCSV, type Student } from "@/api/students";
+import { listStudents, type Student } from "@/api/students";
 import { listStaff, createStaff, type Staff } from "@/api/staff";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { PaginationInfo } from "@/api/types";
+
+const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
 export default function AdminUsers() {
   const { logout } = useAuth();
@@ -28,8 +30,8 @@ export default function AdminUsers() {
   const [studentsOffset, setStudentsOffset] = useState(0);
   
   const [search, setSearch] = useState("");
-  const [importOpen, setImportOpen] = useState(false);
-  const [addPsychOpen, setAddPsychOpen] = useState(false);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const fetchStudents = async (offset: number) => {
     setStudentsLoading(true);
@@ -72,13 +74,20 @@ export default function AdminUsers() {
     s.email.toLowerCase().includes(search.toLowerCase())
   );
 
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(INVITE_LINK);
+    setLinkCopied(true);
+    toast.success("Link copied to clipboard!");
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
   return (
     <AppShell items={adminSidebarItems}>
       <div className="flex flex-col md:flex-row md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30 gap-3 md:gap-0">
         <div className="flex items-center justify-between w-full md:w-auto">
           <div>
             <h1 className="font-display text-xl font-bold">User Management</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage students and psychologist staff.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage students and staff.</p>
           </div>
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
@@ -106,6 +115,40 @@ export default function AdminUsers() {
           </div>
         )}
 
+        {/* Invite Link Section */}
+        <div className="glass border border-border rounded-3xl p-6">
+          <div className="mb-4">
+            <h2 className="font-display text-lg font-bold">Students</h2>
+            <p className="text-sm text-muted-foreground">Students self-register using the Sign Up page. Share this link with students:</p>
+          </div>
+          <div className="flex gap-2 items-center p-3 rounded-lg bg-muted border border-border">
+            <input
+              type="text"
+              value={INVITE_LINK}
+              readOnly
+              className="flex-1 bg-transparent text-sm font-mono outline-none"
+            />
+            <Button
+              onClick={copyInviteLink}
+              size="sm"
+              variant="ghost"
+              className="gap-2"
+            >
+              {linkCopied ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
         {/* Student Directory */}
         <div className="glass border border-border rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -114,9 +157,6 @@ export default function AdminUsers() {
               <p className="text-sm text-muted-foreground">
                 {studentsPagination?.total || 0} students enrolled
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setImportOpen(true)} size="sm" variant="outline"><Upload className="h-4 w-4 mr-1.5" /> Bulk Import</Button>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -203,14 +243,14 @@ export default function AdminUsers() {
           </div>
         </div>
 
-        {/* Psychologist Staff */}
+        {/* Staff */}
         <div className="glass border border-border rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-display text-lg font-bold">Psychologist Staff</h2>
-              <p className="text-sm text-muted-foreground">{filteredStaff.length} active psychologists</p>
+              <h2 className="font-display text-lg font-bold">Add Staff</h2>
+              <p className="text-sm text-muted-foreground">{filteredStaff.length} active staff members</p>
             </div>
-            <Button onClick={() => setAddPsychOpen(true)} size="sm" className="gradient-primary text-primary-foreground border-0"><Plus className="h-4 w-4 mr-1.5" /> Add Psychologist</Button>
+            <Button onClick={() => setAddStaffOpen(true)} size="sm" className="gradient-primary text-primary-foreground border-0"><Plus className="h-4 w-4 mr-1.5" /> Add Staff</Button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -255,90 +295,16 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      <BulkImportModal 
-        open={importOpen} 
-        onOpenChange={setImportOpen} 
-        onSuccess={() => fetchStudents(studentsOffset)} 
-      />
-      <AddPsychologistModal 
-        open={addPsychOpen} 
-        onOpenChange={setAddPsychOpen} 
+      <AddStaffModal 
+        open={addStaffOpen} 
+        onOpenChange={setAddStaffOpen} 
         onSuccess={fetchStaff} 
       />
     </AppShell>
   );
 }
 
-function BulkImportModal({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ created: number; failed: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleUpload = async () => {
-    if (!file) return;
-    setUploading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await uploadStudentsCSV(file);
-      setResult(res);
-      toast.success(`Successfully imported ${res.created} students.`);
-      onSuccess();
-      setTimeout(() => {
-        onOpenChange(false);
-        setFile(null);
-        setResult(null);
-      }, 2000);
-    } catch (err) {
-      setError("Upload failed. Please check your CSV format.");
-      toast.error("Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!uploading) onOpenChange(v); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Upload CSV of Student Roster</DialogTitle></DialogHeader>
-        
-        {error && (
-          <div className="p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" /> {error}
-          </div>
-        )}
-
-        {result && (
-          <div className="p-3 rounded-xl bg-success/10 text-success-foreground text-xs border border-success/20 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-success" /> Students created successfully.
-          </div>
-        )}
-
-        <div className="py-4">
-          <input ref={fileRef} type="file" accept=".csv" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          <button
-            disabled={uploading}
-            onClick={() => fileRef.current?.click()}
-            className="w-full border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition disabled:opacity-50"
-          >
-            <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-            <div className="font-medium text-sm">{file ? file.name : "Click to browse CSV file"}</div>
-          </button>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={uploading}>Cancel</Button>
-          <Button onClick={handleUpload} disabled={!file || uploading} className="gradient-primary text-primary-foreground border-0 min-w-[100px]">
-            {uploading ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Import Roster"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AddPsychologistModal({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
+function AddStaffModal({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
   const [form, setForm] = useState({ full_name: "", email: "", password: "", staff_id: "", specialty: "General" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -350,7 +316,7 @@ function AddPsychologistModal({ open, onOpenChange, onSuccess }: { open: boolean
     setError(null);
     try {
       await createStaff(form);
-      toast.success("Psychologist added successfully");
+      toast.success("Staff member added successfully");
       onSuccess();
       onOpenChange(false);
       setForm({ full_name: "", email: "", password: "", staff_id: "", specialty: "General" });
@@ -364,7 +330,7 @@ function AddPsychologistModal({ open, onOpenChange, onSuccess }: { open: boolean
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Psychologist</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
         
         {error && (
           <div className="p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20 flex items-center gap-2">
@@ -397,7 +363,7 @@ function AddPsychologistModal({ open, onOpenChange, onSuccess }: { open: boolean
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={submit} disabled={loading} className="gradient-primary text-primary-foreground border-0 min-w-[120px]">
-            {loading ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Add Psychologist"}
+            {loading ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Add Staff"}
           </Button>
         </DialogFooter>
       </DialogContent>

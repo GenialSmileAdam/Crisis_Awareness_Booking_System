@@ -62,10 +62,9 @@ export async function loginStaff(
  * Register a new user.
  */
 export async function registerUser(
-  payload: Record<string, string>,
+  payload: Record<string, any>,
 ): Promise<any> {
-  const body = encodeForm(payload);
-  return apiRequest<any>("POST", "/auth/register", body, true);
+  return apiRequest<any>("POST", "/auth/register", payload);
 }
 
 /**

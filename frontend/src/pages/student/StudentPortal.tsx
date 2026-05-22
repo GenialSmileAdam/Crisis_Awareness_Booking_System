@@ -104,6 +104,7 @@ export default function StudentPortal() {
   const location = useLocation();
   const navigate = useNavigate();
   const studentName = user?.name || "Student";
+  const firstName = user?.name?.split(" ")[0] || "";
   const studentId = user?.student_id;
   
   const isCheckinView = location.pathname === "/student/checkin";
@@ -114,6 +115,7 @@ export default function StudentPortal() {
   const [tab, setTab] = useState<SurveyTab>("pulse");
   const [hasCompletedRecently, setHasCompletedRecently] = useState(false);
   const [isTriggered, setIsTriggered] = useState(false);
+  const [pendingLoadError, setPendingLoadError] = useState(false);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -136,20 +138,34 @@ export default function StudentPortal() {
         }
 
         // 2. Pending Check-ins
-        const pending = await getPendingCheckins();
-        setPendingSurveys(pending);
-        
-        if (pending.length > 0) {
-          setTab(pending[0].type as SurveyTab);
-          setHasCompletedRecently(false);
-          
-          // Check for triggered
-          if (pending.some(p => p.type === "pulse" && p.message.toLowerCase().includes("crisis"))) {
-            setIsTriggered(true);
+        try {
+          const pending = await getPendingCheckins();
+          setPendingSurveys(pending);
+          setPendingLoadError(false);
+
+          if (pending.length > 0) {
+            setTab(pending[0].type as SurveyTab);
+            setHasCompletedRecently(false);
+
+            // Check for triggered
+            if (pending.some(p => p.type === "pulse" && p.message.toLowerCase().includes("crisis"))) {
+              setIsTriggered(true);
+            }
+          } else {
+            setHasCompletedRecently(true);
+            localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
           }
-        } else {
-          setHasCompletedRecently(true);
-          localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
+        } catch (err) {
+          // If pending check-ins endpoint fails, allow the student to complete any survey.
+          console.error("Failed to load pending check-ins:", err);
+          setPendingSurveys([
+            { type: "pulse", message: "" },
+            { type: "phq9", message: "" },
+            { type: "gad7", message: "" },
+          ]);
+          setPendingLoadError(true);
+          setHasCompletedRecently(false);
+          // Do not redirect or block the student
         }
       } catch (err) {
         console.error("Failed to fetch student status:", err);
@@ -219,7 +235,9 @@ export default function StudentPortal() {
     <AppShell items={portalItems}>
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1">
-          <h1 className="font-display text-xl md:text-2xl font-bold">{greeting} 👋</h1>
+          <h1 className="font-display text-xl md:text-2xl font-bold">
+            {greeting}{firstName ? `, ${firstName}` : ""} 👋
+          </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             You're all caught up for today
           </p>
@@ -324,6 +342,12 @@ export default function StudentPortal() {
               tab === "gad7" ? <GAD7Form onSubmit={handleSubmit} /> :
               <PulseForm onSubmit={handleSubmit} />
             )}
+          </div>
+        )}
+
+        {pendingLoadError && (
+          <div className="mt-3 p-3 rounded-md bg-yellow-50 border border-yellow-100 text-sm text-muted-foreground">
+            Unable to load pending check-ins. You can still complete your check-in below.
           </div>
         )}
 
