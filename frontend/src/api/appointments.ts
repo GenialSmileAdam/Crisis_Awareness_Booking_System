@@ -25,6 +25,13 @@ export interface CreateAppointmentPayload {
   notes?: string;
 }
 
+export interface StudentAppointmentPayload {
+  psychologist_id: string;
+  start_time: string;
+  end_time: string;
+  notes?: string;
+}
+
 export interface AvailabilitySlot {
   psychologist_id: string;
   available_at: string;
@@ -40,6 +47,20 @@ export async function createAppointment(
   payload: CreateAppointmentPayload,
 ): Promise<Appointment> {
   return apiRequest<Appointment>("POST", "/appointments", payload);
+}
+
+/**
+ * Book an appointment as a student.
+ */
+export async function bookStudentAppointment(
+  payload: StudentAppointmentPayload,
+): Promise<Appointment> {
+  return apiRequest<Appointment>("POST", "/appointments/book", {
+    psychologist_id: payload.psychologist_id,
+    start_time: payload.start_time,
+    end_time: payload.end_time,
+    crisis_note: payload.notes,
+  });
 }
 
 /**

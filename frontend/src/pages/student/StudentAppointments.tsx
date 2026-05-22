@@ -1,4 +1,4 @@
-import { getAppointmentAvailability, createAppointment } from "@/api/appointments";
+import { getAppointmentAvailability, bookStudentAppointment } from "@/api/appointments";
 import { listPsychologists } from "@/api/staff";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -102,12 +102,11 @@ export default function StudentAppointments() {
     setLoading(true);
     try {
       const [start, end] = selectedSlot.split(" / ");
-      const response = await createAppointment({
-        student_id: user?.student_id || "",
+      const response = await bookStudentAppointment({
         psychologist_id: selectedPsychologist.user_id,
-        scheduled_at: start,
-        session_type: mode === "In-Person" ? "in_person" : "virtual",
-        notes: notes || undefined
+        start_time: start,
+        end_time: end,
+        notes: notes || undefined,
       });
       
       const newAppt = {
