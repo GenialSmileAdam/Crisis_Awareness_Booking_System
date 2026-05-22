@@ -49,7 +49,27 @@ export async function submitCheckin(payload: CheckinSubmit): Promise<CheckinResp
  * Get pending check-ins for the current student.
  */
 export async function getPendingCheckins(): Promise<PendingCheckin[]> {
-  return apiRequest<PendingCheckin[]>("GET", "/checkins/pending");
+  const token = localStorage.getItem("safespace_access_token");
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+  const res = await fetch(`${BASE_URL}/checkins/pending`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw { message: "Failed to fetch pending checkins", status: res.status };
+  }
+
+  const data = await res.json();
+
+  if (Array.isArray(data)) return data;
+  if (data?.data && Array.isArray(data.data)) return data.data;
+  return [];
 }
 
 /**
