@@ -12,6 +12,7 @@ from app.routers import (
     staff,
     students,
     users,
+    feedback,
 )
 from app import models
 
@@ -46,6 +47,7 @@ app.include_router(checkins.router, prefix="/checkins", tags=["Check-ins"])
 app.include_router(risk_scores.router, prefix="/risk-scores", tags=["Risk Scores"])
 app.include_router(analytics.router)
 app.include_router(forum.router)
+app.include_router(feedback.router)
 
 @app.get("/")
 async def root():

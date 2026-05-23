@@ -13,6 +13,7 @@ from app.models.notifications import Notification
 from app.models.refresh_tokens import RefreshToken
 from app.models.audit_logs import AuditLog
 from app.models.tables import sessions_table, users_table
+from app.models.feedback import Feedback
 
 __all__ = [
     "User",
@@ -38,4 +39,5 @@ __all__ = [
     "AuditLog",
     "sessions_table",
     "users_table",
+    "feedbacks",
 ]
