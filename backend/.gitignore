@@ -10,5 +10,5 @@ __pycache__/
 *.m4a
 
 .env
-
+env/
 
