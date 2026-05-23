@@ -1,9 +1,7 @@
-import os
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models.
-
+from app.core.config import settings
 from app.models.feedback import Feedback
 from app.schemas.feedback import FeedbackRequest
 
@@ -22,15 +20,15 @@ def log_feedback(db: Session, feedback: FeedbackRequest) -> Feedback:
 
 
 async def send_feedback_email(feedback: FeedbackRequest, record: Feedback) -> None:
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    email_from     = os.getenv("EMAIL_FROM")
-    email_to       = os.getenv("EMAIL_TO")
+    if not settings.EMAIL_ENABLED:
+        print("[info] Email disabled, skipping notification.")
+        return
 
     rating_line = f"Rating: {record.rating}/5" if record.rating else "Rating: N/A"
 
     payload = {
-        "from":    email_from,
-        "to":      [email_to],
+        "from":    settings.EMAIL_FROM,
+        "to":      [settings.EMAIL_TO],
         "subject": f"New Feedback from {record.name}",
         "text": (
             f"New feedback submission\n"
@@ -49,10 +47,10 @@ async def send_feedback_email(feedback: FeedbackRequest, record: Feedback) -> No
             "https://api.resend.com/emails",
             json=payload,
             headers={
-                "Authorization": f"Bearer {resend_api_key}",
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
                 "Content-Type":  "application/json",
             },
         )
 
     if response.status_code not in (200, 201):
-        print(f"Resend failed {response.status_code}: {response.text}")
+        print(f"[warn] Resend failed {response.status_code}: {response.text}")

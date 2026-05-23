@@ -20,15 +20,14 @@ class Settings(BaseSettings):
 
     GROQ_API_KEY: str
     AI_ENABLED: bool = True
-    
+
     GCAL_ENABLED: bool = False
     SMS_ENABLED: bool = False
-    
+
     EMAIL_ENABLED: bool = True
     RESEND_API_KEY: str
     EMAIL_FROM: str
     EMAIL_TO: str
-    
 
     class Config:
         env_file = (str(_repo_env_path), str(_backend_env_path))
