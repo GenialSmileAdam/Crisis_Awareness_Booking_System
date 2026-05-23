@@ -29,6 +29,7 @@ export default function SessionReviewer() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [filename, setFilename] = useState("");
   
+  const [audioUploaded, setAudioUploaded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(80);
@@ -85,7 +86,9 @@ export default function SessionReviewer() {
     setLoading(true);
     try {
       await uploadSessionAudio(aiSessionId, audioFile);
+      setAudioUploaded(true);
       toast.success("Audio uploaded successfully");
+      setStep(3); // auto-advance after confirmed upload
     } catch (err) {
       toast.error("Upload failed. Please try again.");
     } finally {
@@ -229,9 +232,9 @@ export default function SessionReviewer() {
                   
                   <div className="flex gap-4">
                     <Button onClick={executeUpload} disabled={loading} className="gradient-primary text-primary-foreground border-0 px-8 min-w-[160px]">
-                      {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : "Upload Audio"}
+                      {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : audioUploaded ? "Re-upload Audio" : "Upload Audio"}
                     </Button>
-                    {!loading && (
+                    {audioUploaded && !loading && (
                       <Button variant="secondary" onClick={() => setStep(3)} className="px-8">
                         Next: Transcribe &rarr;
                       </Button>

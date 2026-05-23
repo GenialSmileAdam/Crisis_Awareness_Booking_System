@@ -1,9 +1,9 @@
-import { getAppointmentAvailability, bookStudentAppointment } from "@/api/appointments";
+import { getAppointmentAvailability, bookStudentAppointment, listAppointments, Appointment } from "@/api/appointments";
 import { listPsychologists } from "@/api/staff";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, Eye, Home, History, LifeBuoy, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
-import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Loader2 } from "lucide-react";
+import { AppShell } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -13,20 +13,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { studentSidebarItems } from "@/data/sidebar";
-
-const UPCOMING_INIT = [
-  { id: "u1", counselor: { name: "Dr. Amara Obi", title: "Lead Counselor" }, date: "Apr 28, 2026", time: "11:00 AM", type: "Virtual", status: "Confirmed" },
-  { id: "u2", counselor: { name: "Dr. Kelechi Eze", title: "Senior Counselor" }, date: "May 03, 2026", time: "2:00 PM", type: "In-Person", status: "Pending" },
-  { id: "u3", counselor: { name: "Dr. Bola Adewale", title: "Wellness Counselor" }, date: "May 10, 2026", time: "9:00 AM", type: "Virtual", status: "Confirmed" },
-];
-
-const PAST = Array.from({ length: 8 }).map((_, i) => ({
-  id: `p${i}`,
-  date: `Mar ${28 - i * 3}, 2026`,
-  counselor: "Dr. Amara Obi",
-  type: i % 2 ? "Virtual" : "In-Person",
-  notes: "Discussed exam stress and developed coping strategies. Student showed improved mood at end of session.",
-}));
 
 function buildMonth(year: number, month: number) {
   const first = new Date(year, month, 1);
@@ -40,12 +26,16 @@ function buildMonth(year: number, month: number) {
 }
 
 export default function StudentAppointments() {
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
-  
+
+  // Real appointments state
+  const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+
   const [psychologists, setPsychologists] = useState<any[]>([]);
   const [selectedPsychologist, setSelectedPsychologist] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -57,12 +47,27 @@ export default function StudentAppointments() {
   const [psychologistLoadError, setPsychologistLoadError] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
-  
+
   const [mode, setMode] = useState<"In-Person" | "Virtual">("Virtual");
   const [notes, setNotes] = useState("");
   const [pastOpen, setPastOpen] = useState(false);
-  const [viewing, setViewing] = useState<typeof PAST[number] | null>(null);
-  const [upcoming, setUpcoming] = useState(UPCOMING_INIT);
+  const [viewing, setViewing] = useState<Appointment | null>(null);
+
+  useEffect(() => {
+    const fetchMyAppointments = async () => {
+      try {
+        setAppointmentsLoading(true);
+        const data = await listAppointments(50, 0);
+        setMyAppointments(data.data || []);
+      } catch (err) {
+        console.error("Failed to load appointments:", err);
+        setMyAppointments([]);
+      } finally {
+        setAppointmentsLoading(false);
+      }
+    };
+    fetchMyAppointments();
+  }, []);
 
   useEffect(() => {
     const loadPsychologists = async () => {
@@ -111,19 +116,20 @@ export default function StudentAppointments() {
       
       const newAppt = {
         id: response.id,
-        psychologist_full_name: selectedPsychologist.full_name,
         start_time: start,
         end_time: end,
-        status: "booked",
+        status: "booked" as const,
         is_crisis: false,
-        // Compatibility fields for existing UI
-        counselor: { name: selectedPsychologist.full_name, title: selectedPsychologist.staff_type },
-        date: new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: new Date(start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        type: mode,
+        crisis_note: null,
+        student_id: "",
+        psychologist_id: selectedPsychologist.user_id,
+        student_full_name: "",
+        psychologist_full_name: selectedPsychologist.full_name,
+        booking_source: mode.toLowerCase(),
+        created_at: new Date().toISOString(),
       };
-      
-      setUpcoming(prev => [newAppt, ...prev]);
+
+      setMyAppointments(prev => [newAppt, ...prev]);
       setBookingSuccess(true);
       setStep(4); // Success step
       toast.success("Appointment confirmed!");
@@ -466,57 +472,105 @@ export default function StudentAppointments() {
         {/* Upcoming */}
         <section className="space-y-3">
           <div className="label-eyebrow">Upcoming appointments</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {upcoming.map((a) => (
-              <div key={a.id} className="surface-card surface-card-hover p-5 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-                    {a.counselor.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+          {appointmentsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="surface-card p-5 space-y-3 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-muted" />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-3 bg-muted rounded w-3/4" />
+                      <div className="h-2.5 bg-muted rounded w-1/2" />
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-semibold text-sm">{a.counselor.name}</div>
-                    <div className="text-xs text-muted-foreground">{a.counselor.title}</div>
+                  <div className="h-3 bg-muted rounded w-2/3" />
+                  <div className="flex gap-2">
+                    <div className="h-5 bg-muted rounded-full w-16" />
+                    <div className="h-5 bg-muted rounded-full w-16" />
                   </div>
                 </div>
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4" /> {a.date} · {a.time}
+              ))}
+            </div>
+          ) : (() => {
+            const upcomingAppts = myAppointments.filter(
+              (a) => a.status === "booked" && new Date(a.start_time) > new Date()
+            );
+            if (upcomingAppts.length === 0) {
+              return (
+                <div className="surface-card p-10 flex flex-col items-center justify-center text-center space-y-3">
+                  <CalendarIcon className="h-8 w-8 text-muted-foreground/40" />
+                  <div className="font-semibold text-sm">No upcoming appointments</div>
+                  <div className="text-xs text-muted-foreground">Book a session above to get started</div>
                 </div>
-                <div className="flex gap-2">
-                  <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">{a.type}</span>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-xs"
-                    style={{
-                      backgroundColor: a.status === "Confirmed" ? "hsl(var(--success) / 0.15)" : "hsl(var(--warning) / 0.15)",
-                      color: a.status === "Confirmed" ? "hsl(var(--success))" : "hsl(var(--warning))",
-                    }}
-                  >
-                    {a.status}
-                  </span>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => toast.success(`Reschedule request sent for ${a.date}`)}
-                  >
-                    Reschedule
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      setUpcoming((prev) => prev.filter((x) => x.id !== a.id));
-                      toast.success("Appointment cancelled");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {upcomingAppts.map((a) => {
+                  const initials = (a.psychologist_full_name || "?")
+                    .split(" ").map((p) => p[0]).slice(0, 2).join("");
+                  const dateStr = new Date(a.start_time).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric",
+                  });
+                  const timeStr = new Date(a.start_time).toLocaleTimeString([], {
+                    hour: "numeric", minute: "2-digit",
+                  });
+                  return (
+                    <div key={a.id} className="surface-card surface-card-hover p-5 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
+                          {initials}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-sm">{a.psychologist_full_name || "Counselor"}</div>
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4" /> {dateStr} · {timeStr}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs"
+                          style={{
+                            backgroundColor: "hsl(var(--success) / 0.15)",
+                            color: "hsl(var(--success))",
+                          }}
+                        >
+                          {a.status}
+                        </span>
+                        {a.booking_source && (
+                          <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs capitalize">
+                            {a.booking_source}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => toast.success(`Reschedule request sent for ${dateStr}`)}
+                        >
+                          Reschedule
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            setMyAppointments((prev) => prev.filter((x) => x.id !== a.id));
+                            toast.success("Appointment cancelled");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </section>
 
         {/* Past */}
@@ -527,38 +581,62 @@ export default function StudentAppointments() {
           >
             <div className="font-semibold flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              Past Sessions ({PAST.length})
+              Past Sessions
             </div>
             <ChevronRight className={cn("h-4 w-4 transition", pastOpen && "rotate-90")} />
           </button>
           {pastOpen && (
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground uppercase tracking-wider">
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2">Date</th>
-                    <th className="text-left py-2">Counselor</th>
-                    <th className="text-left py-2">Type</th>
-                    <th className="text-right py-2">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PAST.map((p) => (
-                    <tr key={p.id} className="border-b border-border/60 hover:bg-muted/30">
-                      <td className="py-3">{p.date}</td>
-                      <td className="py-3">{p.counselor}</td>
-                      <td className="py-3">
-                        <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">{p.type}</span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setViewing(p)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
+              {appointmentsLoading ? (
+                <div className="space-y-2 animate-pulse">
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="flex gap-4 py-3 border-b border-border/60">
+                      <div className="h-3 bg-muted rounded w-24" />
+                      <div className="h-3 bg-muted rounded w-32" />
+                      <div className="h-3 bg-muted rounded w-16" />
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (() => {
+                const pastAppts = myAppointments.filter(
+                  (a) => a.status === "completed" || new Date(a.start_time) < new Date()
+                );
+                if (pastAppts.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-sm text-muted-foreground">
+                      No past sessions yet
+                    </div>
+                  );
+                }
+                return (
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-muted-foreground uppercase tracking-wider">
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2">Date</th>
+                        <th className="text-left py-2">Counselor</th>
+                        <th className="text-left py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pastAppts.map((p) => (
+                        <tr key={p.id} className="border-b border-border/60 hover:bg-muted/30">
+                          <td className="py-3">
+                            {new Date(p.start_time).toLocaleDateString("en-US", {
+                              month: "short", day: "numeric", year: "numeric",
+                            })}
+                          </td>
+                          <td className="py-3">{p.psychologist_full_name || "—"}</td>
+                          <td className="py-3">
+                            <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs capitalize">
+                              {p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           )}
         </section>
@@ -567,12 +645,12 @@ export default function StudentAppointments() {
       <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Session notes — {viewing?.date}</DialogTitle>
+            <DialogTitle>Session — {viewing ? new Date(viewing.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}</DialogTitle>
           </DialogHeader>
           <div className="text-sm text-muted-foreground">
-            <div className="mb-2"><span className="font-medium text-foreground">Counselor:</span> {viewing?.counselor}</div>
-            <div className="mb-2"><span className="font-medium text-foreground">Type:</span> {viewing?.type}</div>
-            <p className="mt-3 leading-relaxed">{viewing?.notes}</p>
+            <div className="mb-2"><span className="font-medium text-foreground">Counselor:</span> {viewing?.psychologist_full_name || "—"}</div>
+            <div className="mb-2"><span className="font-medium text-foreground">Status:</span> {viewing?.status}</div>
+            {viewing?.session_summary && <p className="mt-3 leading-relaxed">{viewing.session_summary}</p>}
           </div>
         </DialogContent>
       </Dialog>
