@@ -1,4 +1,4 @@
-﻿import {
+import {
   getAppointmentAvailability,
   bookStudentAppointment,
   getMyAppointments,
@@ -152,6 +152,7 @@ export default function StudentAppointments() {
       <CrisisBanner />
       <div className="p-4 md:p-8 space-y-8 pt-4 md:pt-6">
 
+        {/* Booking flow */}
         <section id="booking" className="surface-card p-6 space-y-6">
           <div className="flex items-center gap-3">
             {[1, 2, 3].map((n, i) => (
@@ -169,6 +170,7 @@ export default function StudentAppointments() {
             ))}
           </div>
 
+          {/* Step 1 */}
           <div className={cn(step !== 1 && "hidden md:block opacity-40 pointer-events-none")}>
             <div className="label-eyebrow mb-3">Step 1 — Select your counselor</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -203,6 +205,7 @@ export default function StudentAppointments() {
             </div>
           </div>
 
+          {/* Step 2 */}
           {selectedPsychologist && (
             <div className={cn("animate-fade-in-up", step !== 2 && "hidden md:block opacity-40 pointer-events-none")}>
               <div className="label-eyebrow mb-3">Step 2 — Pick a date & time</div>
@@ -263,6 +266,7 @@ export default function StudentAppointments() {
             </div>
           )}
 
+          {/* Step 3 */}
           {selectedPsychologist && selectedDate && selectedSlot && (
             <div className={cn("animate-fade-in-up", step !== 3 && step !== 4 && "hidden md:block opacity-40 pointer-events-none")}>
               <div className="label-eyebrow mb-3">Step 3 — Review & confirm</div>
@@ -315,6 +319,7 @@ export default function StudentAppointments() {
           )}
         </section>
 
+        {/* Upcoming */}
         <section className="space-y-3">
           <div className="label-eyebrow">Upcoming appointments</div>
           {appointmentsLoading ? (
@@ -352,6 +357,7 @@ export default function StudentAppointments() {
           )}
         </section>
 
+        {/* Past */}
         <section className="surface-card p-6">
           <button onClick={() => setPastOpen((o) => !o)} className="w-full flex items-center justify-between">
             <div className="font-semibold flex items-center gap-2">
