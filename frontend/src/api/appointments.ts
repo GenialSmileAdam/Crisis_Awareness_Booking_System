@@ -7,12 +7,13 @@ export interface Appointment {
   id: string;
   student_id: string;
   psychologist_id: string;
+  psychologist_full_name?: string;
   start_time: string;
   end_time: string;
   status: "booked" | "completed" | "cancelled" | "no_show";
   is_crisis: boolean;
   crisis_note: string | null;
-  student_full_name: string;
+  student_full_name?: string;
   session_summary?: string;
   created_at: string;
 }
@@ -39,6 +40,26 @@ export interface AvailabilitySlot {
 }
 
 // ── Appointment functions ──
+
+/**
+ * Get the current student's own appointments.
+ */
+export async function getMyAppointments(
+  limit = 50,
+  offset = 0,
+): Promise<PaginatedResponse<Appointment>> {
+  return apiRequest<PaginatedResponse<Appointment>>(
+    "GET",
+    `/appointments/my?limit=${limit}&offset=${offset}`,
+  );
+}
+
+/**
+ * Cancel an appointment as a student (sets status to cancelled).
+ */
+export async function cancelMyAppointment(id: string): Promise<Appointment> {
+  return apiRequest<Appointment>("PATCH", `/appointments/${id}`, { status: "cancelled" });
+}
 
 /**
  * Create a new appointment (psychologist, admin).
