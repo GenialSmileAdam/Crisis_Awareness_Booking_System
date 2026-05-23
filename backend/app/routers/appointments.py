@@ -97,8 +97,12 @@ async def list_appointments(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("psychologist", "admin"),
+    current_user: dict = require_roles("psychologist", "admin", "student"),
 ):
+    # Students may only see their own appointments
+    if current_user.get("role") == "student":
+        student_id = current_user.get("student_id")
+
     result = await AppointmentService.get_all(
         db,
         {

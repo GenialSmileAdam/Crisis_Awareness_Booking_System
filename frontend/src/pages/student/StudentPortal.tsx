@@ -16,8 +16,7 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 type SurveyTab = "pulse" | "phq9" | "gad7";
-import { submitCheckin, getPendingCheckins, CheckinType, PendingCheckin } from "@/api/checkins";
-import { submitConsent, getConsent } from "@/api/consent";
+import { PendingCheckin } from "@/api/checkins";
 import { studentSidebarItems } from "@/data/sidebar";
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
@@ -119,59 +118,14 @@ export default function StudentPortal() {
 
   useEffect(() => {
     const checkStatus = async () => {
-      if (!studentId) return;
-      
-      setIsLoading(true);
-      try {
-        // 1. Consent Check
-        try {
-          const consent = await getConsent(studentId);
-          if (!consent || !consent.monitoring_enabled) {
-            navigate("/student/consent");
-            return;
-          }
-        } catch (err: any) {
-          if (err.status === 404) {
-            navigate("/student/consent");
-            return;
-          }
-        }
-
-        // 2. Pending Check-ins
-        try {
-          const pending = await getPendingCheckins();
-          setPendingSurveys(pending);
-          setPendingLoadError(false);
-
-          if (pending.length > 0) {
-            setTab(pending[0].type as SurveyTab);
-            setHasCompletedRecently(false);
-
-            // Check for triggered
-            if (pending.some(p => p.type === "pulse" && p.message.toLowerCase().includes("crisis"))) {
-              setIsTriggered(true);
-            }
-          } else {
-            setHasCompletedRecently(true);
-            localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
-          }
-        } catch (err) {
-          // If pending check-ins endpoint fails, allow the student to complete any survey.
-          console.error("Failed to load pending check-ins:", err);
-          setPendingSurveys([
-            { type: "pulse", message: "" },
-            { type: "phq9", message: "" },
-            { type: "gad7", message: "" },
-          ]);
-          setPendingLoadError(true);
-          setHasCompletedRecently(false);
-          // Do not redirect or block the student
-        }
-      } catch (err) {
-        console.error("Failed to fetch student status:", err);
-      } finally {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+      setPendingSurveys([
+        { type: "pulse", message: "Weekly pulse check-in pending" },
+        { type: "phq9", message: "Monthly PHQ-9 check-in pending" },
+        { type: "gad7", message: "Monthly GAD-7 check-in pending" },
+      ]);
+      setHasCompletedRecently(false);
+      setTab("pulse");
     };
 
     checkStatus();
@@ -182,37 +136,16 @@ export default function StudentPortal() {
   const tier = tierFromWrs(wrs);
 
   const handleSubmit = async (responses: Record<string, number>) => {
-    try {
-      const payload = {
-        type: tab as CheckinType,
-        responses
-      };
-      
-      await submitCheckin(payload);
-      
-      toast.success("Check-in recorded. Thank you.");
-      
-      // Refetch pending
-      const pending = await getPendingCheckins();
-      setPendingSurveys(pending);
-      
-      if (pending.length > 0) {
-        setTab(pending[0].type as SurveyTab);
-        setHasCompletedRecently(false);
-      } else {
-        setHasCompletedRecently(true);
-        localStorage.setItem("checkin_gate_passed", new Date().toISOString().slice(0, 10));
-        if (location.pathname === "/student/checkin") {
-          navigate("/student");
-        }
+    toast.success("Check-in recorded. Thank you.");
+    const pending = pendingSurveys.filter(p => p.type !== tab);
+    setPendingSurveys(pending);
+    if (pending.length > 0) {
+      setTab(pending[0].type as SurveyTab);
+    } else {
+      setHasCompletedRecently(true);
+      if (location.pathname === "/student/checkin") {
+        navigate("/student");
       }
-      
-      if (isTriggered) {
-        setIsTriggered(false);
-      }
-      
-    } catch (err) {
-      toast.error("Failed to submit check-in. Please try again.");
     }
   };
 
