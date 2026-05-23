@@ -86,17 +86,6 @@ async def book_student_appointment(
     return cache_idempotent_response(cache_key, response)
 
 
-@router.get("/my")
-async def get_my_appointments(
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("student"),
-):
-    result = await AppointmentService.get_my_appointments(db, current_user, limit, offset)
-    return success("Appointments retrieved successfully", result)
-
-
 @router.get("")
 async def list_appointments(
     psychologist_id: UUID | None = None,
