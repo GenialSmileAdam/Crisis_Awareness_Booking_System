@@ -1,7 +1,7 @@
 import { listAppointments, updateAppointment, type Appointment } from "@/api/appointments";
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, Sparkles, TrendingUp, BarChart2, PieChart as PieIcon } from "lucide-react";
 // ... existing imports ...
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
@@ -58,6 +58,7 @@ export default function CounselorDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [insights, setInsights] = useState<any>({});
+  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<"risk" | "faculty" | "trends">("risk");
 
   const fetchAppointments = async (newOffset: number) => {
     try {
@@ -131,6 +132,13 @@ export default function CounselorDashboard() {
     }).length;
   }, [alerts]);
 
+  const activeHighRiskAlerts = useMemo(() => {
+    return alerts.filter(a => {
+      const tier = a.tier?.toLowerCase();
+      return tier === "red" || tier === "critical";
+    });
+  }, [alerts]);
+
   const trend = useMemo(() => trendData(7), []);
 
   const tierData = useMemo(() => {
@@ -188,6 +196,30 @@ export default function CounselorDashboard() {
     }
     return cohort;
   }, [analytics, cohort]);
+
+  const facultyHeatmapData = useMemo(() => {
+    if (analytics?.faculty_risk_heatmap) {
+      return Object.entries(analytics.faculty_risk_heatmap).map(([faculty, tiers]: any) => ({
+        faculty,
+        Green: tiers.green || 0,
+        Amber: tiers.amber || 0,
+        Red: tiers.red || 0,
+        Critical: tiers.critical || 0
+      }));
+    }
+    return [];
+  }, [analytics]);
+
+  const highRiskProportion = useMemo(() => {
+    if (analytics?.high_risk_proportion !== undefined) {
+      return analytics.high_risk_proportion;
+    }
+    const total = riskDistributionData.reduce((acc, d) => acc + d.value, 0);
+    const highRisk = riskDistributionData
+      .filter(d => d.name === "Red" || d.name === "Critical")
+      .reduce((acc, d) => acc + d.value, 0);
+    return total > 0 ? Math.round((highRisk / total) * 100) / 100 : 0.12;
+  }, [analytics, riskDistributionData]);
 
   const kpis = [
     { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
@@ -362,15 +394,331 @@ export default function CounselorDashboard() {
         </div>
 
         {currentView === "dashboard" ? (
-          <div className="animate-fade-in">
-            <div className="surface-card p-12 flex flex-col items-center justify-center text-center bg-primary/5 border-dashed border-2 border-primary/20 rounded-3xl">
-              <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-6">
-                <LayoutDashboard className="h-8 w-8" />
+          <div className="grid lg:grid-cols-12 gap-6 animate-fade-in">
+            {/* Left Column: Interactive Analytics Workspace */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="surface-card p-6 bg-card rounded-2xl border border-border/60">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-border/40 pb-4">
+                  <div>
+                    <h2 className="font-display text-xl font-bold flex items-center gap-2">
+                      <BarChart2 className="h-5 w-5 text-primary" />
+                      Clinician Command Center
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Interactive aggregate cohort analysis & wellness logs</p>
+                  </div>
+                  
+                  {/* Tabs Selector */}
+                  <div className="flex gap-1 p-1 rounded-full bg-muted select-none w-full sm:w-auto overflow-x-auto">
+                    <button
+                      onClick={() => setActiveAnalyticsTab("risk")}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 shrink-0",
+                        activeAnalyticsTab === "risk" 
+                          ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <PieIcon className="h-3 w-3 inline mr-1" />
+                      Risk Distribution
+                    </button>
+                    <button
+                      onClick={() => setActiveAnalyticsTab("faculty")}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 shrink-0",
+                        activeAnalyticsTab === "faculty" 
+                          ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Activity className="h-3 w-3 inline mr-1" />
+                      Faculty Analysis
+                    </button>
+                    <button
+                      onClick={() => setActiveAnalyticsTab("trends")}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 shrink-0",
+                        activeAnalyticsTab === "trends" 
+                          ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <TrendingUp className="h-3 w-3 inline mr-1" />
+                      Wellness Trends
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tab content rendering */}
+                {analyticsLoading ? (
+                  <div className="space-y-4">
+                    <div className="h-64 bg-muted rounded-xl animate-pulse" />
+                    <div className="h-10 bg-muted rounded-lg animate-pulse" />
+                  </div>
+                ) : analyticsError ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border p-6">
+                    <AlertTriangle className="h-8 w-8 text-warning mb-2 animate-bounce" />
+                    <span className="font-semibold text-sm">Failed to connect to Analytics Service</span>
+                    <span className="text-xs text-muted-foreground mt-1">Please try refreshing the page or check back later</span>
+                  </div>
+                ) : (
+                  <div className="transition-all duration-300">
+                    {/* RISK DISTRIBUTION TAB */}
+                    {activeAnalyticsTab === "risk" && (
+                      <div className="space-y-6">
+                        <div className="grid md:grid-cols-5 gap-6 items-center">
+                          <div className="md:col-span-3 flex flex-col items-center">
+                            <ResponsiveContainer width="100%" height={230}>
+                              <PieChart>
+                                <Pie data={riskDistributionData} dataKey="value" innerRadius={60} outerRadius={90} paddingAngle={4}>
+                                  {riskDistributionData.map((d, i) => (
+                                    <Cell key={i} fill={d.color} className="stroke-background hover:opacity-90 cursor-pointer transition-all duration-200" />
+                                  ))}
+                                </Pie>
+                                <Tooltip 
+                                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                                  itemStyle={{ color: "hsl(var(--foreground))" }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                            <div className="flex flex-wrap justify-center gap-3 text-[11px] mt-2">
+                              {riskDistributionData.map((d) => (
+                                <div key={d.name} className="flex items-center gap-1.5 px-2 py-0.5 bg-muted/40 rounded-full font-medium">
+                                  <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                                  <span>{d.name}: {d.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2 space-y-4">
+                            <div className="p-4 bg-muted/20 border border-border/40 rounded-xl">
+                              <div className="text-xs text-muted-foreground">High-Risk Ratio</div>
+                              <div className="font-display text-2xl font-bold mt-1 text-destructive tabular-nums">
+                                {Math.round(highRiskProportion * 100)}%
+                              </div>
+                              <div className="w-full bg-muted h-2 rounded-full overflow-hidden mt-2 border border-border/20">
+                                <div 
+                                  className="bg-destructive h-full rounded-full transition-all duration-500" 
+                                  style={{ width: `${highRiskProportion * 100}%` }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1.5">Proportion of Red & Critical students requiring intervention</p>
+                            </div>
+
+                            <div className="p-4 bg-muted/20 border border-border/40 rounded-xl">
+                              <div className="text-xs text-muted-foreground">Avg Campus WRS</div>
+                              <div className="font-display text-2xl font-bold mt-1 text-primary tabular-nums">
+                                {avgCampusWrs}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1">Aggregated Student Wellness Risk Score on campus</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {insights?.risk_distribution && (
+                          <div className="mt-6 p-4 bg-primary/5 border border-primary/10 rounded-xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-2 opacity-15 group-hover:scale-110 transition duration-300">
+                              <Sparkles className="h-8 w-8 text-primary" />
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
+                              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                              AI Clinical Cohort Insight
+                            </div>
+                            <p className="text-xs italic text-muted-foreground leading-relaxed">{insights.risk_distribution}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* FACULTY BREAKDOWN TAB */}
+                    {activeAnalyticsTab === "faculty" && (
+                      <div className="space-y-6 animate-fade-in">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          {/* Faculty Heatmap Stacked Chart */}
+                          <div className="p-4 bg-muted/10 border border-border/30 rounded-xl">
+                            <div className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Faculty Risk Heatmap</div>
+                            {facultyHeatmapData.length === 0 ? (
+                              <div className="h-48 flex items-center justify-center text-xs text-muted-foreground">No heatmap data available</div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={facultyHeatmapData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                  <XAxis dataKey="faculty" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                  <Tooltip 
+                                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} 
+                                    itemStyle={{ fontSize: 10 }}
+                                  />
+                                  <Bar dataKey="Green" stackId="a" fill="#A8FF3E" />
+                                  <Bar dataKey="Amber" stackId="a" fill="#FF8C42" />
+                                  <Bar dataKey="Red" stackId="a" fill="#FF4560" />
+                                  <Bar dataKey="Critical" stackId="a" fill="#B00020" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+
+                          {/* Faculty Average WRS Bar Chart */}
+                          <div className="p-4 bg-muted/10 border border-border/30 rounded-xl">
+                            <div className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Avg WRS Score by department</div>
+                            {facultyAvgData.length === 0 ? (
+                              <div className="h-48 flex items-center justify-center text-xs text-muted-foreground">No average data available</div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={facultyAvgData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                  <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                  <Tooltip 
+                                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12 }}
+                                    itemStyle={{ fontSize: 11 }}
+                                  />
+                                  <Bar dataKey="average_wrs_score" fill="#6C3FE8" radius={[4, 4, 0, 0]} opacity={0.85} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                        </div>
+
+                        {insights?.faculty_avg && (
+                          <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-2 opacity-15">
+                              <Sparkles className="h-8 w-8 text-primary" />
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
+                              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                              AI Departmental Distribution Insight
+                            </div>
+                            <p className="text-xs italic text-muted-foreground leading-relaxed">{insights.faculty_avg}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* WELLNESS TRENDS TAB */}
+                    {activeAnalyticsTab === "trends" && (
+                      <div className="space-y-6 animate-fade-in">
+                        <div className="p-4 bg-muted/10 border border-border/30 rounded-xl">
+                          <div className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Last 30 Days Trend</div>
+                          {wrsTrendData.length === 0 ? (
+                            <div className="h-56 flex items-center justify-center text-xs text-muted-foreground">No trend logs recorded yet</div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={210}>
+                              <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -25 }}>
+                                <defs>
+                                  <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.5} />
+                                    <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={9} tickLine={false} />
+                                <Tooltip 
+                                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                                  itemStyle={{ color: "hsl(var(--foreground))" }}
+                                />
+                                <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+
+                        {insights?.wrs_trend && (
+                          <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-2 opacity-15">
+                              <Sparkles className="h-8 w-8 text-primary" />
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-1">
+                              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                              AI Longitudinal Trend Insight
+                            </div>
+                            <p className="text-xs italic text-muted-foreground leading-relaxed">{insights.wrs_trend}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <h2 className="font-display text-2xl font-bold mb-3">Psychologist Dashboard</h2>
-              <p className="text-muted-foreground text-sm max-w-md">
-                Select a KPI above to manage students or sessions. Use the sidebar to navigate between your schedule and student roster.
-              </p>
+            </div>
+
+            {/* Right Column: Active Cohort Triage */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="surface-card p-6 bg-card rounded-2xl border border-border/60 flex flex-col h-full min-h-[460px]">
+                <div className="border-b border-border/40 pb-4 mb-4">
+                  <h3 className="font-display text-base font-bold flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-4.5 w-4.5" />
+                    Clinical Triage Queue
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Students flagging critical or high risk alerts</p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[350px] scrollbar-thin">
+                  {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />
+                    ))
+                  ) : activeHighRiskAlerts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-muted/10 rounded-2xl border border-dashed border-border/50">
+                      <Sparkles className="h-8 w-8 text-success mb-3 animate-pulse" />
+                      <div className="text-xs font-bold text-foreground">Cohort is secure</div>
+                      <p className="text-[10px] text-muted-foreground mt-1 max-w-[180px]">No active Red or Critical alerts are registered in the system right now.</p>
+                    </div>
+                  ) : (
+                    activeHighRiskAlerts.slice(0, 5).map((a) => {
+                      const tierName = a.tier?.charAt(0).toUpperCase() + a.tier?.slice(1).toLowerCase();
+                      const color = colorFromTier(tierName);
+                      return (
+                        <div 
+                          key={a.id} 
+                          className="p-3 bg-muted/20 border border-border/40 rounded-xl hover:bg-muted/35 hover:border-border/60 transition-all duration-200 flex items-center justify-between gap-3 group"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-xs truncate group-hover:text-primary transition-colors">{a.student_full_name}</div>
+                            <div className="text-[9px] font-mono text-muted-foreground mt-0.5">{a.student_id}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span 
+                                className={cn("text-[9px] px-2 py-0.5 rounded-full font-bold uppercase", tierName === "Critical" && "animate-pulse")}
+                                style={{ backgroundColor: `${color}20`, color }}
+                              >
+                                {tierName}
+                              </span>
+                              <span className="text-[9px] font-semibold text-muted-foreground font-mono">WRS: {a.wrs_score}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => navigate(`/counselor/student/${a.student_id}`)}
+                              className="h-7 text-[10px] px-2.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20"
+                            >
+                              Triage
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => setOverrideModal({ id: a.student_id, name: a.student_full_name, currentTier: tierName, newTier: tierName, justification: "" })}
+                              className="h-7 text-[9px] px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            >
+                              Override
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                
+                {activeHighRiskAlerts.length > 5 && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate("/counselor/students")} 
+                    className="w-full text-xs h-8 mt-4"
+                  >
+                    View All {activeHighRiskAlerts.length} High-Risk Alerts
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -528,124 +876,7 @@ export default function CounselorDashboard() {
         )}
       </div>
 
-      {/* Campus Analytics Section */}
-      {currentView === "dashboard" && (
-        <div className="px-4 md:px-8 pb-12 mt-8 pt-8 border-t border-border">
-          <div className="mb-6">
-            <h2 className="font-display text-2xl font-bold">Campus Analytics</h2>
-            <p className="text-sm text-muted-foreground">Aggregated wellness data across all students.</p>
-          </div>
 
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Chart 1 — Campus WRS Trend (full width) */}
-            <div className="lg:col-span-3 surface-card p-6 bg-card rounded-2xl">
-              <div className="label-eyebrow mb-1">Campus WRS Trend</div>
-              <div className="font-display text-lg font-bold mb-4">Last 7 days</div>
-              {analyticsLoading ? (
-                <div className="h-64 bg-muted rounded-lg animate-pulse" />
-              ) : (!analytics?.wrs_trend && analyticsError) || (wrsTrendData.length === 0) ? (
-                <div className="h-64 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                      <defs>
-                        <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
-                          <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                      />
-                      <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                  {insights?.wrs_trend && (
-                    <div className="mt-4 text-xs italic text-muted-foreground">
-                      {insights.wrs_trend}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Chart 2 — Risk Distribution (half width) */}
-            <div className="surface-card p-6 bg-card rounded-2xl">
-              <div className="label-eyebrow mb-1">Risk distribution</div>
-              <div className="font-display text-lg font-bold mb-4">By tier</div>
-              {analyticsLoading ? (
-                <div className="h-56 bg-muted rounded-lg animate-pulse" />
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
-                        {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap justify-center gap-2 text-xs mt-3">
-                    {riskDistributionData.map((d) => (
-                      <div key={d.name} className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-                        <span>{d.name} ({d.value})</span>
-                      </div>
-                    ))}
-                  </div>
-                  {insights?.risk_distribution && (
-                    <div className="mt-4 text-xs italic text-muted-foreground text-center">
-                      {insights.risk_distribution}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Chart 3 — Check-ins Per Faculty (half width) */}
-            <div className="lg:col-span-2 surface-card p-6 bg-card rounded-2xl">
-              <div className="label-eyebrow mb-1">Check-ins per faculty</div>
-              <div className="font-display text-lg font-bold mb-4">By cohort group</div>
-              {analyticsLoading || loading ? (
-                <div className="h-56 bg-muted rounded-lg animate-pulse" />
-              ) : facultyAvgData.length === 0 ? (
-                <div className="h-56 flex items-center justify-center text-muted-foreground">No cohort data available</div>
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={facultyAvgData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                      <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                      />
-                      <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
-                        {facultyAvgData.map((d: any, i: number) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  {insights?.faculty_avg && (
-                    <div className="mt-4 text-xs italic text-muted-foreground">
-                      {insights.faculty_avg}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       <Dialog open={!!overrideModal} onOpenChange={(open) => !open && setOverrideModal(null)}>
         <DialogContent className="sm:max-w-[425px]">

@@ -13,6 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { FACULTY_WRS, colorFromWrs, RiskTier } from "@/data/mock";
 import { getRiskAlerts, getRiskCohort, overrideRiskTier, type RiskTier as ApiRiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
+import { getRealAnalytics } from "@/api/analytics";
 import { cn, formatWRS } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -37,24 +38,32 @@ export default function MyStudents() {
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [studentsData, alertsData, cohortData] = await Promise.all([
+        setAnalyticsLoading(true);
+        const [studentsData, alertsData, cohortData, analyticsResult] = await Promise.all([
           listStudents(100, 0),
           getRiskAlerts(100, 0),
-          getRiskCohort()
+          getRiskCohort(),
+          getRealAnalytics().catch(() => null)
         ]);
         setStudents(studentsData.data || []);
         setAlerts(alertsData.data || []);
         setCohort(cohortData || []);
+        if (analyticsResult) {
+          setAnalytics(analyticsResult.charts);
+        }
       } catch (err) {
         setError("Failed to load students data");
       } finally {
         setLoading(false);
+        setAnalyticsLoading(false);
       }
     };
     fetchAll();
@@ -80,11 +89,14 @@ export default function MyStudents() {
     };
     
     students.forEach((student) => {
+      const isOverridden = !!overrides[student.student_id];
       const matchingAlert = alerts.find((a) => a.student_id === student.student_id);
-      if (!matchingAlert || !matchingAlert.tier) {
+      
+      const rawTier = isOverridden ? overrides[student.student_id] : matchingAlert?.tier;
+      if (!rawTier) {
         tierCounts["No Data"]++;
       } else {
-        const tier = matchingAlert.tier.charAt(0).toUpperCase() + matchingAlert.tier.slice(1).toLowerCase();
+        const tier = rawTier.charAt(0).toUpperCase() + rawTier.slice(1).toLowerCase();
         if (tierCounts[tier] !== undefined) {
           tierCounts[tier]++;
         }
@@ -98,7 +110,17 @@ export default function MyStudents() {
       { name: "Critical", value: tierCounts.Critical, color: "#B00020" },
       { name: "No Data", value: tierCounts["No Data"], color: "#6B7280" },
     ].filter(d => d.value > 0);
-  }, [students, alerts]);
+  }, [students, alerts, overrides]);
+
+  const facultyWrsData = useMemo(() => {
+    if (analytics?.faculty_avg) {
+      return Object.entries(analytics.faculty_avg).map(([faculty, avg]: any) => ({
+        faculty,
+        avg: Math.round(avg * 10) / 10
+      }));
+    }
+    return FACULTY_WRS;
+  }, [analytics]);
 
   const rows = useMemo(() => {
     let r = [...students];
@@ -330,18 +352,22 @@ export default function MyStudents() {
             <div className="surface-card p-4 md:p-6">
               <div className="label-eyebrow mb-1">Faculty WRS</div>
               <div className="font-display text-sm font-bold mb-4">Click bar to filter</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={FACULTY_WRS} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
-                  <XAxis dataKey="faculty" tick={false} axisLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
-                  <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
-                    {FACULTY_WRS.map((d, i) => (
-                      <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {analyticsLoading ? (
+                <div className="h-48 bg-muted rounded-xl animate-pulse" />
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={facultyWrsData} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
+                    <XAxis dataKey="faculty" tick={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                    <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
+                      {facultyWrsData.map((d, i) => (
+                        <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             <div className="surface-card p-4 md:p-6">
