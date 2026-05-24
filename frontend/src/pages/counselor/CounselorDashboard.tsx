@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
 import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
+import { getRealAnalytics } from "@/api/analytics";
 import { cn, formatWRS } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -52,6 +53,11 @@ export default function CounselorDashboard() {
   const [totalStudents, setTotalStudents] = useState(0);
   const [alertsOffset, setAlertsOffset] = useState(0);
   const [alertsPagination, setAlertsPagination] = useState<any>(null);
+
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState(false);
+  const [insights, setInsights] = useState<any>({});
 
   const fetchAppointments = async (newOffset: number) => {
     try {
@@ -92,6 +98,20 @@ export default function CounselorDashboard() {
       }
     };
     fetchAll();
+
+    const fetchAnalytics = async () => {
+      try {
+        setAnalyticsLoading(true);
+        const data = await getRealAnalytics();
+        setAnalytics(data.charts);
+        setInsights(data.insights || {});
+      } catch (err) {
+        setAnalyticsError(true);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    };
+    fetchAnalytics();
 
     // Auto-refresh appointments every 30 seconds on Sessions page
     if (currentView === "schedule") {
@@ -141,6 +161,33 @@ export default function CounselorDashboard() {
   const avgCampusWrs = useMemo(() => {
     return formatWRS(alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0) / (alerts.length || 1));
   }, [alerts]);
+
+  const wrsTrendData = useMemo(() => {
+    if (analytics?.wrs_trend) {
+      return Object.entries(analytics.wrs_trend).map(([date, score]) => ({ day: date, wrs: score }));
+    }
+    return trend;
+  }, [analytics, trend]);
+
+  const riskDistributionData = useMemo(() => {
+    if (analytics?.risk_distribution) {
+      const rd = analytics.risk_distribution;
+      return [
+        { name: "Green", value: rd.green || 0, color: "#A8FF3E" },
+        { name: "Amber", value: rd.amber || 0, color: "#FF8C42" },
+        { name: "Red", value: rd.red || 0, color: "#FF4560" },
+        { name: "Critical", value: rd.critical || 0, color: "#B00020" }
+      ].filter(t => t.value > 0);
+    }
+    return tierData;
+  }, [analytics, tierData]);
+
+  const facultyAvgData = useMemo(() => {
+    if (analytics?.faculty_avg) {
+      return Object.entries(analytics.faculty_avg).map(([faculty, avg]) => ({ group: faculty, average_wrs_score: avg }));
+    }
+    return cohort;
+  }, [analytics, cohort]);
 
   const kpis = [
     { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
@@ -228,7 +275,7 @@ export default function CounselorDashboard() {
     
     try {
       await overrideRiskTier(overrideModal.id, {
-        override_tier: overrideModal.newTier,
+        override_tier: overrideModal.newTier.toLowerCase() as any,
         justification: overrideModal.justification
       });
       setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier as RiskTier }));
@@ -246,6 +293,11 @@ export default function CounselorDashboard() {
       {error && (
         <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4" /> {error}
+        </div>
+      )}
+      {analyticsError && (
+        <div className="bg-warning/15 text-warning px-4 md:px-8 py-2 text-sm border-b border-warning/30 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" /> Analytics data unavailable. Showing cached data.
         </div>
       )}
       
@@ -489,26 +541,36 @@ export default function CounselorDashboard() {
             <div className="lg:col-span-3 surface-card p-6 bg-card rounded-2xl">
               <div className="label-eyebrow mb-1">Campus WRS Trend</div>
               <div className="font-display text-lg font-bold mb-4">Last 7 days</div>
-              {loading ? (
+              {analyticsLoading ? (
                 <div className="h-64 bg-muted rounded-lg animate-pulse" />
+              ) : (!analytics?.wrs_trend && analyticsError) || (wrsTrendData.length === 0) ? (
+                <div className="h-64 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
               ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                    <defs>
-                      <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
-                        <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                      itemStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                      <defs>
+                        <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
+                          <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                      <Tooltip 
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                      />
+                      <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  {insights?.wrs_trend && (
+                    <div className="mt-4 text-xs italic text-muted-foreground">
+                      {insights.wrs_trend}
+                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -516,14 +578,14 @@ export default function CounselorDashboard() {
             <div className="surface-card p-6 bg-card rounded-2xl">
               <div className="label-eyebrow mb-1">Risk distribution</div>
               <div className="font-display text-lg font-bold mb-4">By tier</div>
-              {loading ? (
+              {analyticsLoading ? (
                 <div className="h-56 bg-muted rounded-lg animate-pulse" />
               ) : (
                 <>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={tierData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
-                        {tierData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                        {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
                       <Tooltip 
                         contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
@@ -532,13 +594,19 @@ export default function CounselorDashboard() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex flex-wrap justify-center gap-2 text-xs mt-3">
-                    {tierData.map((d) => (
+                    {riskDistributionData.map((d) => (
                       <div key={d.name} className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
                         <span>{d.name} ({d.value})</span>
                       </div>
                     ))}
                   </div>
+                  {insights?.risk_distribution && (
+                    <div className="mt-4 text-xs italic text-muted-foreground text-center">
+                      {insights.risk_distribution}
+                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -547,24 +615,32 @@ export default function CounselorDashboard() {
             <div className="lg:col-span-2 surface-card p-6 bg-card rounded-2xl">
               <div className="label-eyebrow mb-1">Check-ins per faculty</div>
               <div className="font-display text-lg font-bold mb-4">By cohort group</div>
-              {loading ? (
+              {analyticsLoading || loading ? (
                 <div className="h-56 bg-muted rounded-lg animate-pulse" />
-              ) : cohort.length === 0 ? (
+              ) : facultyAvgData.length === 0 ? (
                 <div className="h-56 flex items-center justify-center text-muted-foreground">No cohort data available</div>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={cohort} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                    <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                      itemStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
-                      {cohort.map((d, i) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={facultyAvgData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                      <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                      <Tooltip 
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                      />
+                      <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
+                        {facultyAvgData.map((d: any, i: number) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  {insights?.faculty_avg && (
+                    <div className="mt-4 text-xs italic text-muted-foreground">
+                      {insights.faculty_avg}
+                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

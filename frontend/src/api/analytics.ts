@@ -25,3 +25,7 @@ export async function getDepartmentAnalytics(deptId: string): Promise<any> {
 export async function getSummaryReport(): Promise<any> {
   return apiRequest<any>("GET", "/analytics/summary-report");
 }
+
+export async function getRealAnalytics(): Promise<any> {
+  return apiRequest("GET", "/analytics/real-data");
+}

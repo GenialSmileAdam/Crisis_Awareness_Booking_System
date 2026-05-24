@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { getRiskAlerts, getRiskCohort } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
+import { getRealAnalytics } from "@/api/analytics";
 
 import { adminSidebarItems } from "@/data/sidebar";
 
@@ -35,6 +36,11 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ total: 0, limit: 10, offset: 0, has_next: false });
   const [alertsPaginationMeta, setAlertsPaginationMeta] = useState({ limit: 10, offset: 0, has_next: false });
+
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState(false);
+  const [insights, setInsights] = useState<any>({});
 
   // Fetch all data on component mount
   useEffect(() => {
@@ -69,6 +75,20 @@ export default function AdminDashboard() {
       }
     };
     fetchAll();
+
+    const fetchAnalytics = async () => {
+      try {
+        setAnalyticsLoading(true);
+        const data = await getRealAnalytics();
+        setAnalytics(data.charts);
+        setInsights(data.insights || {});
+      } catch (err) {
+        setAnalyticsError(true);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    };
+    fetchAnalytics();
   }, []);
 
   const days = range === "week" ? 7 : range === "month" ? 30 : 90;
@@ -98,6 +118,33 @@ export default function AdminDashboard() {
       { name: "Critical", value: tierCounts.Critical, color: "#B00020" },
     ];
   }, [alerts]);
+
+  const wrsTrendData = useMemo(() => {
+    if (analytics?.wrs_trend) {
+      return Object.entries(analytics.wrs_trend).map(([date, score]) => ({ day: date, wrs: score }));
+    }
+    return trend;
+  }, [analytics, trend]);
+
+  const riskDistributionData = useMemo(() => {
+    if (analytics?.risk_distribution) {
+      const rd = analytics.risk_distribution;
+      return [
+        { name: "Green", value: rd.green || 0, color: "#A8FF3E" },
+        { name: "Amber", value: rd.amber || 0, color: "#FF8C42" },
+        { name: "Red", value: rd.red || 0, color: "#FF4560" },
+        { name: "Critical", value: rd.critical || 0, color: "#B00020" }
+      ].filter(t => t.value > 0);
+    }
+    return tierData;
+  }, [analytics, tierData]);
+
+  const facultyAvgData = useMemo(() => {
+    if (analytics?.faculty_avg) {
+      return Object.entries(analytics.faculty_avg).map(([faculty, avg]) => ({ group: faculty, average_wrs_score: avg }));
+    }
+    return cohort;
+  }, [analytics, cohort]);
 
   const filteredAlerts = useMemo(() => {
     let r = [...alerts];
@@ -155,6 +202,11 @@ export default function AdminDashboard() {
       {error && (
         <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30">
           Failed to load data. Please refresh.
+        </div>
+      )}
+      {analyticsError && (
+        <div className="bg-warning/15 text-warning px-4 md:px-8 py-2 text-sm border-b border-warning/30">
+          Analytics data unavailable. Showing cached data.
         </div>
       )}
 
@@ -217,51 +269,103 @@ export default function AdminDashboard() {
           })}
         </div>
 
+        {/* High Risk Proportion KPI */}
+        <div className="surface-card p-6 rounded-3xl">
+          <div className="label-eyebrow mb-2">High Risk Proportion</div>
+          {analyticsLoading ? (
+            <div className="h-4 bg-muted rounded-full animate-pulse" />
+          ) : (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm font-medium">
+                <span>Critical / Red Tier Students</span>
+                <span className="tabular-nums font-bold text-destructive">
+                  {analytics?.high_risk_proportion ? Math.round(analytics.high_risk_proportion * 100) + "%" : "—"}
+                </span>
+              </div>
+              <div className="h-4 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-1000" 
+                  style={{ 
+                    width: analytics?.high_risk_proportion ? `${analytics.high_risk_proportion * 100}%` : '0%',
+                    background: '#FF4560' 
+                  }} 
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Charts grid */}
         <div className="grid lg:grid-cols-3 gap-4">
           <div id="trend" className="lg:col-span-2 glass border border-border rounded-3xl p-6">
             <div className="label-eyebrow mb-1">Campus WRS Trend</div>
             <div className="font-display text-lg font-bold mb-4">Last {days} days</div>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                <defs>
-                  <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.6} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip 
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                  itemStyle={{ color: "hsl(var(--foreground))" }}
-                />
-                <Area type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#wrsg)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {analyticsLoading ? (
+              <div className="h-60 bg-muted rounded-lg animate-pulse" />
+            ) : (!analytics?.wrs_trend && analyticsError) || (wrsTrendData.length === 0) ? (
+              <div className="h-60 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.6} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
+                    <Area type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#wrsg)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+                {insights?.wrs_trend && (
+                  <div className="mt-4 text-xs italic text-muted-foreground">
+                    {insights.wrs_trend}
+                    <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div className="glass border border-border rounded-3xl p-6">
             <div className="label-eyebrow mb-1">Risk distribution</div>
             <div className="font-display text-lg font-bold mb-4">By tier</div>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={tierData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3} onClick={(d: any) => { setTierFilter(d.name); setPagination(p => ({ ...p, offset: 0 })); }} cursor="pointer">
-                  {tierData.map((d, i) => <Cell key={i} fill={d.color} opacity={tierFilter && tierFilter !== d.name ? 0.3 : 1} />)}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                  itemStyle={{ color: "hsl(var(--foreground))" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap justify-center gap-3 text-xs">
-              {tierData.map((d) => (
-                <button key={d.name} onClick={() => { setTierFilter(d.name === tierFilter ? null : d.name); setPagination(p => ({ ...p, offset: 0 })); }} className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full" style={{ background: d.color }} /> {d.name} ({d.value})
-                </button>
-              ))}
-            </div>
+            {analyticsLoading ? (
+              <div className="h-56 bg-muted rounded-lg animate-pulse" />
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3} onClick={(d: any) => { setTierFilter(d.name); setPagination(p => ({ ...p, offset: 0 })); }} cursor="pointer">
+                      {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} opacity={tierFilter && tierFilter !== d.name ? 0.3 : 1} />)}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-3 text-xs">
+                  {riskDistributionData.map((d) => (
+                    <button key={d.name} onClick={() => { setTierFilter(d.name === tierFilter ? null : d.name); setPagination(p => ({ ...p, offset: 0 })); }} className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: d.color }} /> {d.name} ({d.value})
+                    </button>
+                  ))}
+                </div>
+                {insights?.risk_distribution && (
+                  <div className="mt-4 text-xs italic text-muted-foreground text-center">
+                    {insights.risk_distribution}
+                    <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div id="faculty" className="lg:col-span-2 glass border border-border rounded-3xl p-6">
@@ -272,24 +376,32 @@ export default function AdminDashboard() {
               </div>
               {facultyFilter && <Button size="sm" variant="outline" onClick={() => setFacultyFilter(null)}>Clear: {facultyFilter}</Button>}
             </div>
-            {loading ? (
+            {analyticsLoading || loading ? (
               <div className="h-56 bg-muted rounded-lg animate-pulse" />
-            ) : cohort.length === 0 ? (
+            ) : facultyAvgData.length === 0 ? (
               <div className="h-56 flex items-center justify-center text-muted-foreground">No data available</div>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={cohort} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                  <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => String(v).split(" ")[0]} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <Tooltip 
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                    itemStyle={{ color: "hsl(var(--foreground))" }}
-                  />
-                  <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="hsl(var(--primary))" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.group); setPagination(p => ({ ...p, offset: 0 })); }}>
-                    {cohort.map((d, i) => <Cell key={i} fill="hsl(var(--primary))" opacity={facultyFilter && facultyFilter !== d.group ? 0.3 : 1} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={facultyAvgData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => String(v).split(" ")[0]} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip 
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                    />
+                    <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="hsl(var(--primary))" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.group); setPagination(p => ({ ...p, offset: 0 })); }}>
+                      {facultyAvgData.map((d: any, i: number) => <Cell key={i} fill="hsl(var(--primary))" opacity={facultyFilter && facultyFilter !== d.group ? 0.3 : 1} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {insights?.faculty_avg && (
+                  <div className="mt-4 text-xs italic text-muted-foreground">
+                    {insights.faculty_avg}
+                    <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -319,6 +431,57 @@ export default function AdminDashboard() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Faculty Risk Heatmap */}
+        <div className="glass border border-border rounded-3xl p-6">
+          <h2 className="font-display text-xl font-bold mb-4">Faculty Risk Heatmap</h2>
+          {analyticsLoading ? (
+            <div className="h-64 bg-muted rounded-lg animate-pulse" />
+          ) : !analytics?.faculty_risk_heatmap || Object.keys(analytics.faculty_risk_heatmap).length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3">Faculty</th>
+                    <th className="text-center p-3">Green</th>
+                    <th className="text-center p-3">Amber</th>
+                    <th className="text-center p-3">Red</th>
+                    <th className="text-center p-3">Critical</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analytics.faculty_risk_heatmap).map(([faculty, tiers]: [string, any]) => (
+                    <tr key={faculty} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      <td className="p-3 font-medium">{faculty}</td>
+                      <td className="p-3 text-center">
+                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.green > 0 ? 'rgba(168, 255, 62, 0.15)' : 'transparent', color: tiers.green > 0 ? '#8cd930' : 'inherit' }}>
+                          {tiers.green || 0}
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.amber > 0 ? 'rgba(255, 140, 66, 0.15)' : 'transparent', color: tiers.amber > 0 ? '#d97637' : 'inherit' }}>
+                          {tiers.amber || 0}
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.red > 0 ? 'rgba(255, 69, 96, 0.15)' : 'transparent', color: tiers.red > 0 ? '#d93950' : 'inherit' }}>
+                          {tiers.red || 0}
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="mx-auto w-10 py-1 rounded font-bold" style={{ backgroundColor: tiers.critical > 0 ? 'rgba(176, 0, 32, 0.15)' : 'transparent', color: tiers.critical > 0 ? '#B00020' : 'inherit' }}>
+                          {tiers.critical || 0}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Alerts table */}
