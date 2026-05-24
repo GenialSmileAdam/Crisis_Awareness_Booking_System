@@ -4,6 +4,7 @@ import { apiRequest } from "./client";
 
 export interface JWTPayload {
   sub: string;
+  name: string | null;
   user_type: "student" | "staff";
   role: "student" | "psychologist" | "admin" | "staff";
   is_admin: boolean;
@@ -55,6 +56,15 @@ export async function loginStaff(
   const res = await apiRequest<AuthResponse>("POST", "/auth/login", body, true);
   localStorage.setItem(TOKEN_KEY, res.access_token);
   return res;
+}
+
+/**
+ * Register a new user.
+ */
+export async function registerUser(
+  payload: Record<string, any>,
+): Promise<any> {
+  return apiRequest<any>("POST", "/auth/register", payload);
 }
 
 /**

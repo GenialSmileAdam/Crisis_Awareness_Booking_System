@@ -12,13 +12,11 @@ import { useAuth } from "@/context/AuthContext";
 import { tierFromWrs, RECENT_CHECKINS, PHQ9_QUESTIONS, PHQ9_OPTIONS, GAD7_QUESTIONS, GAD7_OPTIONS, PULSE_QUESTIONS, colorFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { sessionCheckInComplete, setSessionCheckInComplete } from "@/components/StudentRoute";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-
 type SurveyTab = "pulse" | "phq9" | "gad7";
-
+import { PendingCheckin } from "@/api/checkins";
 import { studentSidebarItems } from "@/data/sidebar";
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
@@ -105,94 +103,56 @@ export default function StudentPortal() {
   const location = useLocation();
   const navigate = useNavigate();
   const studentName = user?.name || "Student";
+  const firstName = user?.name?.split(" ")[0] || "";
+  const studentId = user?.student_id;
   
   const isCheckinView = location.pathname === "/student/checkin";
 
-  // Pending survey tracking
-  const [completedSurveys, setCompletedSurveys] = useState<Set<SurveyTab>>(() => {
-    const s = new Set<SurveyTab>();
-    const now = new Date().getTime();
-    const pulseDate = localStorage.getItem("last_pulse");
-    const phq9Date = localStorage.getItem("last_phq9");
-    const gad7Date = localStorage.getItem("last_gad7");
+  // API State
+  const [pendingSurveys, setPendingSurveys] = useState<PendingCheckin[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [tab, setTab] = useState<SurveyTab>("pulse");
+  const [hasCompletedRecently, setHasCompletedRecently] = useState(false);
+  const [isTriggered, setIsTriggered] = useState(false);
+  const [pendingLoadError, setPendingLoadError] = useState(false);
 
-    if (pulseDate && now - new Date(pulseDate).getTime() < 7 * 24 * 60 * 60 * 1000) s.add("pulse");
-    if (phq9Date && now - new Date(phq9Date).getTime() < 30 * 24 * 60 * 60 * 1000) s.add("phq9");
-    if (gad7Date && now - new Date(gad7Date).getTime() < 30 * 24 * 60 * 60 * 1000) s.add("gad7");
-    return s;
-  });
-  const pendingSurveys = useMemo(() => {
-    const pending: SurveyTab[] = [];
-    if (!completedSurveys.has("pulse")) pending.push("pulse");
-    if (!completedSurveys.has("phq9")) pending.push("phq9");
-    if (!completedSurveys.has("gad7")) pending.push("gad7");
-    return pending;
-  }, [completedSurveys]);
+  useEffect(() => {
+    const checkStatus = async () => {
+      setIsLoading(false);
+      setPendingSurveys([
+        { type: "pulse", message: "Weekly pulse check-in pending" },
+        { type: "phq9", message: "Monthly PHQ-9 check-in pending" },
+        { type: "gad7", message: "Monthly GAD-7 check-in pending" },
+      ]);
+      setHasCompletedRecently(false);
+      setTab("pulse");
+    };
 
-  const allComplete = pendingSurveys.length === 0;
-  const [tab, setTab] = useState<SurveyTab>(pendingSurveys[0] || "pulse");
+    checkStatus();
+  }, [studentId, navigate]);
 
   const [bookingOpen, setBookingOpen] = useState(false);
   const [hotlineOpen, setHotlineOpen] = useState(false);
   const tier = tierFromWrs(wrs);
 
-  const [hasCompletedRecently, setHasCompletedRecently] = useState(() => sessionCheckInComplete || completedSurveys.size === 3);
-  const [isTriggered, setIsTriggered] = useState(false);
-
-  useEffect(() => {
-    if (localStorage.getItem("crisis_logged")) {
-      setIsTriggered(true);
-      setHasCompletedRecently(false);
-      setTab("pulse");
-    }
-  }, []);
-
-  const handleSubmit = (responses: Record<string, number>) => {
-    // Calculate score from responses for WRS
-    const values = Object.values(responses);
-    const maxPossible = tab === "pulse" ? 25 : tab === "phq9" ? 27 : 21;
-    const total = values.reduce((a, b) => a + b, 0);
-    const score = Math.round((total / maxPossible) * 100);
-    setWrs(score);
-
-    localStorage.setItem(`last_${tab}`, new Date().toISOString());
-
-    // Mark this survey as complete
-    setCompletedSurveys(prev => {
-      const next = new Set(prev);
-      next.add(tab);
-      // Check if all are now complete
-      if (next.size === 3) {
-        setSessionCheckInComplete(true);
-        setHasCompletedRecently(true);
-      }
-      return next;
-    });
-
-    if (isTriggered) {
-      localStorage.removeItem("crisis_logged");
-      setIsTriggered(false);
-      setSessionCheckInComplete(true);
+  const handleSubmit = async (responses: Record<string, number>) => {
+    toast.success("Check-in recorded. Thank you.");
+    const pending = pendingSurveys.filter(p => p.type !== tab);
+    setPendingSurveys(pending);
+    if (pending.length > 0) {
+      setTab(pending[0].type as SurveyTab);
+    } else {
       setHasCompletedRecently(true);
-      toast.success("Required check-in recorded. Thank you for sharing.");
-      return;
-    }
-
-    toast.success(`${tab === "phq9" ? "PHQ-9" : tab === "gad7" ? "GAD-7" : "Pulse Survey"} check-in recorded.`);
-
-    // Auto-switch to next pending survey
-    const remaining = pendingSurveys.filter(s => s !== tab);
-    if (remaining.length > 0) {
-      setTab(remaining[0]);
-    } else if (location.pathname === "/student/checkin") {
-      navigate("/student");
+      if (location.pathname === "/student/checkin") {
+        navigate("/student");
+      }
     }
   };
 
   const portalItems = useMemo(() => {
     return studentSidebarItems.map(item => ({
       ...item,
-      disabled: ((!hasCompletedRecently && !isTriggered) || isTriggered) && item.label !== "Check-in" && item.label !== "Home",
+      disabled: false,
       ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
   }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
@@ -202,17 +162,17 @@ export default function StudentPortal() {
     return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   }, []);
 
-  const tierColor = colorFromWrs(wrs);
-
   const tabLabels: Record<SurveyTab, string> = { pulse: "Pulse Survey", phq9: "PHQ-9", gad7: "GAD-7" };
 
   return (
     <AppShell items={portalItems}>
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1">
-          <h1 className="font-display text-xl md:text-2xl font-bold">{greeting} 👋</h1>
+          <h1 className="font-display text-xl md:text-2xl font-bold">
+            {greeting}{firstName ? `, ${firstName}` : ""} 👋
+          </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Last check-in: 2 days ago
+            You're all caught up for today
           </p>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -232,7 +192,7 @@ export default function StudentPortal() {
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
+          <Button variant="ghost" size="icon" onClick={() => { localStorage.removeItem("checkin_gate_passed"); logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -241,7 +201,7 @@ export default function StudentPortal() {
       <CrisisBanner />
       <div className="p-4 md:p-8 space-y-6 pt-0 md:pt-0">
         {/* Triggered Check-in Modal */}
-        <Dialog open={isTriggered}>
+        <Dialog open={false}>
           <DialogContent className="sm:max-w-[500px] [&>button]:hidden">
             <div className="flex flex-col items-center text-center space-y-4 py-4">
               <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
@@ -285,24 +245,27 @@ export default function StudentPortal() {
                 </p>
               </div>
               <div className="flex gap-1 p-1 rounded-full bg-muted w-fit">
-                {(["pulse", "phq9", "gad7"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={cn(
-                      "px-4 py-1.5 text-xs font-semibold rounded-full transition relative",
-                      tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground",
-                      completedSurveys.has(t) && "opacity-50"
-                    )}
-                  >
-                    {tabLabels[t]}
-                    {completedSurveys.has(t) && <Check className="inline h-3 w-3 ml-1" />}
-                  </button>
-                ))}
+                {(["pulse", "phq9", "gad7"] as const).map((t) => {
+                  const isPending = pendingSurveys.some(p => p.type === t);
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      className={cn(
+                        "px-4 py-1.5 text-xs font-semibold rounded-full transition relative",
+                        tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                        !isPending && "opacity-50"
+                      )}
+                    >
+                      {tabLabels[t]}
+                      {!isPending && <Check className="inline h-3 w-3 ml-1" />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {completedSurveys.has(tab) ? (
+            {!pendingSurveys.some(p => p.type === tab) ? (
               <div className="flex items-center gap-2 p-4 rounded-xl bg-muted/30 text-sm text-muted-foreground">
                 <Check className="h-4 w-4" style={{ color: "#A8FF3E" }} />
                 {tabLabels[tab]} already submitted. Select another survey above.
@@ -315,7 +278,20 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {!isCheckinView && hasCompletedRecently && (
+        {pendingLoadError && (
+          <div className="mt-3 p-3 rounded-md bg-yellow-50 border border-yellow-100 text-sm text-muted-foreground">
+            Unable to load pending check-ins. You can still complete your check-in below.
+          </div>
+        )}
+
+        {isLoading && !hasCompletedRecently && (
+          <div className="flex flex-col items-center justify-center p-12 space-y-4">
+            <div className="h-8 w-8 rounded-full border-2 border-muted border-t-primary animate-spin" />
+            <p className="text-sm text-muted-foreground">Loading your check-ins...</p>
+          </div>
+        )}
+
+        {!isCheckinView && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Book appointment */}
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
@@ -370,33 +346,21 @@ export default function StudentPortal() {
             </div>
           </div>
 
-          {/* Recent check-ins */}
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-display font-bold">Recent Check-ins</h3>
                 <Link to="/student/history" className="text-xs text-primary hover:underline">View all</Link>
               </div>
-              <div className="space-y-1.5">
-                {RECENT_CHECKINS.slice(0, 5).map((c, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg hover:bg-muted/40 transition">
-                    <div className="flex items-center gap-3">
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorFromWrs(c.wrs) }} />
-                      <span className="font-medium">{c.date}</span>
-                      <span className="text-muted-foreground">{c.type}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-1.5 py-4 flex flex-col items-center justify-center text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">No recent data</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Complete a check-in to see history</p>
               </div>
             </div>
-            <div className="pt-4 mt-4 border-t border-border flex-1 flex flex-col">
+            <div className="pt-4 mt-auto border-t border-border flex flex-col">
               <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Your recent trend</div>
-              <div className="flex-1 mt-2">
-                <ResponsiveContainer width="100%" height={80}>
-                  <LineChart data={[...RECENT_CHECKINS].reverse()}>
-                    <Line type="monotone" dataKey="wrs" stroke="#A8FF3E" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="h-20 flex items-center justify-center bg-muted/20 rounded-lg border border-dashed border-border">
+                <span className="text-[10px] text-muted-foreground/40 font-medium">Trend data pending</span>
               </div>
             </div>
           </div>

@@ -7,10 +7,15 @@ export interface Appointment {
   id: string;
   student_id: string;
   psychologist_id: string;
-  scheduled_at: string;
-  session_type: "in_person" | "virtual";
-  status: "pending" | "confirmed" | "cancelled" | "completed";
-  notes: string | null;
+  start_time: string;
+  end_time: string;
+  status: "booked" | "completed" | "cancelled" | "no_show";
+  is_crisis: boolean;
+  crisis_note: string | null;
+  student_full_name: string;
+  psychologist_full_name: string;
+  booking_source: string | null;
+  session_summary?: string;
   created_at: string;
 }
 
@@ -19,6 +24,13 @@ export interface CreateAppointmentPayload {
   psychologist_id: string;
   scheduled_at: string;
   session_type: "in_person" | "virtual";
+  notes?: string;
+}
+
+export interface StudentAppointmentPayload {
+  psychologist_id: string;
+  start_time: string;
+  end_time: string;
   notes?: string;
 }
 
@@ -37,6 +49,20 @@ export async function createAppointment(
   payload: CreateAppointmentPayload,
 ): Promise<Appointment> {
   return apiRequest<Appointment>("POST", "/appointments", payload);
+}
+
+/**
+ * Book an appointment as a student.
+ */
+export async function bookStudentAppointment(
+  payload: StudentAppointmentPayload,
+): Promise<Appointment> {
+  return apiRequest<Appointment>("POST", "/appointments/book", {
+    psychologist_id: payload.psychologist_id,
+    start_time: payload.start_time,
+    end_time: payload.end_time,
+    crisis_note: payload.notes,
+  });
 }
 
 /**
@@ -61,10 +87,11 @@ export async function listAppointments(
  */
 export async function getAppointmentAvailability(
   psychologistId: string,
-): Promise<AvailabilitySlot[]> {
-  return apiRequest<AvailabilitySlot[]>(
+  date: string,
+): Promise<string[]> {
+  return apiRequest<string[]>(
     "GET",
-    `/appointments/availability/${psychologistId}`,
+    `/appointments/availability/${psychologistId}?date=${date}`,
   );
 }
 

@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { Upload, Download, Plus, Search, AlertCircle, CheckCircle2, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Search, AlertCircle, LogOut, ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
 import { adminSidebarItems } from "@/data/sidebar";
@@ -8,42 +8,78 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { STUDENTS, COUNSELORS, FACULTIES, downloadCSV } from "@/data/mock";
+import { listStudents, type Student } from "@/api/students";
+import { listStaff, createStaff, type Staff } from "@/api/staff";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import type { PaginationInfo } from "@/api/types";
 
-interface Row {
-  id: string; first_name: string; last_name: string; email: string; role: "Student" | "Psychologist"; faculty: string; matric: string; date: string; status: "Active" | "Inactive"; classLevel?: string;
-}
-
-const initialUsers: Row[] = [
-  ...STUDENTS.map((s, i) => ({
-    id: s.id, first_name: s.name.split(" ")[0], last_name: s.name.split(" ")[1], email: s.email, role: "Student" as const, faculty: s.faculty, matric: s.matric,
-    date: s.lastCheckIn, status: i % 5 === 0 ? "Inactive" as const : "Active" as const, classLevel: s.classLevel,
-  })),
-  ...COUNSELORS.map((n, i) => ({
-    id: `PSY-${i + 1}`, first_name: n.split(" ")[1], last_name: n.split(" ")[2], email: `${n.split(" ")[1].toLowerCase()}@nileuni.edu`, role: "Psychologist" as const,
-    faculty: FACULTIES[i % FACULTIES.length], matric: `241099${100 + i}`, date: "2024-01-10", status: "Active" as const,
-  })),
-];
+const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
 export default function AdminUsers() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState<Row[]>(initialUsers);
+  
+  const [students, setStudents] = useState<Student[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  const [staffLoading, setStaffLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [studentsPagination, setStudentsPagination] = useState<PaginationInfo | null>(null);
+  const [studentsOffset, setStudentsOffset] = useState(0);
+  
   const [search, setSearch] = useState("");
-  const [importOpen, setImportOpen] = useState(false);
-  const [addPsychOpen, setAddPsychOpen] = useState(false);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  const students = useMemo(() => {
-    return users.filter((u) => u.role === "Student" && (`${u.first_name} ${u.last_name}`.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())));
-  }, [users, search]);
+  const fetchStudents = async (offset: number) => {
+    setStudentsLoading(true);
+    try {
+      const data = await listStudents(10, offset);
+      setStudents(data.data || []);
+      setStudentsPagination(data.pagination);
+    } catch (err) {
+      setError("Failed to load students");
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
 
-  const psychologists = useMemo(() => {
-    return users.filter((u) => u.role === "Psychologist" && (`${u.first_name} ${u.last_name}`.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())));
-  }, [users, search]);
+  const fetchStaff = async () => {
+    setStaffLoading(true);
+    try {
+      const data = await listStaff(10, 0);
+      setStaff(data.data || []);
+    } catch (err) {
+      setError("Failed to load staff");
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudents(0);
+    fetchStaff();
+  }, []);
+
+  const filteredStudents = students.filter(s => 
+    s.full_name.toLowerCase().includes(search.toLowerCase()) || 
+    s.email.toLowerCase().includes(search.toLowerCase()) ||
+    s.student_id.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredStaff = staff.filter(s => 
+    s.full_name.toLowerCase().includes(search.toLowerCase()) || 
+    s.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(INVITE_LINK);
+    setLinkCopied(true);
+    toast.success("Link copied to clipboard!");
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
 
   return (
     <AppShell items={adminSidebarItems}>
@@ -51,7 +87,7 @@ export default function AdminUsers() {
         <div className="flex items-center justify-between w-full md:w-auto">
           <div>
             <h1 className="font-display text-xl font-bold">User Management</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage students and psychologist staff.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage students and staff.</p>
           </div>
           <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
@@ -72,69 +108,181 @@ export default function AdminUsers() {
       </div>
 
       <div className="p-4 md:p-8 space-y-8 animate-fade-in">
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm font-medium border border-destructive/20">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        )}
+
+        {/* Invite Link Section */}
+        <div className="glass border border-border rounded-3xl p-6">
+          <div className="mb-4">
+            <h2 className="font-display text-lg font-bold">Students</h2>
+            <p className="text-sm text-muted-foreground">Students self-register using the Sign Up page. Share this link with students:</p>
+          </div>
+          <div className="flex gap-2 items-center p-3 rounded-lg bg-muted border border-border">
+            <input
+              type="text"
+              value={INVITE_LINK}
+              readOnly
+              className="flex-1 bg-transparent text-sm font-mono outline-none"
+            />
+            <Button
+              onClick={copyInviteLink}
+              size="sm"
+              variant="ghost"
+              className="gap-2"
+            >
+              {linkCopied ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
         {/* Student Directory */}
         <div className="glass border border-border rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="font-display text-lg font-bold">Student Directory</h2>
-              <p className="text-sm text-muted-foreground">{students.length} students enrolled</p>
+              <p className="text-sm text-muted-foreground">
+                {studentsPagination?.total || 0} students enrolled
+              </p>
             </div>
-            <Button onClick={() => setImportOpen(true)} size="sm" variant="outline"><Upload className="h-4 w-4 mr-1.5" /> Bulk Import</Button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Level</th><th className="text-left p-3">Faculty</th><th className="text-left p-3">Student ID</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
+                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Level</th><th className="text-left p-3">Faculty</th><th className="text-left p-3">Student ID</th><th className="text-left p-3">Added</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {students.slice(0, 10).map((u) => (
-                  <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                    <td className="p-3 font-medium">{u.first_name} {u.last_name}</td>
+                {studentsLoading ? (
+                  Array(5).fill(0).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50">
+                      {Array(8).fill(0).map((_, j) => (
+                        <td key={j} className="p-3"><div className="h-4 w-full bg-muted animate-pulse rounded" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">No students found</td>
+                  </tr>
+                ) : filteredStudents.map((u) => (
+                  <tr key={u.student_id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                    <td className="p-3 font-medium">{u.full_name}</td>
                     <td className="p-3 text-muted-foreground font-mono text-xs">{u.email}</td>
-                    <td className="p-3 text-muted-foreground">{u.classLevel}</td>
-                    <td className="p-3 text-muted-foreground">{u.faculty}</td>
-                    <td className="p-3 font-mono text-xs">{u.matric}</td>
-                    <td className="p-3">
-                      <span className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", u.status === "Active" ? "bg-success/15 text-success-foreground" : "bg-muted text-muted-foreground")}>{u.status}</span>
+                    <td className="p-3 text-muted-foreground">{u.class_level || "—"}</td>
+                    <td className="p-3 text-muted-foreground">—</td>
+                    <td className="p-3 font-mono text-xs">{u.student_id}</td>
+                    <td className="p-3 text-muted-foreground">
+                      {new Date(u.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>
                     <td className="p-3">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setUsers(arr => arr.map(x => x.id === u.id ? { ...x, status: x.status === "Active" ? "Inactive" : "Active" } : x))}>
-                        {u.status === "Active" ? "Deactivate" : "Activate"}
-                      </Button>
+                      <span className={cn(
+                        "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", 
+                        (u as any).crisis_flag ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success-foreground"
+                      )}>
+                        {(u as any).crisis_flag ? "At Risk" : "Active"}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.success("Feature coming soon")}>
+                          Deactivate
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          
+          <div className="flex items-center justify-between mt-6">
+            <div className="text-xs text-muted-foreground">
+              Showing {studentsOffset + 1} to {Math.min(studentsOffset + 10, studentsPagination?.total || 0)} of {studentsPagination?.total || 0} students
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={studentsOffset === 0} 
+                onClick={() => {
+                  const newOffset = studentsOffset - 10;
+                  setStudentsOffset(newOffset);
+                  fetchStudents(newOffset);
+                }}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={!studentsPagination?.has_next} 
+                onClick={() => {
+                  const newOffset = studentsOffset + 10;
+                  setStudentsOffset(newOffset);
+                  fetchStudents(newOffset);
+                }}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {/* Psychologist Staff */}
+        {/* Staff */}
         <div className="glass border border-border rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-display text-lg font-bold">Psychologist Staff</h2>
-              <p className="text-sm text-muted-foreground">{psychologists.length} active psychologists</p>
+              <h2 className="font-display text-lg font-bold">Add Staff</h2>
+              <p className="text-sm text-muted-foreground">{filteredStaff.length} active staff members</p>
             </div>
-            <Button onClick={() => setAddPsychOpen(true)} size="sm" className="gradient-primary text-primary-foreground border-0"><Plus className="h-4 w-4 mr-1.5" /> Add Psychologist</Button>
+            <Button onClick={() => setAddStaffOpen(true)} size="sm" className="gradient-primary text-primary-foreground border-0"><Plus className="h-4 w-4 mr-1.5" /> Add Staff</Button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Department</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
+                  <th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Staff ID</th><th className="text-left p-3">Specialty</th><th className="text-left p-3">Added</th><th className="text-left p-3">Status</th><th className="text-left p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {psychologists.map((u) => (
-                  <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                    <td className="p-3 font-medium">{u.first_name} {u.last_name}</td>
+                {staffLoading ? (
+                  Array(3).fill(0).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50">
+                      {Array(7).fill(0).map((_, j) => (
+                        <td key={j} className="p-3"><div className="h-4 w-full bg-muted animate-pulse rounded" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filteredStaff.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">No staff found</td>
+                  </tr>
+                ) : filteredStaff.map((u) => (
+                  <tr key={u.staff_id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                    <td className="p-3 font-medium">{u.full_name}</td>
                     <td className="p-3 text-muted-foreground font-mono text-xs">{u.email}</td>
-                    <td className="p-3 text-muted-foreground">{u.faculty}</td>
+                    <td className="p-3 font-mono text-xs">{u.staff_id}</td>
+                    <td className="p-3 text-muted-foreground">{u.specialty || "—"}</td>
+                    <td className="p-3 text-muted-foreground">
+                      {new Date(u.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </td>
                     <td className="p-3">
-                      <span className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", u.status === "Active" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{u.status}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-primary/10 text-primary">Active</span>
                     </td>
                     <td className="p-3">
                       <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.success(`Password reset link sent to ${u.email}`)}>Reset Password</Button>
@@ -147,70 +295,77 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      <BulkImportModal open={importOpen} onOpenChange={setImportOpen} />
-      <AddPsychologistModal open={addPsychOpen} onOpenChange={setAddPsychOpen} onCreate={(u) => setUsers((arr) => [u, ...arr])} />
+      <AddStaffModal 
+        open={addStaffOpen} 
+        onOpenChange={setAddStaffOpen} 
+        onSuccess={fetchStaff} 
+      />
     </AppShell>
   );
 }
 
-function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+function AddStaffModal({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", staff_id: "", specialty: "General" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleUpload = () => {
-    if (!file) return;
-    toast.success("Student roster imported successfully");
-    setFile(null);
-    onOpenChange(false);
+  const submit = async () => {
+    if (!form.full_name || !form.email || !form.password || !form.staff_id) return toast.error("Fill all required fields");
+    
+    setLoading(true);
+    setError(null);
+    try {
+      await createStaff(form);
+      toast.success("Staff member added successfully");
+      onSuccess();
+      onOpenChange(false);
+      setForm({ full_name: "", email: "", password: "", staff_id: "", specialty: "General" });
+    } catch (err) {
+      setError("Failed to create account. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Upload CSV of Student Roster</DialogTitle></DialogHeader>
-        <div className="py-4">
-          <input ref={fileRef} type="file" accept=".csv" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-full border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition"
-          >
-            <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-            <div className="font-medium text-sm">{file ? file.name : "Click to browse CSV file"}</div>
-          </button>
+        <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
+        
+        {error && (
+          <div className="p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" /> {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+          <div className="col-span-1 md:col-span-2">
+            <Label>Full Name</Label>
+            <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="mt-1" />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label>Email Address</Label>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" />
+          </div>
+          <div>
+            <Label>Staff ID</Label>
+            <Input value={form.staff_id} onChange={(e) => setForm({ ...form, staff_id: e.target.value })} className="mt-1" placeholder="e.g. PSY001" />
+          </div>
+          <div>
+            <Label>Temporary Password</Label>
+            <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1" />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label>Specialty / Department</Label>
+            <Input value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })} className="mt-1" />
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleUpload} disabled={!file} className="gradient-primary text-primary-foreground border-0">Import Roster</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={submit} disabled={loading} className="gradient-primary text-primary-foreground border-0 min-w-[120px]">
+            {loading ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Add Staff"}
+          </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AddPsychologistModal({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (v: boolean) => void; onCreate: (u: Row) => void }) {
-  const [form, setForm] = useState({ first: "", last: "", email: "", password: "", faculty: "Counseling" });
-  const submit = () => {
-    if (!form.first || !form.last || !form.email || !form.password) return toast.error("Fill all required fields");
-    onCreate({
-      id: `PSY-${Date.now()}`, first_name: form.first, last_name: form.last, email: form.email, role: "Psychologist",
-      faculty: form.faculty, matric: `P-${Date.now().toString().slice(-4)}`, date: new Date().toISOString().split("T")[0], status: "Active",
-    });
-    toast.success("Psychologist added successfully");
-    onOpenChange(false);
-    setForm({ first: "", last: "", email: "", password: "", faculty: "Counseling" });
-  };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Add Psychologist</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
-          <div><Label>First name</Label><Input value={form.first} onChange={(e) => setForm({ ...form, first: e.target.value })} className="mt-1" /></div>
-          <div><Label>Last name</Label><Input value={form.last} onChange={(e) => setForm({ ...form, last: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-1 md:col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-1 md:col-span-2"><Label>Temporary Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="mt-1" /></div>
-          <div className="col-span-1 md:col-span-2"><Label>Department</Label><Input value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })} className="mt-1" /></div>
-        </div>
-        <DialogFooter><Button onClick={submit} className="gradient-primary text-primary-foreground border-0">Add Psychologist</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

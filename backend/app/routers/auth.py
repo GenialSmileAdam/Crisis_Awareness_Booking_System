@@ -17,7 +17,7 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
         value=refresh_token,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
         max_age=60 * 60 * 24 * 7,
     )
 
@@ -107,7 +107,7 @@ async def logout(
         key="refresh_token",
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
     )
 
     body = success("Logged out")

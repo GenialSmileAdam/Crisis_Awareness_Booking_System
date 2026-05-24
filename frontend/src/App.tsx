@@ -17,6 +17,9 @@ import StudentResources from "./pages/student/StudentResources";
 import StudentConsent from "./pages/student/StudentConsent";
 import StudentForum from "./pages/student/StudentForum";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
+import CounselorForum from "./pages/counselor/CounselorForum";
+import CounselorStudent from "./pages/counselor/CounselorStudent";
+import MyStudents from "./pages/counselor/MyStudents";
 import SessionReviewer from "./pages/counselor/SessionReviewer";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
@@ -47,8 +50,10 @@ const App = () => (
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
                 <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/students" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/students" element={<ProtectedRoute role="psychologist"><MyStudents /></ProtectedRoute>} />
                 <Route path="/counselor/sessions" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/forum" element={<ProtectedRoute role="psychologist"><CounselorForum /></ProtectedRoute>} />
+                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role="psychologist"><CounselorStudent /></ProtectedRoute>} />
                 <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />

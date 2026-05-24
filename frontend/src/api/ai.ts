@@ -5,24 +5,37 @@ import { apiRequest } from "./client";
 /**
  * Create a new AI transcription session.
  */
-export async function createAISession(): Promise<{ session_id: string }> {
-  return apiRequest<{ session_id: string }>("POST", "/ai/sessions");
+export async function createAISession(data: {
+  appointment_id: string;
+  client_name: string;
+  notes?: string;
+}): Promise<{ id: string }> {
+  return apiRequest<{ id: string }>("POST", "/ai/sessions", data);
 }
 
 /**
  * Upload an audio file for an AI session.
+ * Uses raw fetch so the browser sets the multipart/form-data boundary correctly.
  */
-export async function uploadSessionAudio(
-  sessionId: string,
-  file: File,
-): Promise<{ session_id: string; audio_uploaded: boolean }> {
-  const form = new FormData();
-  form.append("file", file);
-  return apiRequest<{ session_id: string; audio_uploaded: boolean }>(
-    "POST",
-    `/ai/sessions/${sessionId}/audio`,
-    form,
-  );
+export async function uploadSessionAudio(sessionId: string, file: File): Promise<any> {
+  const token = localStorage.getItem("safespace_access_token");
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/ai/sessions/${sessionId}/audio`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      // Do NOT set Content-Type — let the browser set it with the boundary
+    },
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw { message: err.detail || "Audio upload failed", status: res.status };
+  }
+  return res.json();
 }
 
 /**

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores, analytics
+from app.routers import students, staff, appointments, auth, users, consent, checkins, risk_scores
 from app import models
 
 from app.routers import session_ai
@@ -20,8 +20,11 @@ app.add_middleware(
     allow_origins=[
     "http://localhost:5173",
     "http://localhost:8080",
+    "http://127.0.0.1:5173",
     "https://crisis-awareness-booking-system.vercel.app",
     "https://www.crisis-awareness-booking-system.vercel.app",
+    "https://crisis-awareness-booking-system.onrender.com",
+    "https://www.crisis-awareness-booking-system.onrender.com",
 ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -37,7 +40,6 @@ app.include_router(session_ai.router)
 app.include_router(consent.router, prefix="/consent", tags=["Consent"])
 app.include_router(checkins.router, prefix="/checkins", tags=["Check-ins"])
 app.include_router(risk_scores.router, prefix="/risk-scores", tags=["Risk Scores"])
-app.include_router(analytics.router)
 
 @app.get("/")
 async def root():

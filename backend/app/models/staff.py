@@ -21,6 +21,7 @@ class StaffType(str, enum.Enum):
     psychologist = "psychologist"
     counselor = "counselor"
     administrator = "administrator"
+    support_staff = "support_staff"
 
 
 class Staff(Base):
