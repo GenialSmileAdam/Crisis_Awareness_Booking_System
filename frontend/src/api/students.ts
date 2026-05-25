@@ -7,8 +7,13 @@ export interface Student {
   student_id: string;
   full_name: string;
   email: string;
-  faculty: string;
-  class_level: string;
+  faculty?: string;
+  class_level?: string;
+  emergency_contact?: string;
+  emergency_phone?: string;
+  guidance_counselor?: string;
+  crisis_flag?: boolean;
+  assigned_psychologist_id?: string;
   created_at: string;
 }
 

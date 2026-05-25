@@ -16,7 +16,7 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 type SurveyTab = "pulse" | "phq9" | "gad7";
-import { PendingCheckin } from "@/api/checkins";
+import { PendingCheckin, getPendingCheckins, submitCheckin } from "@/api/checkins";
 import { studentSidebarItems } from "@/data/sidebar";
 import { OnboardingSlides } from "@/components/OnboardingSlides";
 
@@ -119,14 +119,16 @@ export default function StudentPortal() {
 
   useEffect(() => {
     const checkStatus = async () => {
-      setIsLoading(false);
-      setPendingSurveys([
-        { type: "pulse", message: "Weekly pulse check-in pending" },
-        { type: "phq9", message: "Monthly PHQ-9 check-in pending" },
-        { type: "gad7", message: "Monthly GAD-7 check-in pending" },
-      ]);
-      setHasCompletedRecently(false);
-      setTab("pulse");
+      try {
+        const pending = await getPendingCheckins();
+        setPendingSurveys(pending);
+        if (pending.length > 0) setTab(pending[0].type as SurveyTab);
+        else setHasCompletedRecently(true);
+      } catch {
+        setPendingLoadError(true);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     checkStatus();
@@ -137,7 +139,25 @@ export default function StudentPortal() {
   const tier = tierFromWrs(wrs);
 
   const handleSubmit = async (responses: Record<string, number>) => {
-    toast.success("Check-in recorded. Thank you.");
+    if (!studentId) return;
+    const score = tab === "phq9" || tab === "gad7"
+      ? Object.values(responses).reduce((a, b) => a + b, 0)
+      : null;
+    try {
+      const result = await submitCheckin({ student_id: studentId, type: tab, responses, score });
+      if (result.crisis_escalation_required) {
+        toast.error("A counselor has been alerted. Please reach out if you need immediate support.", { duration: 8000 });
+      } else {
+        toast.success("Check-in recorded. Thank you.");
+      }
+      if (score !== null) {
+        const newWrs = Math.round((score / 27) * 100);
+        setWrs(newWrs);
+      }
+    } catch {
+      toast.error("Failed to submit check-in. Please try again.");
+      return;
+    }
     const pending = pendingSurveys.filter(p => p.type !== tab);
     setPendingSurveys(pending);
     if (pending.length > 0) {

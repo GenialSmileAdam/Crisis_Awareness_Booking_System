@@ -92,6 +92,19 @@ export async function getRiskCohort(
 }
 
 /**
+ * Full WRS score history for a student (default 180 days / full semester).
+ */
+export async function getStudentWrsHistory(
+  studentId: string,
+  days = 180,
+): Promise<RiskScoreEntry[]> {
+  return apiRequest<RiskScoreEntry[]>(
+    "GET",
+    `/risk-scores/history/${studentId}?days=${days}`,
+  );
+}
+
+/**
  * Override a student's risk tier (psychologist, admin).
  */
 export async function overrideRiskTier(

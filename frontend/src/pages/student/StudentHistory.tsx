@@ -1,26 +1,67 @@
-import { useState } from "react";
-import { Home, ClipboardList, History, BookOpen, Calendar, ChevronLeft, MessageSquare, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, LogOut, ClipboardList } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { AppShell } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
-import { RECENT_CHECKINS, colorFromWrs, tierFromWrs } from "@/data/mock";
+import { getStudentCheckins, CheckinRecord } from "@/api/checkins";
+import { colorFromWrs, tierFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { studentSidebarItems } from "@/data/sidebar";
 
+function checkinWrs(c: CheckinRecord): number | null {
+  if ((c.type === "phq9" || c.type === "gad7") && c.score !== null) {
+    return Math.round((c.score / 27) * 100);
+  }
+  return null;
+}
+
+function typeLabel(t: string) {
+  switch (t) {
+    case "phq9": return "PHQ-9";
+    case "gad7": return "GAD-7";
+    case "pulse": return "Pulse";
+    case "crisis": return "Crisis";
+    default: return t.toUpperCase();
+  }
+}
+
+const PAGE_SIZE = 10;
+
 export default function StudentHistory() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [pagination, setPagination] = useState({ total: RECENT_CHECKINS.length, limit: 10, offset: 0, has_next: true });
-  const pageRows = RECENT_CHECKINS.slice(pagination.offset, pagination.offset + pagination.limit);
+
+  const [checkins, setCheckins] = useState<CheckinRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const studentId = user?.student_id;
+
+  useEffect(() => {
+    if (!studentId) return;
+    setLoading(true);
+    getStudentCheckins(studentId, PAGE_SIZE, offset)
+      .then((res) => {
+        setCheckins(res.data || []);
+        setTotal(res.pagination?.total || 0);
+      })
+      .catch(() => setCheckins([]))
+      .finally(() => setLoading(false));
+  }, [studentId, offset]);
 
   return (
     <AppShell items={studentSidebarItems}>
       <div className="flex items-center justify-between h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-2 md:gap-3">
-          <Link to="/student"><Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button></Link>
+          <Link to="/student">
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <h1 className="font-display text-lg md:text-xl font-bold">My check-in history</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -30,49 +71,104 @@ export default function StudentHistory() {
           </Button>
         </div>
       </div>
+
       <CrisisBanner />
+
       <div className="p-4 md:p-8 pt-4 md:pt-6">
-        <div className="glass border border-border rounded-3xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left p-4">Date</th>
-                <th className="text-left p-4">Survey type</th>
-                <th className="text-left p-4">Risk tier</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((c, i) => {
-                const color = colorFromWrs(c.wrs);
-                const tier = tierFromWrs(c.wrs);
-                return (
-                  <tr key={i} className="border-t border-border hover:bg-muted/30">
-                    <td className="p-4 font-medium">{c.date}</td>
-                    <td className="p-4 text-muted-foreground">{c.type}</td>
-                    <td className="p-4">
-                      <span
-                        className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", tier === "Critical" && "animate-pulse")}
-                        style={{ backgroundColor: `${color}25`, color }}
-                      >
-                        {tier}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {RECENT_CHECKINS.length > pagination.limit && (
-          <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
-            <div>
-              Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, RECENT_CHECKINS.length)} of {RECENT_CHECKINS.length}
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={pagination.offset === 0} onClick={() => setPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}>Previous</Button>
-              <Button size="sm" variant="outline" disabled={pagination.offset + pagination.limit >= RECENT_CHECKINS.length} onClick={() => setPagination(p => ({ ...p, offset: p.offset + p.limit }))}>Next</Button>
-            </div>
+        {loading ? (
+          <div className="glass border border-border rounded-3xl overflow-hidden">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-14 border-t border-border first:border-0 bg-muted/20 animate-pulse" />
+            ))}
           </div>
+        ) : checkins.length === 0 ? (
+          <div className="glass border border-border rounded-3xl flex flex-col items-center justify-center py-16 gap-3">
+            <ClipboardList className="h-10 w-10 text-muted-foreground/40" />
+            <p className="text-muted-foreground text-sm">No check-ins recorded yet.</p>
+            <Link to="/student">
+              <Button size="sm" className="gradient-primary text-primary-foreground border-0">
+                Take your first check-in
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="glass border border-border rounded-3xl overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-4">Date</th>
+                    <th className="text-left p-4">Survey type</th>
+                    <th className="text-left p-4">Score</th>
+                    <th className="text-left p-4">Risk tier</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checkins.map((c) => {
+                    const wrs = checkinWrs(c);
+                    const color = wrs !== null ? colorFromWrs(wrs) : "#6B7280";
+                    const tier = wrs !== null ? tierFromWrs(wrs) : null;
+                    return (
+                      <tr key={c.id} className="border-t border-border hover:bg-muted/30">
+                        <td className="p-4 font-medium">
+                          {new Date(c.submitted_at).toLocaleDateString("en-GB", {
+                            day: "numeric", month: "short", year: "numeric",
+                          })}
+                        </td>
+                        <td className="p-4 text-muted-foreground">{typeLabel(c.type)}</td>
+                        <td className="p-4">
+                          {c.score !== null ? (
+                            <span className="font-mono text-xs">{c.score}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          {tier ? (
+                            <span
+                              className={cn(
+                                "text-xs px-2.5 py-0.5 rounded-full font-medium",
+                                tier === "Critical" && "animate-pulse",
+                              )}
+                              style={{ backgroundColor: `${color}25`, color }}
+                            >
+                              {tier}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">N/A</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {total > PAGE_SIZE && (
+              <div className="flex justify-between items-center mt-4 text-xs text-muted-foreground">
+                <div>
+                  Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm" variant="outline"
+                    disabled={offset === 0}
+                    onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    disabled={offset + PAGE_SIZE >= total}
+                    onClick={() => setOffset(offset + PAGE_SIZE)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </AppShell>

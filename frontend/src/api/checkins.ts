@@ -1,13 +1,13 @@
-// ── Check-in API disabled — backend endpoints are temporarily offline ──
-// All functions return static/empty data. No network calls are made.
-
+import { apiRequest } from "./client";
 import type { PaginatedResponse } from "./types";
 
 export type CheckinType = "pulse" | "phq9" | "gad7" | "event_triggered" | "crisis";
 
 export interface CheckinSubmit {
+  student_id: string;
   type: CheckinType;
   responses: Record<string, number>;
+  score?: number | null;
 }
 
 export interface CheckinResponse {
@@ -36,30 +36,26 @@ export interface CheckinRecord {
   submitted_at: string;
 }
 
-export async function submitCheckin(_payload: CheckinSubmit): Promise<CheckinResponse> {
-  return Promise.resolve({
-    id: "",
-    student_id: "",
-    type: _payload.type,
-    responses: _payload.responses,
-    score: null,
-    severity_label: null,
-    submitted_at: new Date().toISOString(),
-    crisis_escalation_required: false,
+export async function submitCheckin(payload: CheckinSubmit): Promise<CheckinResponse> {
+  return apiRequest<CheckinResponse>("POST", "/checkins/submit", {
+    student_id: payload.student_id,
+    test_type: payload.type,
+    responses: payload.responses,
+    score: payload.score ?? null,
   });
 }
 
 export async function getPendingCheckins(): Promise<PendingCheckin[]> {
-  return Promise.resolve([]);
+  return apiRequest<PendingCheckin[]>("GET", "/checkins/pending");
 }
 
 export async function getStudentCheckins(
-  _studentId: string,
-  _limit?: number,
-  _offset?: number,
+  studentId: string,
+  limit = 10,
+  offset = 0,
 ): Promise<PaginatedResponse<CheckinRecord>> {
-  return Promise.resolve({
-    data: [],
-    pagination: { total: 0, limit: _limit ?? 10, offset: _offset ?? 0, has_next: false },
-  });
+  return apiRequest<PaginatedResponse<CheckinRecord>>(
+    "GET",
+    `/checkins/student/${studentId}?limit=${limit}&offset=${offset}`,
+  );
 }

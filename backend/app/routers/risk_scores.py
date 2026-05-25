@@ -235,6 +235,35 @@ async def create_risk_override(
     )
 
 
+@router.get("/history/{student_id}")
+async def get_student_wrs_history(
+    student_id: str,
+    days: int = Query(default=180, ge=7, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Full WRS score history for a student (default: last 180 days / full semester)."""
+    _require_admin_or_psychologist(current_user)
+    await _get_student_or_404(db, student_id)
+
+    window_start = datetime.now(timezone.utc) - timedelta(days=days)
+    scores = (
+        await db.execute(
+            select(RiskScore)
+            .where(
+                RiskScore.student_id == student_id,
+                RiskScore.computed_at >= window_start,
+            )
+            .order_by(RiskScore.computed_at.asc())
+        )
+    ).scalars().all()
+
+    return success(
+        "WRS history retrieved successfully",
+        [_serialize_risk_score(s) for s in scores],
+    )
+
+
 @router.get("/{student_id}")
 async def get_student_risk_score(
     student_id: str,

@@ -45,3 +45,6 @@ migrate:
 
 seed:
 	cd backend && "../$(PY)" create_admin.py
+
+seed-data:
+	cd backend && "../$(PY)" seed.py
