@@ -65,8 +65,8 @@ async def list_student_checkins(
 ):
     """Get check-in history for a student."""
     # Check permissions
-    if current_user.role != "admin" and current_user.role != "psychologist" and current_user.student_id != student_id:
-         raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if current_user["role"] not in ("admin", "psychologist") and current_user.get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
          
     query = (
         select(WellnessCheckin)
@@ -99,7 +99,7 @@ async def list_pending_checkins(
     current_user: User = Depends(get_current_user)
 ):
     """Get pending check-ins for the current student."""
-    if current_user.role != "student":
+    if current_user["role"] != "student":
         return []
         
     # Mock for now, usually would check against a schedule or trigger
