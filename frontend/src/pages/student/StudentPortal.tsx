@@ -18,6 +18,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 type SurveyTab = "pulse" | "phq9" | "gad7";
 import { PendingCheckin } from "@/api/checkins";
 import { studentSidebarItems } from "@/data/sidebar";
+import { OnboardingSlides } from "@/components/OnboardingSlides";
 
 function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
   const [answers, setAnswers] = useState<number[]>(Array(9).fill(-1));
@@ -165,7 +166,9 @@ export default function StudentPortal() {
   const tabLabels: Record<SurveyTab, string> = { pulse: "Pulse Survey", phq9: "PHQ-9", gad7: "GAD-7" };
 
   return (
-    <AppShell items={portalItems}>
+    <>
+      <OnboardingSlides />
+      <AppShell items={portalItems}>
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex-1">
           <h1 className="font-display text-xl md:text-2xl font-bold">
@@ -402,5 +405,6 @@ export default function StudentPortal() {
       <BookingModal open={bookingOpen} onOpenChange={setBookingOpen} />
       <HotlineModal open={hotlineOpen} onOpenChange={setHotlineOpen} />
     </AppShell>
+    </>
   );
 }
