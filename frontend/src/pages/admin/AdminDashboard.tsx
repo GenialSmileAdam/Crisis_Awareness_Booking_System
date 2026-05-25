@@ -120,8 +120,12 @@ export default function AdminDashboard() {
   }, [alerts]);
 
   const wrsTrendData = useMemo(() => {
-    if (analytics?.wrs_trend) {
-      return Object.entries(analytics.wrs_trend).map(([date, score]) => ({ day: date, wrs: score }));
+    if (analytics?.wrs_trend && analytics.wrs_trend.length > 0) {
+      return analytics.wrs_trend.map((d: any) => ({
+        day: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        wrs: d.avg_wrs,
+        count: d.count,
+      }));
     }
     return trend;
   }, [analytics, trend]);
@@ -139,12 +143,12 @@ export default function AdminDashboard() {
     return tierData;
   }, [analytics, tierData]);
 
-  const facultyAvgData = useMemo(() => {
-    if (analytics?.faculty_avg) {
-      return Object.entries(analytics.faculty_avg).map(([faculty, avg]) => ({ group: faculty, average_wrs_score: avg }));
-    }
-    return cohort;
-  }, [analytics, cohort]);
+  // Class-level risk for stacked bar + heatmap
+  const classLevelRisk: any[] = useMemo(() => analytics?.class_level_risk || cohort, [analytics, cohort]);
+
+  const appointmentStats = useMemo(() => analytics?.appointment_stats || null, [analytics]);
+  const weeklyEngagement = useMemo(() => analytics?.weekly_engagement || null, [analytics]);
+  const avgWrsCurrent = useMemo(() => analytics?.avg_wrs_current || 0, [analytics]);
 
   const filteredAlerts = useMemo(() => {
     let r = [...alerts];
@@ -178,10 +182,10 @@ export default function AdminDashboard() {
   }, [cohort]);
 
   const kpis = [
-    { label: "Total Students Monitored", value: pagination.total, icon: Users, scrollTo: "trend" },
-    { label: "Active High-Risk Alerts", value: activeHighRiskCount, icon: AlertTriangle, danger: true, scrollTo: "alerts" },
-    { label: "Check-ins This Week", value: "—", icon: ClipboardCheck, scrollTo: "faculty" },
-    { label: "Avg Campus WRS", value: loading ? "..." : avgCampusWrs, icon: Activity, scrollTo: "trend" },
+    { label: "Total Students Monitored", value: loading ? "—" : pagination.total, icon: Users, scrollTo: "trend" },
+    { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, scrollTo: "alerts" },
+    { label: "Check-ins This Week", value: analyticsLoading ? "—" : (analytics?.checkins_7d ?? "—"), icon: ClipboardCheck, scrollTo: "year-group" },
+    { label: "Avg Campus WRS", value: (loading || analyticsLoading) ? "—" : (avgWrsCurrent ? formatWRS(avgWrsCurrent) : avgCampusWrs), icon: Activity, scrollTo: "trend" },
   ];
 
   const handleSidebar = (label: string) => {
@@ -194,7 +198,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const leaderboard = [...cohort].sort((a, b) => (b.average_wrs_score || 0) - (a.average_wrs_score || 0));
+  const leaderboard = [...classLevelRisk].sort((a: any, b: any) => (b.avg_wrs || b.average_wrs_score || 0) - (a.avg_wrs || a.average_wrs_score || 0));
 
   return (
     <>
@@ -301,11 +305,15 @@ export default function AdminDashboard() {
         <div className="grid lg:grid-cols-3 gap-4">
           <div id="trend" className="lg:col-span-2 glass border border-border rounded-3xl p-6">
             <div className="label-eyebrow mb-1">Campus WRS Trend</div>
-            <div className="font-display text-lg font-bold mb-4">Last {days} days</div>
+            <div className="font-display text-lg font-bold mb-1">Average wellness risk score over time</div>
+            <p className="text-xs text-muted-foreground mb-4">Daily average WRS across all student assessments. Scale: 0 (low risk) → 100 (critical).</p>
             {analyticsLoading ? (
               <div className="h-60 bg-muted rounded-lg animate-pulse" />
-            ) : (!analytics?.wrs_trend && analyticsError) || (wrsTrendData.length === 0) ? (
-              <div className="h-60 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
+            ) : wrsTrendData.length === 0 ? (
+              <div className="h-60 flex flex-col items-center justify-center text-muted-foreground bg-muted/20 rounded-lg gap-2">
+                <Activity className="h-8 w-8 opacity-30" />
+                <span className="text-sm">No assessment data yet</span>
+              </div>
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={240}>
@@ -317,17 +325,18 @@ export default function AdminDashboard() {
                       </linearGradient>
                     </defs>
                     <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} domain={[0, 100]} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(v: any, name: string) => [name === "wrs" ? `${v} / 100` : `${v}`, name === "wrs" ? "Avg WRS" : "Count"]}
                     />
-                    <Area type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#wrsg)" />
+                    <Area type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#wrsg)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-                {insights?.wrs_trend && (
-                  <div className="mt-4 text-xs italic text-muted-foreground">
-                    {insights.wrs_trend}
+                {insights?.summary && (
+                  <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground italic">
+                    {insights.summary}
                     <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
                   </div>
                 )}
@@ -370,116 +379,217 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          <div id="faculty" className="lg:col-span-2 glass border border-border rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
+          {/* Year Group Risk — stacked bar */}
+          <div id="year-group" className="lg:col-span-2 glass border border-border rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-1">
               <div>
-                <div className="label-eyebrow">Check-ins per faculty</div>
-                <div className="font-display text-lg font-bold">Click bar to filter alerts</div>
+                <div className="label-eyebrow">Year group risk</div>
+                <div className="font-display text-lg font-bold">Students per tier by class level</div>
               </div>
               {facultyFilter && <Button size="sm" variant="outline" onClick={() => setFacultyFilter(null)}>Clear: {facultyFilter}</Button>}
             </div>
+            <p className="text-xs text-muted-foreground mb-4">Click a bar to filter the alerts table below by class level.</p>
             {analyticsLoading || loading ? (
               <div className="h-56 bg-muted rounded-lg animate-pulse" />
-            ) : facultyAvgData.length === 0 ? (
-              <div className="h-56 flex items-center justify-center text-muted-foreground">No data available</div>
+            ) : classLevelRisk.length === 0 ? (
+              <div className="h-56 flex items-center justify-center text-muted-foreground">No risk score data yet</div>
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={facultyAvgData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                    <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => String(v).split(" ")[0]} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                  <BarChart data={classLevelRisk} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                    <XAxis dataKey="class_level" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
                     />
-                    <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="hsl(var(--primary))" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.group); setPagination(p => ({ ...p, offset: 0 })); }}>
-                      {facultyAvgData.map((d: any, i: number) => <Cell key={i} fill="hsl(var(--primary))" opacity={facultyFilter && facultyFilter !== d.group ? 0.3 : 1} />)}
-                    </Bar>
+                    <Bar dataKey="green" name="Green" stackId="a" fill="#A8FF3E" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
+                    <Bar dataKey="amber" name="Amber" stackId="a" fill="#FF8C42" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
+                    <Bar dataKey="red" name="Red" stackId="a" fill="#FF4560" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
+                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#B00020" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
                   </BarChart>
                 </ResponsiveContainer>
-                {insights?.faculty_avg && (
-                  <div className="mt-4 text-xs italic text-muted-foreground">
-                    {insights.faculty_avg}
-                    <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                  </div>
-                )}
+                <div className="flex gap-4 text-xs mt-3 justify-center">
+                  {[{ label: "Green", color: "#A8FF3E" }, { label: "Amber", color: "#FF8C42" }, { label: "Red", color: "#FF4560" }, { label: "Critical", color: "#B00020" }].map(({ label, color }) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: color }} />
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
           </div>
 
+          {/* Year group WRS leaderboard */}
           <div className="glass border border-border rounded-3xl p-6">
-            <div className="label-eyebrow mb-1">Most at-risk faculties</div>
-            <div className="font-display text-lg font-bold mb-4">Leaderboard</div>
+            <div className="label-eyebrow mb-1">Most at-risk year groups</div>
+            <div className="font-display text-lg font-bold mb-4">By average WRS</div>
             <div className="space-y-3">
-              {loading ? (
+              {(analyticsLoading || loading) ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="space-y-1">
                     <div className="h-4 bg-muted rounded animate-pulse" />
                     <div className="h-2 bg-muted rounded-full animate-pulse" />
                   </div>
                 ))
+              ) : leaderboard.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-8 text-center">No data yet</div>
               ) : (
-                leaderboard.map((f, i) => (
-                  <div key={f.group || i}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium">{i + 1}. {f.group}</span>
-                      <span className="font-mono" style={{ color: colorFromWrs(f.average_wrs_score) }}>{formatWRS(f.average_wrs_score)}</span>
+                leaderboard.map((f: any, i: number) => {
+                  const wrs = f.avg_wrs ?? f.average_wrs_score ?? 0;
+                  const label = f.class_level ?? f.group ?? "Unknown";
+                  return (
+                    <div key={label}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium">{i + 1}. {label}</span>
+                        <span className="font-mono" style={{ color: colorFromWrs(wrs) }}>{formatWRS(wrs)}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${wrs}%`, background: colorFromWrs(wrs) }} />
+                      </div>
                     </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${f.average_wrs_score}%`, background: colorFromWrs(f.average_wrs_score) }} />
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
         </div>
 
-        {/* Faculty Risk Heatmap */}
+        {/* Appointment outcomes + Engagement row */}
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="glass border border-border rounded-3xl p-6">
+            <div className="label-eyebrow mb-1">Appointment outcomes</div>
+            <div className="font-display text-lg font-bold mb-1">Session summary — last 30 days</div>
+            <p className="text-xs text-muted-foreground mb-5">Track session completion and attendance patterns across the unit.</p>
+            {analyticsLoading ? (
+              <div className="space-y-3">{[1,2,3,4].map(i => <div key={i} className="h-10 bg-muted rounded-xl animate-pulse" />)}</div>
+            ) : !appointmentStats ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">No session data yet</div>
+            ) : (
+              <div className="space-y-4">
+                {[
+                  { label: "Completed", value: appointmentStats.completed, color: "#A8FF3E" },
+                  { label: "Upcoming", value: appointmentStats.booked, color: "#6C3FE8" },
+                  { label: "Cancelled", value: appointmentStats.cancelled, color: "#FF8C42" },
+                  { label: "No-show", value: appointmentStats.no_show, color: "#FF4560" },
+                ].map(({ label, value, color }) => (
+                  <div key={label}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium">{label}</span>
+                      <span className="tabular-nums font-semibold" style={{ color }}>{value} <span className="text-muted-foreground font-normal">/ {appointmentStats.total}</span></span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700" style={{ width: appointmentStats.total ? `${(value / appointmentStats.total) * 100}%` : "0%", background: color }} />
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-border flex justify-between text-xs text-muted-foreground">
+                  <span>Session completion rate</span>
+                  <span className="font-bold text-foreground tabular-nums">{Math.round((appointmentStats.completion_rate || 0) * 100)}%</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>No-show rate</span>
+                  <span className="font-bold text-foreground tabular-nums">{Math.round((appointmentStats.no_show_rate || 0) * 100)}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="glass border border-border rounded-3xl p-6">
+            <div className="label-eyebrow mb-1">Student engagement</div>
+            <div className="font-display text-lg font-bold mb-1">7-day check-in rate</div>
+            <p className="text-xs text-muted-foreground mb-5">Percentage of registered students who completed at least one wellness check-in this week.</p>
+            {analyticsLoading ? (
+              <div className="h-32 bg-muted rounded-xl animate-pulse" />
+            ) : !weeklyEngagement ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">No data yet</div>
+            ) : (
+              <div className="space-y-5">
+                <div className="flex items-end gap-4">
+                  <div className="font-display text-5xl font-bold tabular-nums" style={{ color: weeklyEngagement.rate >= 0.5 ? "#A8FF3E" : weeklyEngagement.rate >= 0.25 ? "#FF8C42" : "#FF4560" }}>
+                    {Math.round(weeklyEngagement.rate * 100)}%
+                  </div>
+                  <div className="text-sm text-muted-foreground pb-1">
+                    <span className="font-semibold text-foreground tabular-nums">{weeklyEngagement.checked_in_7d}</span> of <span className="font-semibold text-foreground tabular-nums">{weeklyEngagement.total_students}</span> students active
+                  </div>
+                </div>
+                <div className="h-3 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.round(weeklyEngagement.rate * 100)}%`,
+                      background: weeklyEngagement.rate >= 0.5 ? "#A8FF3E" : weeklyEngagement.rate >= 0.25 ? "#FF8C42" : "#FF4560",
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  {[
+                    { label: "PHQ-9", value: weeklyEngagement.by_type?.phq9 || 0, color: "#6C3FE8" },
+                    { label: "GAD-7", value: weeklyEngagement.by_type?.gad7 || 0, color: "#FF8C42" },
+                    { label: "Pulse", value: weeklyEngagement.by_type?.pulse || 0, color: "#A8FF3E" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="rounded-xl bg-muted/40 p-3 text-center">
+                      <div className="font-display text-xl font-bold tabular-nums" style={{ color }}>{value}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{label} users</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Year Group Risk Heatmap */}
         <div className="glass border border-border rounded-3xl p-6">
-          <h2 className="font-display text-xl font-bold mb-4">Faculty Risk Heatmap</h2>
+          <h2 className="font-display text-xl font-bold mb-1">Year Group Risk Heatmap</h2>
+          <p className="text-xs text-muted-foreground mb-4">Number of students in each risk tier, grouped by class year. Based on latest risk score per student.</p>
           {analyticsLoading ? (
-            <div className="h-64 bg-muted rounded-lg animate-pulse" />
-          ) : !analytics?.faculty_risk_heatmap || Object.keys(analytics.faculty_risk_heatmap).length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
+            <div className="h-48 bg-muted rounded-lg animate-pulse" />
+          ) : classLevelRisk.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No risk score data yet</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                   <tr className="border-b border-border">
-                    <th className="text-left p-3">Faculty</th>
+                    <th className="text-left p-3">Class Level</th>
                     <th className="text-center p-3">Green</th>
                     <th className="text-center p-3">Amber</th>
                     <th className="text-center p-3">Red</th>
                     <th className="text-center p-3">Critical</th>
+                    <th className="text-center p-3">Avg WRS</th>
+                    <th className="text-center p-3">Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analytics.faculty_risk_heatmap).map(([faculty, tiers]: [string, any]) => (
-                    <tr key={faculty} className="border-b border-border last:border-0 hover:bg-muted/30">
-                      <td className="p-3 font-medium">{faculty}</td>
-                      <td className="p-3 text-center">
-                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.green > 0 ? 'rgba(168, 255, 62, 0.15)' : 'transparent', color: tiers.green > 0 ? '#8cd930' : 'inherit' }}>
-                          {tiers.green || 0}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.amber > 0 ? 'rgba(255, 140, 66, 0.15)' : 'transparent', color: tiers.amber > 0 ? '#d97637' : 'inherit' }}>
-                          {tiers.amber || 0}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="mx-auto w-10 py-1 rounded" style={{ backgroundColor: tiers.red > 0 ? 'rgba(255, 69, 96, 0.15)' : 'transparent', color: tiers.red > 0 ? '#d93950' : 'inherit' }}>
-                          {tiers.red || 0}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="mx-auto w-10 py-1 rounded font-bold" style={{ backgroundColor: tiers.critical > 0 ? 'rgba(176, 0, 32, 0.15)' : 'transparent', color: tiers.critical > 0 ? '#B00020' : 'inherit' }}>
-                          {tiers.critical || 0}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {classLevelRisk.map((row: any) => {
+                    const label = row.class_level ?? row.group ?? "Unknown";
+                    const wrs = row.avg_wrs ?? row.average_wrs_score ?? 0;
+                    return (
+                      <tr key={label} className="border-b border-border last:border-0 hover:bg-muted/30">
+                        <td className="p-3 font-medium">{label}</td>
+                        {[
+                          { key: "green", bg: "rgba(168,255,62,0.12)", color: "#8cd930" },
+                          { key: "amber", bg: "rgba(255,140,66,0.12)", color: "#d97637" },
+                          { key: "red", bg: "rgba(255,69,96,0.12)", color: "#d93950" },
+                          { key: "critical", bg: "rgba(176,0,32,0.12)", color: "#B00020" },
+                        ].map(({ key, bg, color }) => (
+                          <td key={key} className="p-3 text-center">
+                            <div className="mx-auto w-10 py-1 rounded font-semibold tabular-nums" style={{ backgroundColor: (row[key] || 0) > 0 ? bg : "transparent", color: (row[key] || 0) > 0 ? color : "inherit" }}>
+                              {row[key] || 0}
+                            </div>
+                          </td>
+                        ))}
+                        <td className="p-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${colorFromWrs(wrs)}20`, color: colorFromWrs(wrs) }}>
+                            {formatWRS(wrs)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center text-muted-foreground tabular-nums">{row.total || 0}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

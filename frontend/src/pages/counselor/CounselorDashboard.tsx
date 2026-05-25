@@ -160,12 +160,17 @@ export default function CounselorDashboard() {
   }, [alerts]);
 
   const avgCampusWrs = useMemo(() => {
+    if (analytics?.avg_wrs_current) return formatWRS(analytics.avg_wrs_current);
     return formatWRS(alerts.reduce((acc, a) => acc + (a.wrs_score || 0), 0) / (alerts.length || 1));
-  }, [alerts]);
+  }, [analytics, alerts]);
 
   const wrsTrendData = useMemo(() => {
-    if (analytics?.wrs_trend) {
-      return Object.entries(analytics.wrs_trend).map(([date, score]) => ({ day: date, wrs: score }));
+    if (analytics?.wrs_trend && analytics.wrs_trend.length > 0) {
+      return analytics.wrs_trend.map((d: any) => ({
+        day: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        wrs: d.avg_wrs,
+        count: d.count,
+      }));
     }
     return trend;
   }, [analytics, trend]);
@@ -183,18 +188,25 @@ export default function CounselorDashboard() {
     return tierData;
   }, [analytics, tierData]);
 
-  const facultyAvgData = useMemo(() => {
-    if (analytics?.faculty_avg) {
-      return Object.entries(analytics.faculty_avg).map(([faculty, avg]) => ({ group: faculty, average_wrs_score: avg }));
+  // Check-in volume by assessment type (last 14 days)
+  const checkinVolumeData = useMemo(() => {
+    if (analytics?.checkin_volume && analytics.checkin_volume.length > 0) {
+      return analytics.checkin_volume.slice(-14).map((d: any) => ({
+        ...d,
+        day: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      }));
     }
-    return cohort;
-  }, [analytics, cohort]);
+    return [];
+  }, [analytics]);
+
+  const appointmentStats = useMemo(() => analytics?.appointment_stats || null, [analytics]);
+  const weeklyEngagement = useMemo(() => analytics?.weekly_engagement || null, [analytics]);
 
   const kpis = [
     { label: "Total Students", value: loading ? "—" : totalStudents, icon: Users, action: () => { navigate("/counselor/students"); } },
     { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, action: () => { navigate("/counselor/students"); setFilter("Critical"); } },
     { label: "Total Sessions", value: loading ? "—" : (pagination?.total || 0), icon: CalendarCheck, action: () => navigate("/counselor/sessions") },
-    { label: "Avg Campus WRS", value: loading ? "—" : avgCampusWrs, icon: Activity, action: () => toast.info("Data will be available after integration") },
+    { label: "Avg Campus WRS", value: (loading || analyticsLoading) ? "—" : avgCampusWrs, icon: Activity, action: () => document.getElementById("analytics-section")?.scrollIntoView({ behavior: "smooth" }) },
   ];
 
   const filteredAppointments = useMemo(() => {
@@ -533,117 +545,205 @@ export default function CounselorDashboard() {
 
       {/* Campus Analytics Section */}
       {currentView === "dashboard" && (
-        <div className="px-4 md:px-8 pb-12 mt-8 pt-8 border-t border-border">
+        <div id="analytics-section" className="px-4 md:px-8 pb-12 mt-8 pt-8 border-t border-border">
           <div className="mb-6">
             <h2 className="font-display text-2xl font-bold">Campus Analytics</h2>
-            <p className="text-sm text-muted-foreground">Aggregated wellness data across all students.</p>
+            <p className="text-sm text-muted-foreground">Live wellness data — last 30 days unless noted.</p>
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Chart 1 — Campus WRS Trend (full width) */}
+            {/* Chart 1 — WRS Trend (full width) */}
             <div className="lg:col-span-3 surface-card p-6 bg-card rounded-2xl">
               <div className="label-eyebrow mb-1">Campus WRS Trend</div>
-              <div className="font-display text-lg font-bold mb-4">Last 7 days</div>
+              <div className="font-display text-lg font-bold mb-1">Average wellness risk score over time</div>
+              <p className="text-xs text-muted-foreground mb-4">Each point is the average WRS across all assessments that day. Higher = higher risk.</p>
               {analyticsLoading ? (
                 <div className="h-64 bg-muted rounded-lg animate-pulse" />
-              ) : (!analytics?.wrs_trend && analyticsError) || (wrsTrendData.length === 0) ? (
-                <div className="h-64 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">No data available</div>
+              ) : wrsTrendData.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-muted-foreground bg-muted/20 rounded-lg gap-2">
+                  <Activity className="h-8 w-8 opacity-30" />
+                  <span className="text-sm">No assessment data yet. Check-ins will populate this chart.</span>
+                </div>
               ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                      <defs>
-                        <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
-                          <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
-                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                      />
-                      <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                  {insights?.wrs_trend && (
-                    <div className="mt-4 text-xs italic text-muted-foreground">
-                      {insights.wrs_trend}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
-                </>
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={wrsTrendData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="wrsg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6C3FE8" stopOpacity={0.6} />
+                        <stop offset="100%" stopColor="#6C3FE8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} tick={{ fontSize: 11 }} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} domain={[0, 100]} tickFormatter={(v) => `${v}`} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(v: any, name: string) => [name === "wrs" ? `${v} / 100` : `${v}`, name === "wrs" ? "Avg WRS" : "Assessments"]}
+                    />
+                    <Area type="monotone" dataKey="wrs" stroke="#6C3FE8" strokeWidth={2.5} fill="url(#wrsg)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+              {insights?.summary && (
+                <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground italic">
+                  {insights.summary}
+                  <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
+                </div>
               )}
             </div>
 
-            {/* Chart 2 — Risk Distribution (half width) */}
+            {/* Chart 2 — Risk Distribution */}
             <div className="surface-card p-6 bg-card rounded-2xl">
               <div className="label-eyebrow mb-1">Risk distribution</div>
-              <div className="font-display text-lg font-bold mb-4">By tier</div>
+              <div className="font-display text-lg font-bold mb-1">Students by tier</div>
+              <p className="text-xs text-muted-foreground mb-4">Latest risk score per student.</p>
               {analyticsLoading ? (
                 <div className="h-56 bg-muted rounded-lg animate-pulse" />
+              ) : riskDistributionData.length === 0 ? (
+                <div className="h-56 flex items-center justify-center text-muted-foreground">No risk scores yet</div>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                      <Pie data={riskDistributionData} dataKey="value" innerRadius={45} outerRadius={75} paddingAngle={3}>
                         {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                      <Tooltip
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                         itemStyle={{ color: "hsl(var(--foreground))" }}
+                        formatter={(v: any) => [`${v} students`, ""]}
                       />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="flex flex-wrap justify-center gap-2 text-xs mt-3">
+                  <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs mt-2">
                     {riskDistributionData.map((d) => (
                       <div key={d.name} className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-                        <span>{d.name} ({d.value})</span>
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                        <span>{d.name} <span className="font-semibold tabular-nums">({d.value})</span></span>
                       </div>
                     ))}
                   </div>
-                  {insights?.risk_distribution && (
-                    <div className="mt-4 text-xs italic text-muted-foreground text-center">
-                      {insights.risk_distribution}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
                 </>
               )}
             </div>
 
-            {/* Chart 3 — Check-ins Per Faculty (half width) */}
+            {/* Chart 3 — Assessment Volume by Type (stacked bar) */}
             <div className="lg:col-span-2 surface-card p-6 bg-card rounded-2xl">
-              <div className="label-eyebrow mb-1">Check-ins per faculty</div>
-              <div className="font-display text-lg font-bold mb-4">By cohort group</div>
-              {analyticsLoading || loading ? (
+              <div className="label-eyebrow mb-1">Assessment volume</div>
+              <div className="font-display text-lg font-bold mb-1">PHQ-9, GAD-7 & Pulse — last 14 days</div>
+              <p className="text-xs text-muted-foreground mb-4">Daily check-in count by assessment type. Shows student engagement over time.</p>
+              {analyticsLoading ? (
                 <div className="h-56 bg-muted rounded-lg animate-pulse" />
-              ) : facultyAvgData.length === 0 ? (
-                <div className="h-56 flex items-center justify-center text-muted-foreground">No cohort data available</div>
+              ) : checkinVolumeData.length === 0 ? (
+                <div className="h-56 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                  <Activity className="h-8 w-8 opacity-30" />
+                  <span className="text-sm">No check-ins yet in the last 14 days</span>
+                </div>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={facultyAvgData} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-                      <XAxis dataKey="group" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip 
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={checkinVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                      <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={10} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                         itemStyle={{ color: "hsl(var(--foreground))" }}
                       />
-                      <Bar dataKey="average_wrs_score" radius={[8, 8, 0, 0]} fill="#6C3FE8">
-                        {facultyAvgData.map((d: any, i: number) => <Cell key={i} fill="#6C3FE8" opacity={0.8} />)}
-                      </Bar>
+                      <Bar dataKey="phq9" name="PHQ-9" stackId="a" fill="#6C3FE8" />
+                      <Bar dataKey="gad7" name="GAD-7" stackId="a" fill="#FF8C42" />
+                      <Bar dataKey="pulse" name="Pulse" stackId="a" fill="#A8FF3E" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                  {insights?.faculty_avg && (
-                    <div className="mt-4 text-xs italic text-muted-foreground">
-                      {insights.faculty_avg}
-                      <div className="mt-1 text-[10px] text-muted-foreground/50 not-italic">Powered by AI ✨</div>
-                    </div>
-                  )}
+                  <div className="flex gap-4 text-xs mt-3 justify-center">
+                    {[{ label: "PHQ-9", color: "#6C3FE8" }, { label: "GAD-7", color: "#FF8C42" }, { label: "Pulse", color: "#A8FF3E" }].map(({ label, color }) => (
+                      <div key={label} className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: color }} />
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </>
+              )}
+            </div>
+
+            {/* Chart 4 — Appointment Outcomes */}
+            <div className="surface-card p-6 bg-card rounded-2xl">
+              <div className="label-eyebrow mb-1">Appointment outcomes</div>
+              <div className="font-display text-lg font-bold mb-1">Session completion — 30 days</div>
+              <p className="text-xs text-muted-foreground mb-5">Track attendance and cancellation patterns.</p>
+              {analyticsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map(i => <div key={i} className="h-10 bg-muted rounded-xl animate-pulse" />)}
+                </div>
+              ) : !appointmentStats ? (
+                <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">No session data yet</div>
+              ) : (
+                <div className="space-y-4">
+                  {[
+                    { label: "Completed", value: appointmentStats.completed, color: "#A8FF3E", total: appointmentStats.total },
+                    { label: "Upcoming", value: appointmentStats.booked, color: "#6C3FE8", total: appointmentStats.total },
+                    { label: "Cancelled", value: appointmentStats.cancelled, color: "#FF8C42", total: appointmentStats.total },
+                    { label: "No-show", value: appointmentStats.no_show, color: "#FF4560", total: appointmentStats.total },
+                  ].map(({ label, value, color, total }) => (
+                    <div key={label}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium">{label}</span>
+                        <span className="tabular-nums font-semibold" style={{ color }}>{value} <span className="text-muted-foreground font-normal">/ {total}</span></span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: total ? `${(value / total) * 100}%` : "0%", background: color }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-border flex justify-between text-xs text-muted-foreground">
+                    <span>Completion rate</span>
+                    <span className="font-bold text-foreground tabular-nums">{Math.round((appointmentStats.completion_rate || 0) * 100)}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Chart 5 — Student Engagement */}
+            <div className="lg:col-span-2 surface-card p-6 bg-card rounded-2xl">
+              <div className="label-eyebrow mb-1">Student engagement</div>
+              <div className="font-display text-lg font-bold mb-1">7-day check-in rate</div>
+              <p className="text-xs text-muted-foreground mb-5">How many registered students completed at least one check-in this week.</p>
+              {analyticsLoading ? (
+                <div className="h-32 bg-muted rounded-xl animate-pulse" />
+              ) : !weeklyEngagement ? (
+                <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">No data yet</div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="flex items-end gap-4">
+                    <div className="font-display text-5xl font-bold tabular-nums" style={{ color: weeklyEngagement.rate >= 0.5 ? "#A8FF3E" : weeklyEngagement.rate >= 0.25 ? "#FF8C42" : "#FF4560" }}>
+                      {Math.round(weeklyEngagement.rate * 100)}%
+                    </div>
+                    <div className="text-sm text-muted-foreground pb-1">
+                      <span className="font-semibold text-foreground tabular-nums">{weeklyEngagement.checked_in_7d}</span> of <span className="font-semibold text-foreground tabular-nums">{weeklyEngagement.total_students}</span> students active
+                    </div>
+                  </div>
+                  <div className="h-3 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.round(weeklyEngagement.rate * 100)}%`,
+                        background: weeklyEngagement.rate >= 0.5 ? "#A8FF3E" : weeklyEngagement.rate >= 0.25 ? "#FF8C42" : "#FF4560",
+                      }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-1">
+                    {[
+                      { label: "PHQ-9", value: weeklyEngagement.by_type?.phq9 || 0, color: "#6C3FE8" },
+                      { label: "GAD-7", value: weeklyEngagement.by_type?.gad7 || 0, color: "#FF8C42" },
+                      { label: "Pulse", value: weeklyEngagement.by_type?.pulse || 0, color: "#A8FF3E" },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="rounded-xl bg-muted/40 p-3 text-center">
+                        <div className="font-display text-xl font-bold tabular-nums" style={{ color }}>{value}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{label} users</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>

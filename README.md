@@ -318,33 +318,37 @@ Valid tiers: `green`, `amber`, `red`, `critical`.
 - Python 3.11+
 - A Supabase project (PostgreSQL)
 
-### 1. Clone & configure environment
+### 1. Clone & install dependencies
 
 ```bash
 git clone <repo-url>
 cd Crisis_Awareness_Booking_System
 
-# Copy the example env and fill in your values
+make install
+```
+
+`make install` creates a Python virtualenv at the project root, installs backend requirements, and runs `npm install` for the frontend.
+
+### 2. Configure environment
+
+```bash
 cp backend/.env.example .env
 ```
 
-**Required environment variables (in `.env` at project root):**
+Edit `.env` at the **project root** and fill in your values:
 
 ```env
-# Database
 DATABASE_URL=postgresql+asyncpg://user:password@host:port/dbname
 
-# Supabase
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 
-# JWT
 JWT_SECRET=<long-random-string>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# Optional features (set to false to disable)
+# Optional – leave false to run without external APIs
 AI_ENABLED=false
 GROQ_API_KEY=
 
@@ -357,37 +361,32 @@ GCAL_ENABLED=false
 SMS_ENABLED=false
 ```
 
-### 2. Backend
+### 3. Run migrations & seed admin
 
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Run database migrations
-alembic upgrade head
-
-# Seed first admin user (edit email/password in create_admin.py first)
-python create_admin.py
-
-# Start the server
-uvicorn app.main:app --reload --port 8000
+make migrate   # alembic upgrade head
+make seed      # creates first admin (edit backend/create_admin.py first)
 ```
 
-API docs are available at `http://localhost:8000/docs` (Swagger UI).
-
-### 3. Frontend
+### 4. Start the dev servers
 
 ```bash
-cd frontend
-npm install
+make dev
+```
 
-# Optional: set API base URL (defaults to http://localhost:8000)
-echo "VITE_API_BASE_URL=http://localhost:8000" > .env.local
+This starts **both** the FastAPI backend and the Vite frontend in one terminal:
 
-npm run dev
-# Opens at http://localhost:5173
+| Service | URL |
+|---|---|
+| Backend API | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| Frontend | http://localhost:5173 |
+
+Press `Ctrl+C` to stop both. You can also run them separately:
+
+```bash
+make backend    # FastAPI only (port 8000)
+make frontend   # Vite only   (port 5173)
 ```
 
 ---
