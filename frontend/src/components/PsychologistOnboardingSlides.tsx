@@ -34,19 +34,19 @@ const slides = [
 
 export function PsychologistOnboardingSlides() {
   const { user } = useAuth();
-  const storageKey = `safespace_psychologist_onboarding_seen_${user?.id}`;
+  const storageKey = `safespace_psychologist_onboarding_seen_${user?.sub}`;
 
   const [isVisible, setIsVisible] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.sub) return;
     const hasSeenOnboarding = localStorage.getItem(storageKey);
     if (!hasSeenOnboarding) {
       setIsVisible(true);
     }
-  }, [storageKey, user?.id]);
+  }, [storageKey, user?.sub]);
 
   const handleComplete = () => {
     localStorage.setItem(storageKey, "true");
