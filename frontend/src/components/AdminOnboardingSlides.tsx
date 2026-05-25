@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Shield, LayoutDashboard, Users, BookOpen, MessageSquare, Settings, ChevronRight, X, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 const slides = [
   {
@@ -37,19 +38,23 @@ const slides = [
 ];
 
 export function AdminOnboardingSlides() {
+  const { user } = useAuth();
+  const storageKey = `safespace_admin_onboarding_seen_${user?.id}`;
+
   const [isVisible, setIsVisible] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem("safespace_admin_onboarding_seen");
+    if (!user?.id) return;
+    const hasSeenOnboarding = localStorage.getItem(storageKey);
     if (!hasSeenOnboarding) {
       setIsVisible(true);
     }
-  }, []);
+  }, [storageKey, user?.id]);
 
   const handleComplete = () => {
-    localStorage.setItem("safespace_admin_onboarding_seen", "true");
+    localStorage.setItem(storageKey, "true");
     setIsVisible(false);
   };
 
