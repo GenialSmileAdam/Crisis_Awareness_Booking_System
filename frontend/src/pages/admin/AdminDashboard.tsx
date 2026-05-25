@@ -14,8 +14,8 @@ import { useAuth } from "@/context/AuthContext";
 import { getRiskAlerts, getRiskCohort } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { getRealAnalytics } from "@/api/analytics";
-
 import { adminSidebarItems } from "@/data/sidebar";
+import { AdminOnboardingSlides } from "@/components/AdminOnboardingSlides";
 
 const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This Semester" } as const;
 type Range = keyof typeof RANGE_LABELS;
@@ -197,6 +197,8 @@ export default function AdminDashboard() {
   const leaderboard = [...cohort].sort((a, b) => (b.average_wrs_score || 0) - (a.average_wrs_score || 0));
 
   return (
+    <>
+    <AdminOnboardingSlides />
     <AppShell items={adminSidebarItems}>
       {/* Error Banner */}
       {error && (
@@ -621,5 +623,6 @@ export default function AdminDashboard() {
         </div>
       </div>
     </AppShell>
+    </>
   );
 }

@@ -137,7 +137,7 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
   const hiddenItems = isStudentOrAdmin ? items.slice(3) : [];
   
   // Add Logout to hidden items
-  const drawerItems = [
+  const drawerItems: SidebarItem[] = [
     ...hiddenItems,
     { icon: LogOut, label: "Logout", onClick: async () => { await logout(); navigate("/login"); } }
   ];

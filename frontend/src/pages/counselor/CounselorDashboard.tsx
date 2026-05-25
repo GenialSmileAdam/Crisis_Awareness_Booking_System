@@ -21,6 +21,7 @@ import { cn, formatWRS } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
 import type { PaginationInfo } from "@/api/types";
+import { PsychologistOnboardingSlides } from "@/components/PsychologistOnboardingSlides";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
 const SESSION_FILTERS = ["All", "Upcoming", "Completed", "Cancelled"] as const;
@@ -288,6 +289,8 @@ export default function CounselorDashboard() {
   };
 
   return (
+    <>
+    <PsychologistOnboardingSlides />
     <AppShell items={counselorSidebarItems}>
       {/* Error Banner */}
       {error && (
@@ -700,6 +703,7 @@ export default function CounselorDashboard() {
         </DialogContent>
       </Dialog>
     </AppShell>
+    </>
   );
 }
 
