@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { FeedbackButton } from "./FeedbackButton";
 
 export interface SidebarItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -148,6 +149,7 @@ export function AppShell({ items, children }: { items: SidebarItem[]; children: 
     <div className="flex min-h-screen w-full bg-background pb-[calc(env(safe-area-inset-bottom)+60px)] md:pb-0 overflow-x-hidden">
       <AppSidebar items={items} />
       <main className="flex-1 min-w-0">{children}</main>
+      <FeedbackButton />
 
       {/* Drawer Overlay */}
       {drawerOpen && (
