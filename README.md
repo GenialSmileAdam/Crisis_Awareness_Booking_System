@@ -1,13 +1,13 @@
 # Crisis Awareness Booking Management System
 
-**PsyUnit – Psychology Unit Management Platform**
+**SafeSpace – Psychology Unit Management Platform**
 Nile University of Nigeria Buildathon 2026
 
 ---
 
 ## Overview
 
-A full-stack web platform for the university Psychology Unit that replaces manual, paper-based counselling administration with a digital system. Students can book counselling sessions (with crisis priority flagging), complete evidence-based wellness self-assessments, and manage their consent settings. Counsellors view risk scores, manage appointments, and document sessions. Admins oversee the entire system.
+A full-stack web platform for the university Psychology Unit that replaces manual, paper-based counselling administration with a digital system. Students complete evidence-based wellness self-assessments (PHQ-9, GAD-7, Pulse), book counselling sessions with crisis-priority flagging, and track their progress over time. Counsellors view real-time risk scores, manage appointments, and access full student profiles with WRS trend charts. Admins oversee the entire system with deployment KPIs.
 
 **Live Frontend:** [crisis-awareness-booking-system.vercel.app](https://crisis-awareness-booking-system.vercel.app)
 
@@ -25,8 +25,7 @@ The Psychology Unit operated with no digital system — scheduling was manual, s
 |---|---|
 | Frontend | React 18 + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui (Radix UI) |
-| State / Data Fetching | TanStack React Query v5 |
-| Forms | React Hook Form + Zod |
+| Charts | Recharts |
 | Routing | React Router v6 |
 | Backend | Python 3.12 + FastAPI (async) |
 | ORM | SQLAlchemy 2.0 (async) |
@@ -48,28 +47,32 @@ The Psychology Unit operated with no digital system — scheduling was manual, s
 │   ├── src/
 │   │   ├── api/               # API client functions (per resource)
 │   │   ├── components/        # Reusable UI components
-│   │   ├── context/           # AuthContext (JWT + session state)
+│   │   │   ├── AppSidebar.tsx
+│   │   │   ├── CrisisBanner.tsx
+│   │   │   ├── FeedbackButton.tsx
+│   │   │   └── OnboardingSlides.tsx
+│   │   ├── context/           # AuthContext, WrsContext
 │   │   ├── pages/
-│   │   │   ├── Landing.tsx
-│   │   │   ├── Login.tsx
 │   │   │   ├── admin/         # AdminDashboard, AdminUsers, AdminForum, AdminResources, AdminSettings
-│   │   │   ├── counselor/     # CounselorDashboard, MyStudents, CounselorStudent, SessionReviewer, CounselorForum
-│   │   │   └── student/       # StudentPortal, StudentAppointments, StudentHistory, StudentConsent, StudentForum, StudentResources
+│   │   │   ├── counselor/     # CounselorDashboard, MyStudents, CounselorStudent, SessionReviewer
+│   │   │   └── student/       # StudentPortal, StudentAppointments, StudentHistory, StudentConsent, StudentForum
 │   │   └── main.tsx
 │   └── package.json
 │
 ├── backend/                   # FastAPI application
 │   ├── app/
-│   │   ├── core/              # config.py, database.py, security.py, limiter.py
+│   │   ├── core/              # config.py, database.py, security.py
 │   │   ├── models/            # SQLAlchemy ORM models
 │   │   ├── routers/           # One file per resource group
 │   │   ├── schemas/           # Pydantic request/response models
-│   │   ├── services/          # Business logic layer
-│   │   └── utils/             # Pagination helpers, response helpers
+│   │   └── services/          # Business logic layer
 │   ├── migrations/            # Alembic migration files
-│   ├── create_admin.py        # One-time script to seed the first admin user
+│   ├── seed.py                # Semester seed script (20 students, 17 weeks of data)
+│   ├── create_admin.py        # One-time admin bootstrap script
 │   └── requirements.txt
 │
+├── Makefile                   # Dev shortcuts (install, dev, migrate, seed-data)
+├── dev.sh                     # Starts both servers with pre-flight checks
 ├── .env                       # Project-root env (loaded by config.py)
 └── README.md
 ```
@@ -80,7 +83,7 @@ The Psychology Unit operated with no digital system — scheduling was manual, s
 
 ### Login
 
-All users (students, counsellors, admins) log in at `POST /auth/login` with their **email address** and password.
+All users log in at `POST /auth/login` with their **email address** and password.
 The endpoint uses `OAuth2PasswordRequestForm` — requests must use `Content-Type: application/x-www-form-urlencoded` with fields `username` (email) and `password`.
 
 On success the API returns a short-lived **access token** (JWT, 15 min) in the response body and sets an HTTP-only **refresh token** cookie (7 days).
@@ -90,25 +93,29 @@ On success the API returns a short-lived **access token** (JWT, 15 min) in the r
 | Role | `role` value in JWT | Access |
 |---|---|---|
 | Student | `student` | Own profile, appointments, checkins, consent, forum |
-| Counsellor / Psychologist | `psychologist` | Assigned students, risk scores, appointments, analytics, forum |
+| Counsellor / Psychologist | `psychologist` | Assigned students, risk scores, appointments, analytics |
 | Admin | `admin` | Everything — user management, all staff, all students |
 
-Admins are staff users with `is_admin = true`. The effective role (`admin` vs `psychologist`) is determined at login from the user's `is_admin` flag and `staff_type`.
+Admins are staff users with `is_admin = true`. The effective role is determined at login from the user's `is_admin` flag and `staff_type`.
 
-### JWT Payload
+---
 
-```json
-{
-  "id": "<uuid>",
-  "name": "Full Name",
-  "role": "psychologist",
-  "user_type": "staff",
-  "is_admin": false,
-  "staff_type": "psychologist",
-  "staff_id": "PSY001",
-  "student_id": null
-}
+## Wellness Risk Score (WRS)
+
+The WRS is a 0–100 score computed from PHQ-9 and GAD-7 submissions:
+
 ```
+WRS = round((raw_score / 27) × 100)
+```
+
+| Tier | WRS Range | Colour |
+|---|---|---|
+| Green | 0–39 | Low concern |
+| Amber | 40–64 | Monitor closely |
+| Red | 65–84 | Escalate soon |
+| Critical | 85–100 | Immediate intervention |
+
+Counsellors can override a student's tier with a written justification. Overrides are logged.
 
 ---
 
@@ -119,6 +126,7 @@ Admins are staff users with `is_admin = true`. The effective role (`admin` vs `p
 | `/` | `Landing.tsx` | Public |
 | `/login` | `Login.tsx` | Public |
 | `/student` | `StudentPortal.tsx` | Student |
+| `/student/checkin` | `StudentPortal.tsx` (check-in view) | Student |
 | `/student/appointments` | `StudentAppointments.tsx` | Student |
 | `/student/history` | `StudentHistory.tsx` | Student |
 | `/student/consent` | `StudentConsent.tsx` | Student |
@@ -135,122 +143,46 @@ Admins are staff users with `is_admin = true`. The effective role (`admin` vs `p
 | `/admin/resources` | `AdminResources.tsx` | Admin |
 | `/admin/settings` | `AdminSettings.tsx` | Admin |
 
-The frontend stores the access token in `localStorage` under the key `safespace_access_token` and the decoded user object under `ss_user`. The `AuthContext` attempts a silent token refresh on mount.
+A floating **Feedback & Support** button is available on all authenticated pages.
 
 ---
 
 ## Backend API Reference
 
-Base URL (local): `http://localhost:8000`
+Base URL (local): `http://localhost:8000`  
+Swagger UI: `http://localhost:8000/docs`
 
 ### Auth
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/auth/register` | None | Register a student or staff user |
-| `POST` | `/auth/login` | None (form-urlencoded) | Log in; returns access token + sets refresh cookie |
-| `POST` | `/auth/refresh` | Refresh cookie | Rotate tokens |
-| `POST` | `/auth/logout` | Bearer | Revoke refresh token |
-
-**Register payload (JSON):**
-```json
-{
-  "email": "user@university.edu",
-  "password": "SecurePass1!",
-  "full_name": "Full Name",
-  "user_type": "staff",
-  "staff_id": "PSY001",
-  "staff_type": "psychologist"
-}
-```
-For students: `user_type: "student"`, `student_id`, `class_level`, `emergency_contact`, `emergency_phone`.
-
----
-
-### Users (Admin only)
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/users` | Admin | List all users |
-| `POST` | `/users` | Admin | Create a user |
-| `GET` | `/users/{id}` | Admin | Get user by ID |
-| `PATCH` | `/users/{id}` | Admin | Update user |
-| `DELETE` | `/users/{id}` | Admin | Soft-delete user |
-
----
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/register` | Register a student or staff user |
+| `POST` | `/auth/login` | Log in; returns access token + sets refresh cookie |
+| `POST` | `/auth/refresh` | Rotate tokens |
+| `POST` | `/auth/logout` | Revoke refresh token |
 
 ### Students
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/students` | Psychologist / Admin | List students (psychologist sees only assigned) |
-| `GET` | `/students/search?q=` | Psychologist / Admin | Search by student ID |
-| `GET` | `/students/{student_id}` | Psychologist / Admin | Get student profile |
-| `GET` | `/students/{student_id}/sessions` | Psychologist / Admin | List session summaries |
-| `GET` | `/students/{student_id}/crisis-logs` | Psychologist / Admin | List crisis events |
-| `POST` | `/students/upload-csv` | Psychologist / Admin | Bulk import from CSV |
-
-> Psychologists only see students where `assigned_psychologist_id` matches their user ID.
-
----
-
-### Staff
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/psychologists` | All authenticated | List all psychologists |
-| `GET` | `/staff` | Admin | List all staff |
-| `POST` | `/staff` | Admin | Create staff member |
-| `GET` | `/staff/{id}` | Admin | Get staff member |
-| `PATCH` | `/staff/{id}` | Admin | Update staff member |
-| `DELETE` | `/staff/{id}` | Admin | Remove staff member |
-
----
-
-### Appointments
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/appointments` | Psychologist / Student | List appointments (scoped to caller) |
-| `GET` | `/appointments/availability/{psych_id}?date=` | Any authenticated | Get available slots |
-| `POST` | `/appointments` | Psychologist / Admin | Create appointment (admin/counsellor flow) |
-| `POST` | `/appointments/book` | Student | Book an appointment (student flow) |
-| `PATCH` | `/appointments/{id}` | Psychologist / Admin | Update appointment |
-| `DELETE` | `/appointments/{id}` | Psychologist / Admin | Cancel appointment |
-
-**Student booking payload (JSON):**
-```json
-{
-  "psychologist_id": "<uuid>",
-  "start_time": "2026-06-20T10:00:00",
-  "end_time": "2026-06-20T11:00:00",
-  "is_crisis": false,
-  "crisis_note": null
-}
-```
-
----
-
-### Consent
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/consent` | Student | Set monitoring consent |
-| `GET` | `/consent/{student_id}` | Student (own) / Psychologist / Admin | Get consent record |
-
-**Consent payload:** `{ "monitoring_enabled": true }`
-
----
+| `GET` | `/students/search?student_id=` | Psychologist / Admin | Search by student ID |
+| `GET` | `/students/{student_id}` | Psychologist / Admin | Full student profile |
+| `PATCH` | `/students/{student_id}` | Psychologist / Admin | Update student record |
+| `DELETE` | `/students/{student_id}` | Admin | Delete student |
+| `GET` | `/students/{student_id}/sessions` | Psychologist / Admin | Session summaries |
+| `GET` | `/students/{student_id}/crisis-logs` | Psychologist / Admin | Crisis log history |
+| `POST` | `/students/upload-csv` | Admin | Bulk import from CSV |
 
 ### Wellness Check-ins
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/checkins/submit` | Student | Submit PHQ-9, GAD-7, or pulse check |
+| `POST` | `/checkins/submit` | Student | Submit PHQ-9, GAD-7, or Pulse check-in |
 | `GET` | `/checkins/pending` | Student | Get pending check-in prompts |
-| `GET` | `/checkins/student/{student_id}` | Student (own) / Psychologist / Admin | Get check-in history |
+| `GET` | `/checkins/student/{student_id}` | Student (own) / Psychologist / Admin | Paginated check-in history |
 
-**Submission payload (JSON):**
+**Submission payload:**
 ```json
 {
   "student_id": "STU001",
@@ -259,54 +191,45 @@ For students: `user_type: "student"`, `student_id`, `class_level`, `emergency_co
   "score": 5
 }
 ```
-Supported `test_type` values: `phq9`, `gad7`, `pulse`.
-Submitting PHQ-9 or GAD-7 automatically calculates and stores a Wellness Risk Score (WRS).
-
----
 
 ### Risk Scores
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/risk-scores/cohort` | Psychologist / Admin | Aggregated risk by cohort |
-| `GET` | `/risk-scores/alerts` | Psychologist / Admin | Students in amber/red/critical tier |
-| `GET` | `/risk-scores/{student_id}` | Psychologist / Admin | Latest risk score for a student |
+| `GET` | `/risk-scores/alerts` | Psychologist / Admin | Students in amber/red/critical |
+| `GET` | `/risk-scores/cohort` | Psychologist / Admin | Risk breakdown by cohort |
+| `GET` | `/risk-scores/history/{student_id}?days=180` | Psychologist / Admin | WRS history for trend chart |
+| `GET` | `/risk-scores/{student_id}` | Psychologist / Admin | Latest risk score + override |
 | `POST` | `/risk-scores/override/{student_id}` | Psychologist / Admin | Manually override tier |
 
 **Override payload:** `{ "override_tier": "amber", "justification": "Reason" }`
-Valid tiers: `green`, `amber`, `red`, `critical`.
 
----
+### Appointments
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/appointments` | Psychologist / Student | List appointments (scoped to caller) |
+| `GET` | `/appointments/availability/{psych_id}?date=` | Any | Get available slots |
+| `POST` | `/appointments/book` | Student | Book an appointment |
+| `PATCH` | `/appointments/{id}` | Psychologist / Admin | Update appointment |
+| `DELETE` | `/appointments/{id}` | Psychologist / Admin | Cancel appointment |
 
 ### Analytics
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/analytics/real-data` | Psychologist / Admin | Chart data from live DB |
-| `GET` | `/analytics/department/{dept_id}` | Psychologist / Admin | Department-scoped analytics |
 | `GET` | `/analytics/university` | Admin | University-wide analytics |
 | `GET` | `/analytics/summary-report` | Admin | Summary report |
 
----
-
-### Forum
+### Forum & Feedback
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/forum/posts` | Any authenticated | List forum posts |
 | `POST` | `/forum/posts` | Student | Create a forum post |
-| `DELETE` | `/forum/posts/{post_id}` | Staff / Admin | Soft-delete a post |
-
----
-
-### Feedback
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/feedback` | None | Submit feedback |
-| `GET` | `/feedback/health` | None | Health check |
-
-**Feedback payload:** `{ "name": "Jane", "email": "jane@uni.edu", "message": "Great app!", "rating": 5 }`
+| `DELETE` | `/forum/posts/{post_id}` | Staff / Admin | Remove a post |
+| `POST` | `/feedback` | None | Submit feedback or support request |
 
 ---
 
@@ -323,11 +246,10 @@ Valid tiers: `green`, `amber`, `red`, `critical`.
 ```bash
 git clone <repo-url>
 cd Crisis_Awareness_Booking_System
-
 make install
 ```
 
-`make install` creates a Python virtualenv at the project root, installs backend requirements, and runs `npm install` for the frontend.
+`make install` creates a Python virtualenv, installs backend requirements, and runs `npm install` for the frontend.
 
 ### 2. Configure environment
 
@@ -335,7 +257,7 @@ make install
 cp backend/.env.example .env
 ```
 
-Edit `.env` at the **project root** and fill in your values:
+Edit `.env` at the **project root**:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://user:password@host:port/dbname
@@ -361,20 +283,48 @@ GCAL_ENABLED=false
 SMS_ENABLED=false
 ```
 
-### 3. Run migrations & seed admin
+### 3. Run migrations
 
 ```bash
-make migrate   # alembic upgrade head
-make seed      # creates first admin (edit backend/create_admin.py first)
+make migrate
 ```
 
-### 4. Start the dev servers
+### 4. Seed demo data (optional)
+
+Populates the database with a full semester of realistic data — 20 students across all risk tiers, 17 weeks of PHQ-9/GAD-7/Pulse check-ins with midterm and finals stress peaks, appointments, and crisis logs.
+
+```bash
+make seed-data
+```
+
+**Demo credentials** (password: `ChangeMe123!` for all):
+
+| ID | Name | Email | Risk |
+|---|---|---|---|
+| PSY001 | Dr. Amara Adeyemi | amara.adeyemi@psyunit.nileuniversity.edu.ng | — |
+| PSY002 | Dr. Kelechi Ibrahim | kelechi.ibrahim@psyunit.nileuniversity.edu.ng | — |
+| PSY003 | Dr. Bola Okonkwo | bola.okonkwo@psyunit.nileuniversity.edu.ng | — |
+| STU001 | Chioma Okafor | stu001@student.nileuniversity.edu.ng | Green |
+| STU002 | Emeka Nwosu | stu002@student.nileuniversity.edu.ng | Amber |
+| STU008 | Kemi Obaseki | stu008@student.nileuniversity.edu.ng | Critical |
+| STU013 | Zainab Musa | stu013@student.nileuniversity.edu.ng | Red |
+| STU015 | Precious Ejefu | stu015@student.nileuniversity.edu.ng | Critical |
+| STU018 | Hassan Abdullahi | stu018@student.nileuniversity.edu.ng | Red |
+
+All 20 student emails follow the pattern `stu001@student.nileuniversity.edu.ng` through `stu020@...`
+
+To bootstrap the first admin account, edit `backend/create_admin.py` with the desired credentials and run:
+```bash
+cd backend && ../venv/bin/python create_admin.py
+```
+
+### 5. Start the dev servers
 
 ```bash
 make dev
 ```
 
-This starts **both** the FastAPI backend and the Vite frontend in one terminal:
+Starts both servers in one terminal with pre-flight checks:
 
 | Service | URL |
 |---|---|
@@ -382,7 +332,7 @@ This starts **both** the FastAPI backend and the Vite frontend in one terminal:
 | Swagger UI | http://localhost:8000/docs |
 | Frontend | http://localhost:5173 |
 
-Press `Ctrl+C` to stop both. You can also run them separately:
+Press `Ctrl+C` to stop both. Run separately if needed:
 
 ```bash
 make backend    # FastAPI only (port 8000)
@@ -393,11 +343,13 @@ make frontend   # Vite only   (port 5173)
 
 ## Key Design Decisions
 
-- **Psychologist scoping**: Counsellors only see students assigned to them (`assigned_psychologist_id`). Admins see everyone.
-- **Dual-token auth**: Short-lived JWT access tokens (15 min) with rotating HTTP-only refresh tokens (7 days). Refresh token reuse triggers full revocation (security violation).
-- **WRS calculation**: Submitting a PHQ-9 or GAD-7 automatically computes a 0–100 Wellness Risk Score and places the student in a risk tier (`green` → `amber` → `red` → `critical`).
-- **Idempotency keys**: POST/PATCH endpoints accept an `Idempotency-Key` header to prevent duplicate submissions on network retry.
-- **Optional integrations**: AI insights (Groq), email (Resend), Google Calendar, and SMS are all feature-flagged and default to disabled, so the system runs without external API keys in development.
+- **Psychologist scoping**: Counsellors only see students assigned to them via `assigned_psychologist_id`. Admins see everyone.
+- **Dual-token auth**: Short-lived JWT access tokens (15 min) with rotating HTTP-only refresh tokens (7 days). Refresh token reuse triggers full revocation.
+- **WRS calculation**: Submitting a PHQ-9 or GAD-7 automatically computes a 0–100 Wellness Risk Score and places the student in a risk tier. Counsellors can override with a written justification.
+- **WRS trend tracking**: The `/risk-scores/history/{student_id}` endpoint returns the full semester's WRS history, rendered as an AreaChart with tier reference lines in the counsellor's student profile view.
+- **Semester seed**: `seed.py` generates 17 weeks of data with Gaussian stress bumps at midterms (week 7) and finals (week 15), four risk profiles, and realistic appointment/crisis log patterns. Re-running is idempotent.
+- **Optional integrations**: AI insights (Groq), email (Resend), Google Calendar, and SMS are feature-flagged and default to disabled.
+- **Feedback & support**: A floating button on all authenticated pages allows users to submit feedback (1–5 stars) or contact support at andreekunwe@gmail.com with defined SLAs.
 
 ---
 
