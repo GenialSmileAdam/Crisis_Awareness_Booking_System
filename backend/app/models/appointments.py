@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,11 @@ class BookingSource(str, enum.Enum):
     walk_in = "walk_in"
 
 
+class SessionType(str, enum.Enum):
+    in_person = "in_person"
+    virtual = "virtual"
+
+
 class Appointment(Base):
     __tablename__ = "appointments"
 
@@ -52,6 +57,9 @@ class Appointment(Base):
     is_crisis: Mapped[bool] = mapped_column(nullable=False, default=False)
     crisis_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     booking_source: Mapped[BookingSource] = mapped_column(nullable=False)
+    pending_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    session_type: Mapped[SessionType] = mapped_column(nullable=False, default=SessionType.in_person)
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     calendar_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

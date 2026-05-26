@@ -14,6 +14,7 @@ from app.models.refresh_tokens import RefreshToken
 from app.models.audit_logs import AuditLog
 from app.models.tables import sessions_table, users_table
 from app.models.feedback import Feedback
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 
 __all__ = [
     "User",
@@ -40,4 +41,6 @@ __all__ = [
     "sessions_table",
     "users_table",
     "feedbacks",
+    "PsychologistAvailability",
+    "PsychologistBusyBlock",
 ]

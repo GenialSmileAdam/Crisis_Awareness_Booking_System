@@ -66,15 +66,17 @@ export async function bookStudentAppointment(
 }
 
 /**
- * List appointments with pagination (psychologist, admin).
+ * List appointments with pagination (psychologist, admin, student).
  */
 export async function listAppointments(
   limit?: number,
   offset?: number,
+  student_id?: string,
 ): Promise<PaginatedResponse<Appointment>> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set("limit", String(limit));
   if (offset !== undefined) params.set("offset", String(offset));
+  if (student_id) params.set("student_id", student_id);
   const qs = params.toString();
   return apiRequest<PaginatedResponse<Appointment>>(
     "GET",

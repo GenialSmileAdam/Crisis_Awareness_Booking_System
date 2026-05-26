@@ -127,12 +127,21 @@ async def get_risk_score_cohort(
 
 @router.get("/alerts")
 async def get_risk_score_alerts(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    tier: str | None = Query(default=None, description="Filter by tier: green, amber, red, critical"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     _require_admin_or_psychologist(current_user)
+
+    # Validate optional tier filter
+    valid_tiers = {t.value for t in RiskTier}
+    if tier is not None and tier.lower() not in valid_tiers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tier must be one of: {', '.join(sorted(valid_tiers))}",
+        )
 
     latest_scores = (
         select(
@@ -147,6 +156,7 @@ async def get_risk_score_alerts(
         select(
             RiskScore.student_id,
             users_table.c.full_name,
+            Student.faculty,
             RiskScore.wrs_score,
             RiskScore.tier,
             RiskScore.computed_at,
@@ -158,13 +168,18 @@ async def get_risk_score_alerts(
         )
         .join(Student, Student.student_id == RiskScore.student_id)
         .join(users_table, users_table.c.id == Student.user_id)
-        .where(
-            RiskScore.tier.in_(
-                [RiskTier.amber, RiskTier.red, RiskTier.critical]
-            ),
-            users_table.c.deleted_at.is_(None),
-        )
+        .where(users_table.c.deleted_at.is_(None))
     )
+
+    # If a specific tier filter is requested, filter by that tier only;
+    # otherwise default to amber/red/critical alerts (original behaviour).
+    if tier is not None:
+        tier_enum = RiskTier(tier.lower())
+        base_query = base_query.where(RiskScore.tier == tier_enum)
+    else:
+        base_query = base_query.where(
+            RiskScore.tier.in_([RiskTier.amber, RiskTier.red, RiskTier.critical])
+        )
 
     total = (
         await db.execute(
@@ -184,6 +199,7 @@ async def get_risk_score_alerts(
         {
             "student_id": row.student_id,
             "full_name": row.full_name,
+            "faculty": row.faculty,
             "wrs_score": row.wrs_score,
             "tier": row.tier.value,
             "computed_at": row.computed_at.isoformat(),

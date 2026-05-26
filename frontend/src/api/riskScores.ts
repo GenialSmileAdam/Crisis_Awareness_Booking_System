@@ -22,6 +22,7 @@ export interface RiskScoreDetail {
 export interface RiskAlert {
   student_id: string;
   full_name: string;
+  faculty: string | null;
   wrs_score: number;
   tier: RiskTier;
   computed_at: string;
@@ -61,14 +62,18 @@ export async function getRiskScore(studentId: string): Promise<RiskScoreDetail> 
 
 /**
  * Get paginated risk alerts (admin, psychologist).
+ * Pass `tier` to fetch students in a specific risk tier (green | amber | red | critical).
+ * Without `tier`, defaults to amber + red + critical alerts only.
  */
 export async function getRiskAlerts(
   limit?: number,
   offset?: number,
+  tier?: RiskTier,
 ): Promise<PaginatedResponse<RiskAlert>> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set("limit", String(limit));
   if (offset !== undefined) params.set("offset", String(offset));
+  if (tier !== undefined) params.set("tier", tier);
   const qs = params.toString();
   return apiRequest<PaginatedResponse<RiskAlert>>(
     "GET",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Search, AlertCircle, LogOut, ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
 import { adminSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -181,11 +181,19 @@ export default function AdminUsers() {
                   </tr>
                 ) : filteredStudents.map((u) => (
                   <tr key={u.student_id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                    <td className="p-3 font-medium">{u.full_name}</td>
+                    <td className="p-3 font-medium">
+                      <Link to={`/admin/student/${u.student_id}`} className="hover:underline text-primary">
+                        {u.full_name}
+                      </Link>
+                    </td>
                     <td className="p-3 text-muted-foreground font-mono text-xs">{u.email}</td>
                     <td className="p-3 text-muted-foreground">{u.class_level || "—"}</td>
-                    <td className="p-3 text-muted-foreground">—</td>
-                    <td className="p-3 font-mono text-xs">{u.student_id}</td>
+                    <td className="p-3 text-muted-foreground">{(u as any).faculty || "—"}</td>
+                    <td className="p-3 font-mono text-xs">
+                      <Link to={`/admin/student/${u.student_id}`} className="hover:underline text-primary">
+                        {u.student_id}
+                      </Link>
+                    </td>
                     <td className="p-3 text-muted-foreground">
                       {new Date(u.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>

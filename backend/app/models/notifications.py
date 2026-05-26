@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,7 +51,9 @@ class Notification(Base):
     category: Mapped[NotificationCategory] = mapped_column(
         Enum(NotificationCategory, name="notification_category"), nullable=False
     )
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     status: Mapped[NotificationStatus] = mapped_column(
         Enum(NotificationStatus, name="notification_status"),
         default=NotificationStatus.pending,

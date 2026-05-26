@@ -285,30 +285,30 @@ async def _compute_chart_data(db: AsyncSession, days: int) -> dict[str, Any]:
         )
     ).scalar() or 0
 
-    # ── 11. WRS over time by class level (uses class_level — Student.faculty doesn't exist) ──
+    # ── 11. WRS over time by faculty (Engineering, Medicine, etc.) ────────────
     fac_trend_rows = (
         await db.execute(
             select(
                 func.date(RiskScore.computed_at).label("date"),
-                func.coalesce(Student.class_level, "Unknown").label("class_level"),
+                func.coalesce(Student.faculty, "Unknown").label("faculty"),
                 func.avg(RiskScore.wrs_score).label("avg_wrs"),
             )
             .join(Student, Student.student_id == RiskScore.student_id)
             .where(RiskScore.computed_at >= window_start)
-            .group_by(func.date(RiskScore.computed_at), Student.class_level)
+            .group_by(func.date(RiskScore.computed_at), Student.faculty)
             .order_by(func.date(RiskScore.computed_at))
         )
     ).all()
     fac_trend_by_date: dict[str, dict] = defaultdict(lambda: {"date": ""})
-    class_levels: set[str] = set()
+    faculties: set[str] = set()
     for row in fac_trend_rows:
         d = str(row.date)
-        cl = row.class_level or "Unknown"
-        class_levels.add(cl)
+        fac = row.faculty or "Unknown"
+        faculties.add(fac)
         fac_trend_by_date[d]["date"] = d
-        fac_trend_by_date[d][cl] = round(float(row.avg_wrs), 1)
+        fac_trend_by_date[d][fac] = round(float(row.avg_wrs), 1)
     wrs_by_faculty = sorted(fac_trend_by_date.values(), key=lambda x: x["date"])
-    faculty_list = sorted(list(class_levels))
+    faculty_list = sorted(list(faculties))
 
     return {
         "wrs_trend": wrs_trend,

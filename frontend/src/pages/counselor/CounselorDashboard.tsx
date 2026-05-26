@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
-import { getRiskAlerts, getRiskCohort, overrideRiskTier } from "@/api/riskScores";
+import { getRiskAlerts, getRiskCohort, overrideRiskTier, type RiskTier as RiskTierType } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { getRealAnalytics } from "@/api/analytics";
 import { cn, formatWRS } from "@/lib/utils";
@@ -61,6 +61,21 @@ export default function CounselorDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [insights, setInsights] = useState<any>({});
+  const [tierModal, setTierModal] = useState<{ tier: string; students: any[] } | null>(null);
+
+  const openTierModal = async (tierName: string) => {
+    const tierLower = tierName.toLowerCase() as RiskTierType;
+    // Optimistically open the modal immediately with whatever we have cached
+    const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
+    setTierModal({ tier: tierName, students: cached });
+    try {
+      // Fetch all students in that tier from the API (limit 200 covers any realistic cohort)
+      const result = await getRiskAlerts(200, 0, tierLower);
+      setTierModal({ tier: tierName, students: result.data || [] });
+    } catch {
+      // Keep cached result on failure — modal already shows it
+    }
+  };
 
   const fetchAppointments = async (newOffset: number) => {
     try {
@@ -83,7 +98,7 @@ export default function CounselorDashboard() {
         setError(null);
         const [studentsData, alertsData, appointmentsData, cohortData] = await Promise.all([
           listStudents(10, 0),
-          getRiskAlerts(10, 0),
+          getRiskAlerts(200, 0),
           listAppointments(10, 0),
           getRiskCohort()
         ]);
@@ -752,7 +767,7 @@ export default function CounselorDashboard() {
                 <>
                   <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={riskDistributionData} dataKey="value" innerRadius={45} outerRadius={75} paddingAngle={3}>
+                      <Pie data={riskDistributionData} dataKey="value" innerRadius={45} outerRadius={75} paddingAngle={3} onClick={(d: any) => openTierModal(d.name)} cursor="pointer">
                         {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} />)}
                       </Pie>
                       <Tooltip
@@ -764,10 +779,10 @@ export default function CounselorDashboard() {
                   </ResponsiveContainer>
                   <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs mt-2">
                     {riskDistributionData.map((d) => (
-                      <div key={d.name} className="flex items-center gap-1.5">
+                      <button key={d.name} onClick={() => openTierModal(d.name)} className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
                         <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
                         <span>{d.name} <span className="font-semibold tabular-nums">({d.value})</span></span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </>
@@ -896,6 +911,42 @@ export default function CounselorDashboard() {
           </div>
         </div>
       )}
+
+      {/* Tier students modal */}
+      <Dialog open={!!tierModal} onOpenChange={(o) => !o && setTierModal(null)}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              <span style={{ color: tierModal ? colorFromWrs(tierModal.tier === "Green" ? 20 : tierModal.tier === "Amber" ? 50 : tierModal.tier === "Red" ? 75 : 90) : undefined }}>
+                {tierModal?.tier}
+              </span>{" "}
+              tier students ({tierModal?.students.length ?? 0})
+            </DialogTitle>
+          </DialogHeader>
+          {tierModal?.students.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No students in this tier.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {tierModal?.students.map((s: any) => {
+                const color = colorFromWrs(s.wrs_score || 0);
+                return (
+                  <div key={s.student_id} className="flex items-center justify-between py-3">
+                    <div>
+                      <Link to={`/counselor/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
+                        {s.student_id}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">{s.faculty || "—"}</div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>
+                      {formatWRS(s.wrs_score)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!overrideModal} onOpenChange={(open) => !open && setOverrideModal(null)}>
         <DialogContent className="sm:max-w-[425px]">

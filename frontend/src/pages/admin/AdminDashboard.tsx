@@ -12,7 +12,7 @@ import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { getRiskAlerts, getRiskCohort } from "@/api/riskScores";
+import { getRiskAlerts, getRiskCohort, type RiskTier } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { getRealAnalytics } from "@/api/analytics";
 import { adminSidebarItems } from "@/data/sidebar";
@@ -101,10 +101,18 @@ export default function AdminDashboard() {
     fetchAnalytics();
   }, [days]);
 
-  const openTierModal = (tierName: string) => {
-    const tierLower = tierName.toLowerCase();
-    const tierStudents = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
-    setTierModal({ tier: tierName, students: tierStudents });
+  const openTierModal = async (tierName: string) => {
+    const tierLower = tierName.toLowerCase() as RiskTier;
+    // Optimistically open the modal immediately with whatever we have cached
+    const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
+    setTierModal({ tier: tierName, students: cached });
+    try {
+      // Fetch all students in that tier from the API (limit 200 covers any realistic cohort)
+      const result = await getRiskAlerts(200, 0, tierLower);
+      setTierModal({ tier: tierName, students: result.data || [] });
+    } catch {
+      // Keep cached result on failure — modal already shows it
+    }
   };
 
   const tierData = useMemo(() => {
@@ -755,7 +763,7 @@ export default function AdminDashboard() {
                     return (
                       <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
                         <td className="p-3 font-medium">
-                          <Link to={`/counselor/student/${a.student_id}`} className="hover:underline text-primary">
+                          <Link to={`/admin/student/${a.student_id}`} className="hover:underline text-primary">
                             {a.student_id}
                           </Link>
                         </td>
@@ -911,7 +919,7 @@ export default function AdminDashboard() {
                 return (
                   <div key={s.student_id} className="flex items-center justify-between py-3">
                     <div>
-                      <Link to={`/counselor/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
+                      <Link to={`/admin/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
                         {s.student_id}
                       </Link>
                       <div className="text-xs text-muted-foreground">{s.faculty || "—"}</div>

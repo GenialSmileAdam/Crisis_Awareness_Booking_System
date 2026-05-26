@@ -274,8 +274,12 @@ async def seed(db: AsyncSession) -> None:
             role=UserRole.student.value, is_admin=False, is_active=True,
             password_hash=PASSWORD_HASH, created_at=now, updated_at=now,
         ))
+        # Derive year_of_study from class_level (100L→1, 200L→2, …)
+        year_of_study = int(level[0]) if level and level[0].isdigit() else None
         db.add(Student(
             student_id=sid, user_id=uid, class_level=level,
+            faculty=faculty,
+            year_of_study=year_of_study,
             assigned_psychologist_id=psych_uid,
             guidance_counselor=PSYCHOLOGIST_DEFS[psych_slot][1],
             emergency_contact=ec_name,

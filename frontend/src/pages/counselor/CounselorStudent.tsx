@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CrisisBanner } from "@/components/CrisisBanner";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
-import { counselorSidebarItems } from "@/data/sidebar";
+import { counselorSidebarItems, adminSidebarItems } from "@/data/sidebar";
 import { getStudent, getStudentCrisisLogs, Student } from "@/api/students";
 import { getStudentCheckins, CheckinRecord } from "@/api/checkins";
 import { getRiskScore, getStudentWrsHistory, overrideRiskTier, RiskScoreDetail, RiskScoreEntry } from "@/api/riskScores";
@@ -92,9 +92,10 @@ function WrsTooltip({ active, payload, label }: any) {
 
 // ── component ─────────────────────────────────────────────────────────────────
 export default function CounselorStudent() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const { student_id } = useParams<{ student_id: string }>();
+  const sidebarItems = user?.role === "admin" ? adminSidebarItems : counselorSidebarItems;
 
   const [student, setStudent] = useState<Student | null>(null);
   const [riskScore, setRiskScore] = useState<RiskScoreDetail | null>(null);
@@ -133,7 +134,7 @@ export default function CounselorStudent() {
             getRiskScore(student_id).catch(() => null),
             getStudentWrsHistory(student_id).catch(() => []),
             getStudentCheckins(student_id, 10, 0),
-            listAppointments(100, 0),
+            listAppointments(50, 0, student_id),
             getStudentCrisisLogs(student_id).catch(() => []),
           ]);
         setStudent(studentData);
@@ -141,9 +142,7 @@ export default function CounselorStudent() {
         setWrsHistory(historyData);
         setCheckins(checkinsData.data || []);
         setCheckinTotal(checkinsData.pagination?.total || 0);
-        setAppointments(
-          (appointmentsData.data || []).filter((a: any) => a.student_id === student_id)
-        );
+        setAppointments(appointmentsData.data || []);
         setCrisisLogs(Array.isArray(crisisData) ? crisisData : []);
       } catch {
         setError("Failed to load student data");
@@ -202,7 +201,7 @@ export default function CounselorStudent() {
 
   if (loading) {
     return (
-      <AppShell items={counselorSidebarItems}>
+      <AppShell items={sidebarItems}>
         <div className="p-8 space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />
@@ -214,14 +213,14 @@ export default function CounselorStudent() {
 
   if (error || !student) {
     return (
-      <AppShell items={counselorSidebarItems}>
+      <AppShell items={sidebarItems}>
         <div className="p-8 text-center text-destructive">{error || "Student not found"}</div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell items={counselorSidebarItems}>
+    <AppShell items={sidebarItems}>
       {/* Header */}
       <div className="flex items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-3">

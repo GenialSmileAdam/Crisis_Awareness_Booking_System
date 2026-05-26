@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, Time, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,10 @@ class Staff(Base):
     department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     hire_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     specialization: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    office_location: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    work_start_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    work_end_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     max_appointments_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

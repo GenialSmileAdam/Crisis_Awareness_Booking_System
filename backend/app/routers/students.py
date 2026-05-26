@@ -37,6 +37,7 @@ async def upload_students_csv(
 async def list_students(
     student_id: str | None = None,
     class_level: str | None = None,
+    faculty: str | None = None,
     crisis_flag: bool | None = None,
     assigned_psychologist_id: UUID | None = None,
     limit: int = Query(default=20, ge=1, le=100),
@@ -49,6 +50,7 @@ async def list_students(
         {
             "student_id_query": student_id,
             "class_level": class_level,
+            "faculty": faculty,
             "crisis_flag": crisis_flag,
             "assigned_psychologist_id": assigned_psychologist_id,
         },

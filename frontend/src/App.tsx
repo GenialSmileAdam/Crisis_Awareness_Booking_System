@@ -53,7 +53,8 @@ const App = () => (
                 <Route path="/counselor/students" element={<ProtectedRoute role="psychologist"><MyStudents /></ProtectedRoute>} />
                 <Route path="/counselor/sessions" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
                 <Route path="/counselor/forum" element={<ProtectedRoute role="psychologist"><CounselorForum /></ProtectedRoute>} />
-                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role="psychologist"><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "admin"]}><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["admin", "psychologist"]}><CounselorStudent /></ProtectedRoute>} />
                 <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />

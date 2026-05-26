@@ -28,6 +28,12 @@ class Student(Base):
         nullable=False,
     )
     class_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    faculty: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    program: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    year_of_study: Mapped[Optional[int]] = mapped_column(nullable=True)
     assigned_psychologist_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("staff.user_id"),

@@ -5,7 +5,7 @@ import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
 type Role = "student" | "psychologist" | "admin" | "staff";
 
-export function ProtectedRoute({ role, children }: { role: Role; children: ReactNode }) {
+export function ProtectedRoute({ role, children }: { role: Role | Role[]; children: ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   useTokenRefresh();
@@ -19,6 +19,7 @@ export function ProtectedRoute({ role, children }: { role: Role; children: React
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, [navigate]);
 
-  if (!user || user.role !== role) return <Navigate to="/login" replace />;
+  const allowed = Array.isArray(role) ? role : [role];
+  if (!user || !allowed.includes(user.role as Role)) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
