@@ -1,11 +1,14 @@
 import httpx
 from jose import JWTError, jwt
-from jose.backends.rsa_backend import RSAKey
 from typing import Any, Dict
 import json
-from functools import lru_cache
+import base64
 import logging
+import time
 from urllib.parse import urlencode
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from app.core.config import settings
 
@@ -28,6 +31,58 @@ class OIDCProvider:
             return settings.CAMPUS_ONE_REDIRECT_URI
         return f"{settings.BACKEND_URL.rstrip('/')}/api/auth/callback"
 
+    @staticmethod
+    def _b64url_decode(value: str) -> bytes:
+        padding = "=" * (-len(value) % 4)
+        return base64.urlsafe_b64decode(value + padding)
+
+    def _decode_jwt_part(self, part: str) -> Dict[str, Any]:
+        return json.loads(self._b64url_decode(part))
+
+    def _validate_claims(self, payload: Dict[str, Any]) -> None:
+        if payload.get("iss") != self.issuer:
+            raise JWTError("Invalid issuer")
+
+        audience = payload.get("aud")
+        if isinstance(audience, str):
+            audience = [audience]
+        if self.client_id not in (audience or []):
+            raise JWTError("Invalid audience")
+
+        now = int(time.time())
+        leeway = 60
+
+        exp = payload.get("exp")
+        if not isinstance(exp, int) or exp < now - leeway:
+            raise JWTError("Token has expired")
+
+        nbf = payload.get("nbf")
+        if isinstance(nbf, int) and nbf > now + leeway:
+            raise JWTError("Token is not valid yet")
+
+    def _verify_eddsa_token(self, token: str, key_data: Dict[str, Any]) -> Dict[str, Any]:
+        if key_data.get("kty") != "OKP" or key_data.get("crv") != "Ed25519":
+            raise JWTError("Unsupported EdDSA key type")
+
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise JWTError("Invalid token format")
+
+        signing_input = f"{parts[0]}.{parts[1]}".encode()
+        signature = self._b64url_decode(parts[2])
+        public_key = Ed25519PublicKey.from_public_bytes(
+            self._b64url_decode(key_data["x"])
+        )
+
+        try:
+            public_key.verify(signature, signing_input)
+        except InvalidSignature as exc:
+            raise JWTError("Invalid token signature") from exc
+
+        payload = self._decode_jwt_part(parts[1])
+        self._validate_claims(payload)
+        return payload
+
     async def get_jwks(self) -> Dict[str, Any]:
         """Fetch and cache JWKS from Campus One."""
         if self._jwks_cache:
@@ -47,9 +102,12 @@ class OIDCProvider:
             # Decode without verification first to get the kid
             unverified_header = jwt.get_unverified_header(token)
             kid = unverified_header.get("kid")
+            alg = unverified_header.get("alg")
 
             if not kid:
                 raise JWTError("No kid in token header")
+            if alg == "none":
+                raise JWTError("Unsigned ID tokens are not accepted")
 
             # Find the key in JWKS
             key_data = None
@@ -60,6 +118,9 @@ class OIDCProvider:
 
             if not key_data:
                 raise JWTError(f"Key {kid} not found in JWKS")
+
+            if alg == "EdDSA":
+                return self._verify_eddsa_token(token, key_data)
 
             # python-jose verifies signature and claims during decode.
             payload = jwt.decode(
