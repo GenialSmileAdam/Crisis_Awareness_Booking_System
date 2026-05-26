@@ -42,6 +42,7 @@ class AppointmentUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     crisis_note: Optional[str] = None
+    pending_approval: Optional[bool] = None
 
     @model_validator(mode="after")
     def validate_times(self) -> "AppointmentUpdate":

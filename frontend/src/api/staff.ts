@@ -10,6 +10,8 @@ export interface Staff {
   email: string;
   specialty: string;
   staff_type: string;
+  specialization?: string;
+  is_available_now?: boolean;
   created_at: string;
 }
 

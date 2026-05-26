@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Activity, AlertCircle } from "lucide-react";
+import { NeonSpinner } from "@/components/NeonSpinner";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +30,8 @@ const SIGNUP_ROLES: { id: SignUpRole; label: string }[] = [
 ];
 
 const HINTS: Record<Role, { identifier: string; pwd: string }> = {
-  student: { identifier: "Student ID: 27001011", pwd: "ChangeMe123!" },
-  psychologist: { identifier: "dr.amara@nileuni.edu", pwd: "ChangeMe123!" },
+  student: { identifier: "STU001  (or  stu001@student.nileuniversity.edu.ng)", pwd: "ChangeMe123!" },
+  psychologist: { identifier: "amara.adeyemi@psyunit.nileuniversity.edu.ng", pwd: "ChangeMe123!" },
   admin: { identifier: "thisismymail014@gmail.com", pwd: "PsyUnitAdmin1" },
 };
 
@@ -327,19 +328,21 @@ export default function Login() {
 
               <form onSubmit={submitSignIn} className="space-y-4">
                 <div>
-                  <Label htmlFor="identifier">Email Address</Label>
+                  <Label htmlFor="identifier">
+                    {signInRole === "student" ? "Student ID or Email" : "Email Address"}
+                  </Label>
                   <Input
                     id="identifier"
-                    type="email"
+                    type={signInRole === "student" ? "text" : "email"}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder={signInRole === "student" ? "e.g. 241030218@nileuniversity.edu.ng" : "you@nileuni.edu"}
+                    placeholder={signInRole === "student" ? "e.g. STU001 or stu001@student.nileuniversity.edu.ng" : "you@nileuni.edu"}
                     required
                     className={cn("mt-1.5 focus-visible:ring-primary", error && "border-destructive focus-visible:ring-destructive")}
                   />
                   {signInRole === "student" && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Use your student ID as your email e.g. 241030218@nileuniversity.edu.ng
+                      Enter your Student ID (e.g. STU001) or your full student email.
                     </p>
                   )}
                 </div>
@@ -364,7 +367,11 @@ export default function Login() {
                   className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Signing in..." : "Sign In"} {!isSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
+                  {isSubmitting ? (
+                    <><NeonSpinner size={16} className="mr-2" /> Signing in…</>
+                  ) : (
+                    <>Sign In <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" /></>
+                  )}
                 </Button>
               </form>
 
@@ -611,7 +618,11 @@ export default function Login() {
                   className="w-full gradient-primary text-primary-foreground border-0 h-11 group"
                   disabled={isSignUpSubmitting}
                 >
-                  {isSignUpSubmitting ? "Creating account..." : "Create Account"} {!isSignUpSubmitting && <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" />}
+                  {isSignUpSubmitting ? (
+                    <><NeonSpinner size={16} className="mr-2" /> Creating account…</>
+                  ) : (
+                    <>Create Account <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition" /></>
+                  )}
                 </Button>
               </form>
             </TabsContent>

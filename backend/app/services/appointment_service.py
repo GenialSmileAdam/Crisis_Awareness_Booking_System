@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointments import Appointment, AppointmentStatus, BookingSource
 from app.models.crisis_logs import CrisisLog, SeverityLevel
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 from app.models.staff import Staff, StaffType
 from app.models.students import Student
 from app.models.tables import sessions_table, users_table
@@ -163,6 +164,7 @@ class AppointmentService:
             is_crisis=appointment_data.is_crisis,
             crisis_note=appointment_data.crisis_note,
             booking_source=BookingSource.student_portal,
+            pending_approval=not appointment_data.is_crisis,
         )
         db.add(appointment)
         await db.flush()
@@ -289,6 +291,7 @@ class AppointmentService:
                 "is_crisis": row.Appointment.is_crisis,
                 "crisis_note": row.Appointment.crisis_note,
                 "booking_source": row.Appointment.booking_source,
+                "pending_approval": row.Appointment.pending_approval,
                 "calendar_event_id": row.Appointment.calendar_event_id,
                 "deleted_at": row.Appointment.deleted_at,
                 "created_at": row.Appointment.created_at,
@@ -303,8 +306,24 @@ class AppointmentService:
     @classmethod
     async def get_availability(cls, db: AsyncSession, psychologist_id: UUID, day: date) -> list[str]:
         staff = await cls._ensure_psychologist_active(db, psychologist_id)
-        start_of_day = datetime.combine(day, time(hour=9))
-        end_of_day = datetime.combine(day, time(hour=17))
+
+        # Respect the psychologist's configured weekly schedule (0=Mon…6=Sun)
+        avail = (
+            await db.execute(
+                select(PsychologistAvailability).where(
+                    PsychologistAvailability.psychologist_id == psychologist_id,
+                    PsychologistAvailability.day_of_week == day.weekday(),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if avail is None or not avail.is_available:
+            return []
+
+        start_of_day = datetime.combine(day, avail.start_time)
+        end_of_day = datetime.combine(day, avail.end_time)
+
+        # Existing booked appointments within the window
         appointments = (
             await db.execute(
                 select(Appointment.start_time, Appointment.end_time)
@@ -318,15 +337,37 @@ class AppointmentService:
                 .order_by(Appointment.start_time.asc())
             )
         ).all()
+
         if len(appointments) >= staff.max_appointments_per_day:
             return []
+
+        # One-off busy blocks that overlap this calendar day
+        day_start_dt = datetime.combine(day, time.min)
+        day_end_dt = datetime.combine(day, time.max)
+        busy_rows = (
+            await db.execute(
+                select(PsychologistBusyBlock.block_start, PsychologistBusyBlock.block_end)
+                .where(
+                    PsychologistBusyBlock.psychologist_id == psychologist_id,
+                    PsychologistBusyBlock.block_end > day_start_dt,
+                    PsychologistBusyBlock.block_start < day_end_dt,
+                )
+            )
+        ).all()
+
+        def _naive(dt: datetime) -> datetime:
+            return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
+
+        busy_ranges = [(_naive(r.block_start), _naive(r.block_end)) for r in busy_rows]
+        appt_ranges = [(_naive(r.start_time), _naive(r.end_time)) for r in appointments]
 
         slots: list[str] = []
         current = start_of_day
         while current < end_of_day:
             next_hour = current + timedelta(hours=1)
-            overlap = any(current < row.end_time and next_hour > row.start_time for row in appointments)
-            if not overlap:
+            appt_overlap = any(current < e and next_hour > s for s, e in appt_ranges)
+            busy_overlap = any(current < e and next_hour > s for s, e in busy_ranges)
+            if not appt_overlap and not busy_overlap:
                 slots.append(f"{current.isoformat()} / {next_hour.isoformat()}")
             current = next_hour
         return slots[: staff.max_appointments_per_day]
@@ -373,6 +414,7 @@ class AppointmentService:
             "is_crisis": row.Appointment.is_crisis,
             "crisis_note": row.Appointment.crisis_note,
             "booking_source": row.Appointment.booking_source,
+            "pending_approval": row.Appointment.pending_approval,
             "calendar_event_id": row.Appointment.calendar_event_id,
             "deleted_at": row.Appointment.deleted_at,
             "created_at": row.Appointment.created_at,

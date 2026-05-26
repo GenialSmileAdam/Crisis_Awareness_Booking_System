@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import insert, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 from app.models.staff import Staff, StaffType
 from app.models.users import User, UserRole
 from app.models.tables import users_table
@@ -109,9 +110,49 @@ class StaffService:
                 .order_by(users_table.c.full_name.asc())
             )
         ).all()
-        data = [
-            {
-                "user_id": row.Staff.user_id,
+
+        # Compute real-time availability for each psychologist
+        now = datetime.utcnow()
+        now_time = now.time()
+        today_dow = now.weekday()  # 0=Mon…6=Sun
+        psych_ids = [row.Staff.user_id for row in rows]
+
+        avail_by_id: dict = {}
+        busy_ids: set = set()
+        if psych_ids:
+            avail_rows = (
+                await db.execute(
+                    select(PsychologistAvailability).where(
+                        PsychologistAvailability.psychologist_id.in_(psych_ids),
+                        PsychologistAvailability.day_of_week == today_dow,
+                        PsychologistAvailability.is_available.is_(True),
+                    )
+                )
+            ).scalars().all()
+            avail_by_id = {a.psychologist_id: a for a in avail_rows}
+
+            busy_rows = (
+                await db.execute(
+                    select(PsychologistBusyBlock.psychologist_id).where(
+                        PsychologistBusyBlock.psychologist_id.in_(psych_ids),
+                        PsychologistBusyBlock.block_start <= now,
+                        PsychologistBusyBlock.block_end >= now,
+                    )
+                )
+            ).all()
+            busy_ids = {r.psychologist_id for r in busy_rows}
+
+        data = []
+        for row in rows:
+            psych_id = row.Staff.user_id
+            avail = avail_by_id.get(psych_id)
+            is_available_now = (
+                avail is not None
+                and avail.start_time <= now_time <= avail.end_time
+                and psych_id not in busy_ids
+            )
+            data.append({
+                "user_id": psych_id,
                 "staff_id": row.Staff.staff_id,
                 "staff_type": row.Staff.staff_type,
                 "department": row.Staff.department,
@@ -123,11 +164,11 @@ class StaffService:
                 "updated_at": row.Staff.updated_at,
                 "full_name": row.full_name,
                 "email": row.email,
-            }
-            for row in rows
-        ]
+                "is_available_now": is_available_now,
+            })
+
         cls._psychologists_cache = {
-            "expires_at": datetime.utcnow() + timedelta(minutes=10),
+            "expires_at": datetime.utcnow() + timedelta(minutes=1),
             "data": data,
         }
         return data

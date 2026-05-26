@@ -41,7 +41,11 @@ function decodeJWT(token: string): JWTPayload | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const decoded = JSON.parse(atob(parts[1]));
+    // JWT uses base64url (- and _ instead of + and /), without padding.
+    // atob() requires standard base64 with padding.
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "==".slice(0, (4 - (base64.length % 4)) % 4);
+    const decoded = JSON.parse(atob(padded));
     return decoded as JWTPayload;
   } catch {
     return null;

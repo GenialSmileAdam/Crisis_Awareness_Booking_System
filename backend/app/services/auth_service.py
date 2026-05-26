@@ -127,6 +127,23 @@ class AuthService:
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
 
+        # Fallback: allow students to log in with their student ID instead of email
+        if user is None:
+            student = (
+                await db.execute(
+                    select(Student).where(Student.student_id == email)
+                )
+            ).scalar_one_or_none()
+            if student:
+                user = (
+                    await db.execute(
+                        select(User).where(
+                            User.id == student.user_id,
+                            User.deleted_at.is_(None),
+                        )
+                    )
+                ).scalar_one_or_none()
+
         logger = logging.getLogger(__name__)
         logger.debug("AuthService.login: lookup completed for email=%s, user_found=%s", email, bool(user))
 

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { LayoutDashboard, BarChart3, Users, FileText, Settings, Search, AlertTriangle, ClipboardCheck, Activity, MessageSquare, Library, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
@@ -18,6 +18,7 @@ import { getRealAnalytics } from "@/api/analytics";
 import { adminSidebarItems } from "@/data/sidebar";
 import { AdminOnboardingSlides } from "@/components/AdminOnboardingSlides";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { NeonSpinner } from "@/components/NeonSpinner";
 
 const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This Semester" } as const;
 type Range = keyof typeof RANGE_LABELS;
@@ -43,7 +44,8 @@ export default function AdminDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [insights, setInsights] = useState<any>({});
-  const [tierModal, setTierModal] = useState<{ tier: string; students: any[] } | null>(null);
+  const [tierModal, setTierModal] = useState<{ tier: string; students: any[]; loading?: boolean } | null>(null);
+  const tierModalRequestRef = useRef<string | null>(null);
 
   // Derived from range — must be declared before the useEffect that depends on it
   const days = range === "week" ? 7 : range === "month" ? 30 : 90;
@@ -76,7 +78,7 @@ export default function AdminDashboard() {
         });
       } catch (err) {
         setError("Failed to load dashboard data");
-        console.error("Dashboard data fetch error:", err);
+        toast.error("Failed to load dashboard data. Please refresh.");
       } finally {
         setLoading(false);
       }
@@ -94,6 +96,7 @@ export default function AdminDashboard() {
         setInsights(data.insights || {});
       } catch (err) {
         setAnalyticsError(true);
+        toast.error("Analytics failed to load — showing cached data if available.");
       } finally {
         setAnalyticsLoading(false);
       }
@@ -103,15 +106,20 @@ export default function AdminDashboard() {
 
   const openTierModal = async (tierName: string) => {
     const tierLower = tierName.toLowerCase() as RiskTier;
-    // Optimistically open the modal immediately with whatever we have cached
+    tierModalRequestRef.current = tierName;
     const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
-    setTierModal({ tier: tierName, students: cached });
+    setTierModal({ tier: tierName, students: cached, loading: true });
     try {
-      // Fetch all students in that tier from the API (limit 200 covers any realistic cohort)
       const result = await getRiskAlerts(200, 0, tierLower);
-      setTierModal({ tier: tierName, students: result.data || [] });
+      // Guard: ignore if user switched to a different tier while this was loading
+      if (tierModalRequestRef.current === tierName) {
+        setTierModal({ tier: tierName, students: result.data || [], loading: false });
+      }
     } catch {
-      // Keep cached result on failure — modal already shows it
+      toast.error(`Failed to load ${tierName} tier students`);
+      if (tierModalRequestRef.current === tierName) {
+        setTierModal(prev => prev ? { ...prev, loading: false } : null);
+      }
     }
   };
 
@@ -910,7 +918,11 @@ export default function AdminDashboard() {
               tier students ({tierModal?.students.length ?? 0})
             </DialogTitle>
           </DialogHeader>
-          {tierModal?.students.length === 0 ? (
+          {tierModal?.loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <NeonSpinner size={18} /> Loading students…
+            </div>
+          ) : tierModal?.students.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No students in this tier.</p>
           ) : (
             <div className="divide-y divide-border">
@@ -920,9 +932,9 @@ export default function AdminDashboard() {
                   <div key={s.student_id} className="flex items-center justify-between py-3">
                     <div>
                       <Link to={`/admin/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
-                        {s.student_id}
+                        {s.full_name || s.student_id}
                       </Link>
-                      <div className="text-xs text-muted-foreground">{s.faculty || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{s.student_id} · {s.faculty || "—"}</div>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>
                       {formatWRS(s.wrs_score)}

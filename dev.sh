@@ -37,6 +37,13 @@ if lsof -ti:8000 >/dev/null 2>&1; then
   sleep 1
 fi
 
+# ── Free port 5173 if already in use ─────────────────────────────────────────
+if lsof -ti:5173 >/dev/null 2>&1; then
+  echo "Port 5173 is in use — killing existing process..."
+  lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+  sleep 1
+fi
+
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
 BACKEND_PID=""
 FRONTEND_PID=""

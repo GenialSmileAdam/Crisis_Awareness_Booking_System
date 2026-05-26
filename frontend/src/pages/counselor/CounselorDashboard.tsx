@@ -1,5 +1,5 @@
 import { listAppointments, updateAppointment, type Appointment, getAppointmentAvailability, bookStudentAppointment } from "@/api/appointments";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
 // ... existing imports ...
@@ -22,6 +22,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tool
 import { toast } from "sonner";
 import type { PaginationInfo } from "@/api/types";
 import { PsychologistOnboardingSlides } from "@/components/PsychologistOnboardingSlides";
+import { NeonSpinner } from "@/components/NeonSpinner";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
 const SESSION_FILTERS = ["All", "Upcoming", "Completed", "Cancelled"] as const;
@@ -61,19 +62,24 @@ export default function CounselorDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [insights, setInsights] = useState<any>({});
-  const [tierModal, setTierModal] = useState<{ tier: string; students: any[] } | null>(null);
+  const [tierModal, setTierModal] = useState<{ tier: string; students: any[]; loading?: boolean } | null>(null);
+  const tierModalRequestRef = useRef<string | null>(null);
 
   const openTierModal = async (tierName: string) => {
     const tierLower = tierName.toLowerCase() as RiskTierType;
-    // Optimistically open the modal immediately with whatever we have cached
+    tierModalRequestRef.current = tierName;
     const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
-    setTierModal({ tier: tierName, students: cached });
+    setTierModal({ tier: tierName, students: cached, loading: true });
     try {
-      // Fetch all students in that tier from the API (limit 200 covers any realistic cohort)
       const result = await getRiskAlerts(200, 0, tierLower);
-      setTierModal({ tier: tierName, students: result.data || [] });
+      if (tierModalRequestRef.current === tierName) {
+        setTierModal({ tier: tierName, students: result.data || [], loading: false });
+      }
     } catch {
-      // Keep cached result on failure — modal already shows it
+      toast.error(`Failed to load ${tierName} tier students`);
+      if (tierModalRequestRef.current === tierName) {
+        setTierModal(prev => prev ? { ...prev, loading: false } : null);
+      }
     }
   };
 
@@ -111,6 +117,7 @@ export default function CounselorDashboard() {
         setCohort(cohortData || []);
       } catch (err) {
         setError("Failed to load dashboard data");
+        toast.error("Failed to load dashboard data. Please refresh.");
       } finally {
         setLoading(false);
       }
@@ -125,6 +132,7 @@ export default function CounselorDashboard() {
         setInsights(data.insights || {});
       } catch (err) {
         setAnalyticsError(true);
+        toast.error("Analytics failed to load.");
       } finally {
         setAnalyticsLoading(false);
       }
@@ -228,7 +236,7 @@ export default function CounselorDashboard() {
 
   const pendingConfirmation = useMemo(() => {
     return appointments.filter(
-      a => a.status === "booked" && a.booking_source === "student_portal" && new Date(a.start_time) > new Date()
+      a => a.pending_approval === true && new Date(a.start_time) > new Date()
     );
   }, [appointments]);
 
@@ -340,7 +348,7 @@ export default function CounselorDashboard() {
       )}
       
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
-        <h1 className="font-display text-lg md:text-xl font-bold">Welcome, Dr. {user?.name} 👋</h1>
+        <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -442,9 +450,9 @@ export default function CounselorDashboard() {
                           variant="outline"
                           onClick={async () => {
                             try {
-                              await updateAppointment(a.id, { status: "booked" } as any);
+                              await updateAppointment(a.id, { pending_approval: false } as any);
                               toast.success(`Session with ${a.student_full_name} confirmed`);
-                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, booking_source: "psychologist_manual" as any } : x));
+                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, pending_approval: false } : x));
                             } catch { toast.error("Failed to confirm"); }
                           }}
                         >
@@ -579,10 +587,10 @@ export default function CounselorDashboard() {
                                 return (
                                   <div key={day.toDateString() + hour} className={cn("border-t border-r last:border-r-0 border-border p-1 min-h-[48px]", day.toDateString() === new Date().toDateString() && "bg-primary/5")}>
                                     {slotAppts.map(a => (
-                                      <Link key={a.id} to={`/counselor/student/${a.student_id}`} className={cn("block rounded px-1.5 py-1 mb-0.5 text-[10px] font-medium truncate", a.is_crisis ? "bg-destructive/15 text-destructive" : a.booking_source === "student_portal" ? "bg-amber-500/15 text-amber-600" : "bg-primary/15 text-primary")}>
+                                      <Link key={a.id} to={`/counselor/student/${a.student_id}`} className={cn("block rounded px-1.5 py-1 mb-0.5 text-[10px] font-medium truncate", a.is_crisis ? "bg-destructive/15 text-destructive" : a.pending_approval ? "bg-amber-500/15 text-amber-600" : "bg-primary/15 text-primary")}>
                                         {a.student_full_name || a.student_id}
                                         {a.is_crisis && " 🔴"}
-                                        {a.booking_source === "student_portal" && " ⏳"}
+                                        {a.pending_approval && " ⏳"}
                                       </Link>
                                     ))}
                                   </div>
@@ -651,15 +659,22 @@ export default function CounselorDashboard() {
                           </div>
                         </td>
                         <td className="p-3">
-                          <span className={cn(
-                            "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                            a.status === "booked" ? "bg-primary/15 text-primary" :
-                            a.status === "completed" ? "bg-success/15 text-success-foreground" :
-                            a.status === "cancelled" ? "bg-muted text-muted-foreground" :
-                            "bg-warning/15 text-warning-foreground"
-                          )}>
-                            {a.status.replace('_', ' ')}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={cn(
+                              "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit",
+                              a.status === "booked" ? "bg-primary/15 text-primary" :
+                              a.status === "completed" ? "bg-success/15 text-success-foreground" :
+                              a.status === "cancelled" ? "bg-muted text-muted-foreground" :
+                              "bg-warning/15 text-warning-foreground"
+                            )}>
+                              {a.status.replace('_', ' ')}
+                            </span>
+                            {a.pending_approval && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-medium w-fit">
+                                ⏳ Awaiting confirmation
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex justify-end gap-2">
@@ -923,7 +938,11 @@ export default function CounselorDashboard() {
               tier students ({tierModal?.students.length ?? 0})
             </DialogTitle>
           </DialogHeader>
-          {tierModal?.students.length === 0 ? (
+          {tierModal?.loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <NeonSpinner size={18} /> Loading students…
+            </div>
+          ) : tierModal?.students.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No students in this tier.</p>
           ) : (
             <div className="divide-y divide-border">
@@ -933,9 +952,9 @@ export default function CounselorDashboard() {
                   <div key={s.student_id} className="flex items-center justify-between py-3">
                     <div>
                       <Link to={`/counselor/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
-                        {s.student_id}
+                        {s.full_name || s.student_id}
                       </Link>
-                      <div className="text-xs text-muted-foreground">{s.faculty || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{s.student_id} · {s.faculty || "—"}</div>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>
                       {formatWRS(s.wrs_score)}

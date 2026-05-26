@@ -15,6 +15,7 @@ export interface Appointment {
   student_full_name: string;
   psychologist_full_name: string;
   booking_source: string | null;
+  pending_approval: boolean;
   session_summary?: string;
   created_at: string;
 }
