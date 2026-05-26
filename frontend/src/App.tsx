@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { StudentRoute } from "@/components/StudentRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import StudentPortal from "./pages/student/StudentPortal";
 import StudentHistory from "./pages/student/StudentHistory";
 import StudentAppointments from "./pages/student/StudentAppointments";
@@ -43,6 +44,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />
                 <Route path="/student/checkin" element={<StudentRoute><StudentPortal /></StudentRoute>} />
                 <Route path="/student/consent" element={<StudentRoute><StudentConsent /></StudentRoute>} />

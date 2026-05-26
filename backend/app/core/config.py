@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
     EMAIL_TO: str = ""
 
+    # Campus One OIDC
+    CAMPUS_ONE_CLIENT_ID: str = ""
+    CAMPUS_ONE_CLIENT_SECRET: str = ""
+    CAMPUS_ONE_WEBHOOK_SECRET: str = ""
+    CAMPUS_ONE_ISSUER: str = "https://auth.campusone.com.ng"
+    CAMPUS_ONE_DISCOVERY_URL: str = "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration"
+    CAMPUS_ONE_JWKS_URL: str = "https://auth.campusone.com.ng/api/auth/jwks"
+    CAMPUS_ONE_SCOPES: str = "openid email profile academic notifications"
+    CAMPUS_ONE_REDIRECT_URI: str = ""
+
+    # Deployment URLs
+    FRONTEND_URL: str = "http://localhost:5173"
+    BACKEND_URL: str = "http://localhost:8000"
+
     class Config:
         env_file = (str(_repo_env_path), str(_backend_env_path))
         env_file_encoding = "utf-8"

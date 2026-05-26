@@ -308,6 +308,26 @@ export default function Login() {
 
             {/* ── SIGN IN TAB ── */}
             <TabsContent value="signin" className="mt-6 space-y-4">
+              <Button
+                type="button"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-11"
+                onClick={() => {
+                  const apiUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+                  window.location.href = `${apiUrl}/auth/campus-one/authorize`;
+                }}
+              >
+                Sign in with Campus One
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="px-2 bg-background text-muted-foreground">Or continue with email</span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-1 p-1 rounded-full bg-muted">
                 {SIGNIN_ROLES.map((r) => (
                   <button
