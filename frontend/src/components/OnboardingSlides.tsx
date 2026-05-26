@@ -229,12 +229,6 @@ const slides = [
     Visual: CheckinVisual,
   },
   {
-    title: "Your Risk Score",
-    description: "Every check-in updates your Wellness Risk Score (WRS) — a 0–100 number your counsellor uses to understand how you're doing over time.",
-    bullets: ["Green (0–39): Doing well", "Amber/Red: Counsellor checks in", "Critical: Immediate support triggered"],
-    Visual: WrsVisual,
-  },
-  {
     title: "Book Appointments",
     description: "Need to talk? Request a session with your assigned psychologist in a few taps. Crisis cases are automatically prioritised.",
     bullets: ["Choose your preferred time slot", "Mark as Crisis for same-day priority", "Get reminders before your session"],
@@ -258,7 +252,7 @@ const slides = [
 
 export function OnboardingSlides() {
   const { user } = useAuth();
-  const storageKey = `safespace_onboarding_v2_${user?.sub}`;
+  const storageKey = `safespace_onboarding_v3_${user?.sub}`;
   const [isVisible, setIsVisible] = useState(false);
   const [current, setCurrent] = useState(0);
 

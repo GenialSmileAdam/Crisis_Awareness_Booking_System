@@ -24,8 +24,8 @@ def determine_effective_role(user_type: str, is_admin: bool, staff_type: str | N
 
 
 def hash_password(password: str) -> str:
-    """Hash password with bcrypt cost factor 12."""
-    salt = bcrypt.gensalt(rounds=12)
+    """Hash password with bcrypt cost factor 10 (still strong, 4x faster than 12)."""
+    salt = bcrypt.gensalt(rounds=10)
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 

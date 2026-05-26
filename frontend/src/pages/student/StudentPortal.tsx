@@ -16,7 +16,8 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 type SurveyTab = "pulse" | "phq9" | "gad7";
-import { PendingCheckin, getPendingCheckins, submitCheckin } from "@/api/checkins";
+import { PendingCheckin, getPendingCheckins, submitCheckin, getStudentCheckins, CheckinRecord } from "@/api/checkins";
+import { listAppointments, getNextAvailableSlot, NextAvailableSlot, Appointment } from "@/api/appointments";
 import { studentSidebarItems } from "@/data/sidebar";
 import { OnboardingSlides } from "@/components/OnboardingSlides";
 
@@ -137,6 +138,38 @@ export default function StudentPortal() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [hotlineOpen, setHotlineOpen] = useState(false);
   const tier = tierFromWrs(wrs);
+
+  // Real data for home cards
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [recentCheckins, setRecentCheckins] = useState<CheckinRecord[]>([]);
+  const [nextSlot, setNextSlot] = useState<NextAvailableSlot | null>(null);
+  const [homeLoading, setHomeLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      if (!studentId) return;
+      try {
+        const [apptData, checkinData, slotData] = await Promise.allSettled([
+          listAppointments(10, 0),
+          getStudentCheckins(studentId, 5, 0),
+          getNextAvailableSlot(),
+        ]);
+        if (apptData.status === "fulfilled") {
+          const upcoming = (apptData.value.data || []).filter(
+            (a) => a.status === "booked" && new Date(a.start_time) > new Date()
+          );
+          setUpcomingAppointments(upcoming);
+        }
+        if (checkinData.status === "fulfilled") setRecentCheckins(checkinData.value.data || []);
+        if (slotData.status === "fulfilled") setNextSlot(slotData.value);
+      } catch {
+        // non-fatal
+      } finally {
+        setHomeLoading(false);
+      }
+    };
+    fetchHomeData();
+  }, [studentId]);
 
   const handleSubmit = async (responses: Record<string, number>) => {
     if (!studentId) return;
@@ -323,10 +356,24 @@ export default function StudentPortal() {
                 <h3 className="font-display font-bold">Book an Appointment</h3>
                 <Calendar className="h-4 w-4 text-primary" />
               </div>
-              <div className="text-xs text-muted-foreground mb-1">Next available</div>
-              <div className="font-medium text-sm">Tomorrow · 11:00 AM · Dr. Amara Obi</div>
+              {homeLoading ? (
+                <div className="h-4 bg-muted rounded animate-pulse mb-1" />
+              ) : nextSlot ? (
+                <>
+                  <div className="text-xs text-muted-foreground mb-1">Next available</div>
+                  <div className="font-medium text-sm">
+                    {new Date(nextSlot.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    {" · "}
+                    {new Date(nextSlot.slot.split(" / ")[0]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground mb-1">No slots available in the next 2 weeks</div>
+              )}
               <div className="flex gap-2 mt-4 mb-5">
-                <Button size="sm" onClick={() => setBookingOpen(true)} className="gradient-primary text-primary-foreground border-0 flex-1">Book Now</Button>
+                <Link to="/student/appointments" className="flex-1">
+                  <Button size="sm" className="gradient-primary text-primary-foreground border-0 w-full">Book Now</Button>
+                </Link>
                 <Link to="/student/appointments" className="flex-1">
                   <Button size="sm" variant="outline" className="w-full">View all <ChevronRight className="h-3 w-3 ml-1" /></Button>
                 </Link>
@@ -334,38 +381,40 @@ export default function StudentPortal() {
             </div>
             <div className="pt-5 border-t border-border flex-1">
               <div className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Upcoming Sessions</div>
-              <div className="space-y-3">
-                <div className="flex items-start justify-between text-xs group">
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Calendar className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Dr. Amara Obi</div>
-                      <div className="text-muted-foreground">Tomorrow, 11:00 AM</div>
-                      <div className="mt-1">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold bg-primary/10 text-primary">Virtual</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => toast.success("Appointment canceled")}>Cancel</Button>
+              {homeLoading ? (
+                <div className="space-y-2">
+                  {[1, 2].map(i => <div key={i} className="h-12 bg-muted rounded-lg animate-pulse" />)}
                 </div>
-                <div className="flex items-start justify-between text-xs group">
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Calendar className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-medium">Dr. Kelechi Eze</div>
-                      <div className="text-muted-foreground">May 2, 2:00 PM</div>
-                      <div className="mt-1">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold bg-muted text-foreground">In-Person</span>
+              ) : upcomingAppointments.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center py-4">No upcoming sessions</div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingAppointments.slice(0, 3).map((a) => {
+                    const initials = (a.psychologist_full_name || "?").split(" ").map(p => p[0]).slice(0, 2).join("");
+                    return (
+                      <div key={a.id} className="flex items-start justify-between text-xs group">
+                        <div className="flex items-start gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 font-bold text-[10px]">
+                            {initials}
+                          </div>
+                          <div>
+                            <div className="font-medium">{a.psychologist_full_name || "Counselor"}</div>
+                            <div className="text-muted-foreground">
+                              {new Date(a.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric" })},{" "}
+                              {new Date(a.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                            </div>
+                            <div className="mt-1">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold bg-primary/10 text-primary capitalize">
+                                {a.booking_source?.replace("_", " ") || "session"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => toast.success("Appointment canceled")}>Cancel</Button>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -375,16 +424,56 @@ export default function StudentPortal() {
                 <h3 className="font-display font-bold">Recent Check-ins</h3>
                 <Link to="/student/history" className="text-xs text-primary hover:underline">View all</Link>
               </div>
-              <div className="space-y-1.5 py-4 flex flex-col items-center justify-center text-center">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">No recent data</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Complete a check-in to see history</p>
-              </div>
+              {homeLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted rounded animate-pulse" />)}
+                </div>
+              ) : recentCheckins.length === 0 ? (
+                <div className="py-4 flex flex-col items-center justify-center text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">No recent data</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Complete a check-in to see history</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {recentCheckins.slice(0, 4).map((c) => {
+                    const typeLabel = c.type === "phq9" ? "PHQ-9" : c.type === "gad7" ? "GAD-7" : "Pulse";
+                    const wrs = (c.type === "phq9" || c.type === "gad7") && c.score !== null
+                      ? Math.round((c.score / 27) * 100) : null;
+                    const color = wrs !== null ? colorFromWrs(wrs) : "#6B7280";
+                    return (
+                      <div key={c.id} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50 last:border-0">
+                        <div>
+                          <span className="font-medium">{typeLabel}</span>
+                          <span className="text-muted-foreground ml-2">
+                            {new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                        {wrs !== null && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${color}25`, color }}>
+                            {wrs}/100
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="pt-4 mt-auto border-t border-border flex flex-col">
               <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Your recent trend</div>
-              <div className="h-20 flex items-center justify-center bg-muted/20 rounded-lg border border-dashed border-border">
-                <span className="text-[10px] text-muted-foreground/40 font-medium">Trend data pending</span>
-              </div>
+              {recentCheckins.length >= 2 ? (
+                <ResponsiveContainer width="100%" height={60}>
+                  <LineChart data={recentCheckins.slice().reverse().map(c => ({
+                    wrs: (c.type === "phq9" || c.type === "gad7") && c.score !== null ? Math.round((c.score / 27) * 100) : null
+                  })).filter(d => d.wrs !== null)}>
+                    <Line type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-16 flex items-center justify-center bg-muted/20 rounded-lg border border-dashed border-border">
+                  <span className="text-[10px] text-muted-foreground/40 font-medium">Complete more check-ins for trend</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -392,26 +481,64 @@ export default function StudentPortal() {
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
             <div>
               <div className="label-eyebrow mb-3">Your Counselor</div>
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full gradient-primary text-primary-foreground flex items-center justify-center font-semibold">AO</div>
-                <div>
-                  <div className="font-semibold">Dr. Amara Obi</div>
-                  <div className="text-xs text-muted-foreground">Senior Wellness Counselor</div>
+              {homeLoading ? (
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-muted rounded animate-pulse" />
+                    <div className="h-2.5 bg-muted rounded w-2/3 animate-pulse" />
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-2 mt-4 mb-5">
-                <Button size="sm" variant="outline" className="flex-1" onClick={() => toast.success("Message sent to Dr. Amara")}>
-                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Message
-                </Button>
-                <Button size="sm" onClick={() => setBookingOpen(true)} className="gradient-primary text-primary-foreground border-0 flex-1">Book</Button>
-              </div>
+              ) : upcomingAppointments.length > 0 ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full gradient-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
+                      {(upcomingAppointments[0].psychologist_full_name || "?").split(" ").map(p => p[0]).slice(0, 2).join("")}
+                    </div>
+                    <div>
+                      <div className="font-semibold">{upcomingAppointments[0].psychologist_full_name}</div>
+                      <div className="text-xs text-muted-foreground">Counselor</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4 mb-5">
+                    <Button size="sm" variant="outline" className="flex-1" onClick={() => toast.success("Message feature coming soon")}>
+                      <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Message
+                    </Button>
+                    <Link to="/student/appointments" className="flex-1">
+                      <Button size="sm" className="gradient-primary text-primary-foreground border-0 w-full">Book</Button>
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-muted/40 text-muted-foreground flex items-center justify-center">
+                      <MessageSquare className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm">No counselor assigned</div>
+                      <div className="text-xs text-muted-foreground">Book a session to get started</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 mb-5">
+                    <Link to="/student/appointments">
+                      <Button size="sm" className="gradient-primary text-primary-foreground border-0 w-full">Find a Counselor</Button>
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
             <div className="pt-4 border-t border-border flex-1 flex flex-col">
-              <div className="text-xs text-muted-foreground">Next available slot</div>
-              <div className="font-bold text-sm mb-3">Tomorrow · 11:00 AM</div>
-              <div className="text-xs text-muted-foreground leading-relaxed mb-4">
-                Specializes in academic stress, anxiety, and student transitions. 8 years experience in university wellness.
-              </div>
+              {nextSlot && (
+                <>
+                  <div className="text-xs text-muted-foreground">Next available slot</div>
+                  <div className="font-bold text-sm mb-3">
+                    {new Date(nextSlot.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    {" · "}
+                    {new Date(nextSlot.slot.split(" / ")[0]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-2 mt-auto">
                 <span className="h-2 w-2 rounded-full bg-[#A8FF3E] animate-pulse"></span>
                 <span className="text-xs font-medium">Available this week</span>

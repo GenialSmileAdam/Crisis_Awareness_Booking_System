@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Search, ArrowUpDown, AlertTriangle, MoreHorizontal, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
@@ -263,7 +263,9 @@ export default function MyStudents() {
                       return (
                         <tr key={s.student_id} className={cn("border-b border-border/60 last:border-0 hover:bg-primary/5 transition", i % 2 === 0 && "bg-muted/20")}>
                           <td className="p-3">
-                            <div className="font-medium text-xs md:text-sm">{s.full_name}</div>
+                            <Link to={`/counselor/student/${s.student_id}`} className="hover:underline">
+                              <div className="font-medium text-xs md:text-sm text-primary">{s.full_name}</div>
+                            </Link>
                             <div className="text-[10px] text-muted-foreground font-mono">{s.student_id}</div>
                           </td>
                           <td className="hidden md:table-cell p-3 text-muted-foreground">{s.class_level || "—"}</td>

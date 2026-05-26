@@ -532,11 +532,11 @@ export default function StudentAppointments() {
                         <span
                           className="px-2 py-0.5 rounded-full text-xs"
                           style={{
-                            backgroundColor: "hsl(var(--success) / 0.15)",
-                            color: "hsl(var(--success))",
+                            backgroundColor: a.booking_source === "student_portal" ? "hsl(var(--warning) / 0.15)" : "hsl(var(--success) / 0.15)",
+                            color: a.booking_source === "student_portal" ? "hsl(var(--warning))" : "hsl(var(--success))",
                           }}
                         >
-                          {a.status}
+                          {a.booking_source === "student_portal" ? "Pending Confirmation" : a.status}
                         </span>
                         {a.booking_source && (
                           <span className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs capitalize">

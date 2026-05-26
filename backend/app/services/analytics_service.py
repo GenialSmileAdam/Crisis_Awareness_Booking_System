@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -12,13 +12,39 @@ from app.models.risk_scores import RiskScore
 from app.models.students import Student
 from app.models.wellness_checkins import WellnessCheckin
 
+# ── 5-minute in-process TTL cache — avoids re-running 10+ queries per page load ──
+_cache: dict[str, tuple[dict, datetime]] = {}
+_CACHE_TTL = 300  # seconds
 
-async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
+
+def _get_cached(key: str) -> dict | None:
+    if key in _cache:
+        data, ts = _cache[key]
+        if (datetime.now(timezone.utc) - ts).total_seconds() < _CACHE_TTL:
+            return data
+    return None
+
+
+def _set_cache(key: str, data: dict) -> None:
+    _cache[key] = (data, datetime.now(timezone.utc))
+
+
+async def get_real_chart_data(db: AsyncSession, days: int = 30) -> dict[str, Any]:
+    cache_key = f"analytics:{days}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+    result = await _compute_chart_data(db, days)
+    _set_cache(cache_key, result)
+    return result
+
+
+async def _compute_chart_data(db: AsyncSession, days: int) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
-    thirty_days_ago = now - timedelta(days=30)
+    window_start = now - timedelta(days=days)
     seven_days_ago = now - timedelta(days=7)
 
-    # Subquery: latest risk score timestamp per student (reused across queries)
+    # Subquery: latest risk score timestamp per student (SQLAlchemy object, no DB call)
     latest_scores_sq = (
         select(
             RiskScore.student_id,
@@ -45,7 +71,7 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         key = row.tier.value if hasattr(row.tier, "value") else str(row.tier)
         risk_distribution[key] = row.n
 
-    # ── 2. WRS trend — daily average over last 30 days ────────────────────────
+    # ── 2. WRS trend — daily average over selected window ─────────────────────
     trend_rows = (
         await db.execute(
             select(
@@ -53,7 +79,7 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
                 func.avg(RiskScore.wrs_score).label("avg_wrs"),
                 func.count(RiskScore.id).label("n"),
             )
-            .where(RiskScore.computed_at >= thirty_days_ago)
+            .where(RiskScore.computed_at >= window_start)
             .group_by(func.date(RiskScore.computed_at))
             .order_by(func.date(RiskScore.computed_at))
         )
@@ -67,7 +93,7 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         for row in trend_rows
     ]
 
-    # ── 3. Check-in volume by type, last 30 days (pivoted by date) ────────────
+    # ── 3. Check-in volume by type ─────────────────────────────────────────────
     vol_rows = (
         await db.execute(
             select(
@@ -75,11 +101,8 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
                 WellnessCheckin.type,
                 func.count(WellnessCheckin.id).label("n"),
             )
-            .where(WellnessCheckin.submitted_at >= thirty_days_ago)
-            .group_by(
-                func.date(WellnessCheckin.submitted_at),
-                WellnessCheckin.type,
-            )
+            .where(WellnessCheckin.submitted_at >= window_start)
+            .group_by(func.date(WellnessCheckin.submitted_at), WellnessCheckin.type)
             .order_by(func.date(WellnessCheckin.submitted_at))
         )
     ).all()
@@ -95,11 +118,11 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         vol_by_date[d]["total"] += row.n
     checkin_volume = sorted(vol_by_date.values(), key=lambda x: x["date"])
 
-    # ── 4. Appointment stats, last 30 days ────────────────────────────────────
+    # ── 4. Appointment stats ───────────────────────────────────────────────────
     appt_rows = (
         await db.execute(
             select(Appointment.status, func.count(Appointment.id).label("n"))
-            .where(Appointment.created_at >= thirty_days_ago)
+            .where(Appointment.created_at >= window_start)
             .where(Appointment.deleted_at.is_(None))
             .group_by(Appointment.status)
         )
@@ -117,11 +140,11 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         "no_show_rate": round(appt_counts["no_show"] / concluded, 2) if concluded else 0.0,
     }
 
-    # ── 5. Booking source breakdown, last 30 days ─────────────────────────────
+    # ── 5. Booking source breakdown ────────────────────────────────────────────
     src_rows = (
         await db.execute(
             select(Appointment.booking_source, func.count(Appointment.id).label("n"))
-            .where(Appointment.created_at >= thirty_days_ago)
+            .where(Appointment.created_at >= window_start)
             .where(Appointment.deleted_at.is_(None))
             .group_by(Appointment.booking_source)
         )
@@ -136,7 +159,7 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         if key in booking_sources:
             booking_sources[key] = row.n
 
-    # ── 6. Class-level risk breakdown (latest score per student) ──────────────
+    # ── 6. Class-level risk breakdown ─────────────────────────────────────────
     cl_rows = (
         await db.execute(
             select(
@@ -173,35 +196,30 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         cl_map[lvl][tier] = row.n
         cl_map[lvl]["total"] += row.n
         cl_map[lvl]["_wrs_sum"] += float(row.avg_wrs) * row.n
-    class_level_risk = []
-    for lvl, d in sorted(cl_map.items()):
-        avg = round(d["_wrs_sum"] / d["total"], 1) if d["total"] else 0.0
-        class_level_risk.append(
-            {
-                "class_level": lvl,
-                "green": d["green"],
-                "amber": d["amber"],
-                "red": d["red"],
-                "critical": d["critical"],
-                "avg_wrs": avg,
-                "total": d["total"],
-            }
-        )
+    class_level_risk = [
+        {
+            "class_level": lvl,
+            "green": d["green"],
+            "amber": d["amber"],
+            "red": d["red"],
+            "critical": d["critical"],
+            "avg_wrs": round(d["_wrs_sum"] / d["total"], 1) if d["total"] else 0.0,
+            "total": d["total"],
+        }
+        for lvl, d in sorted(cl_map.items())
+    ]
 
-    # ── 7. Crisis stats, last 30 days ─────────────────────────────────────────
-    crisis_total = (
+    # ── 7. Crisis stats — both counts in one query ────────────────────────────
+    crisis_row = (
         await db.execute(
-            select(func.count(CrisisLog.id)).where(CrisisLog.created_at >= thirty_days_ago)
+            select(
+                func.count(CrisisLog.id).label("total"),
+                func.sum(case((CrisisLog.resolved.is_(True), 1), else_=0)).label("resolved"),
+            ).where(CrisisLog.created_at >= window_start)
         )
-    ).scalar() or 0
-    crisis_resolved = (
-        await db.execute(
-            select(func.count(CrisisLog.id)).where(
-                CrisisLog.created_at >= thirty_days_ago,
-                CrisisLog.resolved.is_(True),
-            )
-        )
-    ).scalar() or 0
+    ).one()
+    crisis_total = int(crisis_row.total or 0)
+    crisis_resolved = int(crisis_row.resolved or 0)
     crisis_stats = {
         "total_30d": crisis_total,
         "resolved": crisis_resolved,
@@ -242,7 +260,7 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         "by_type": eng_by_type,
     }
 
-    # ── 9. High-risk proportion & campus average WRS ──────────────────────────
+    # ── 9. Campus average WRS ─────────────────────────────────────────────────
     total_scored = sum(risk_distribution.values())
     high_risk_count = risk_distribution["red"] + risk_distribution["critical"]
     high_risk_proportion = round(high_risk_count / total_scored, 3) if total_scored else 0.0
@@ -267,6 +285,31 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         )
     ).scalar() or 0
 
+    # ── 11. WRS over time by class level (uses class_level — Student.faculty doesn't exist) ──
+    fac_trend_rows = (
+        await db.execute(
+            select(
+                func.date(RiskScore.computed_at).label("date"),
+                func.coalesce(Student.class_level, "Unknown").label("class_level"),
+                func.avg(RiskScore.wrs_score).label("avg_wrs"),
+            )
+            .join(Student, Student.student_id == RiskScore.student_id)
+            .where(RiskScore.computed_at >= window_start)
+            .group_by(func.date(RiskScore.computed_at), Student.class_level)
+            .order_by(func.date(RiskScore.computed_at))
+        )
+    ).all()
+    fac_trend_by_date: dict[str, dict] = defaultdict(lambda: {"date": ""})
+    class_levels: set[str] = set()
+    for row in fac_trend_rows:
+        d = str(row.date)
+        cl = row.class_level or "Unknown"
+        class_levels.add(cl)
+        fac_trend_by_date[d]["date"] = d
+        fac_trend_by_date[d][cl] = round(float(row.avg_wrs), 1)
+    wrs_by_faculty = sorted(fac_trend_by_date.values(), key=lambda x: x["date"])
+    faculty_list = sorted(list(class_levels))
+
     return {
         "wrs_trend": wrs_trend,
         "risk_distribution": risk_distribution,
@@ -279,6 +322,8 @@ async def get_real_chart_data(db: AsyncSession) -> dict[str, Any]:
         "high_risk_proportion": high_risk_proportion,
         "avg_wrs_current": avg_wrs_current,
         "checkins_7d": checkins_7d,
+        "wrs_by_faculty": wrs_by_faculty,
+        "faculty_list": faculty_list,
     }
 
 
@@ -287,7 +332,7 @@ def generate_ai_insights(charts: dict) -> dict:
     if not settings.AI_ENABLED or not settings.GROQ_API_KEY:
         return {}
     try:
-        from groq import Groq  # only import when needed
+        from groq import Groq
         client = Groq(api_key=settings.GROQ_API_KEY)
         summary = (
             f"Risk distribution: {charts.get('risk_distribution')}\n"

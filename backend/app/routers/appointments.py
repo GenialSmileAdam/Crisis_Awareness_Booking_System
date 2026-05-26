@@ -120,6 +120,50 @@ async def list_appointments(
     return success("Appointments retrieved successfully", result)
 
 
+@router.get("/next-available")
+async def get_next_available_slot(
+    db: AsyncSession = Depends(get_db),
+    _: dict = require_roles("student", "admin", "psychologist"),
+):
+    """Return the earliest available slot across all active psychologists."""
+    from app.models.staff import Staff, StaffType
+    from app.models.tables import users_table
+    from sqlalchemy import select as sa_select
+    from datetime import date as date_cls, timedelta as td
+
+    staff_rows = (
+        await db.execute(
+            sa_select(Staff)
+            .join(users_table, users_table.c.id == Staff.user_id)
+            .where(
+                Staff.staff_type == StaffType.psychologist,
+                users_table.c.is_active.is_(True),
+                users_table.c.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+
+    today = date_cls.today()
+    for offset in range(14):  # search up to 2 weeks ahead
+        check_date = today + td(days=offset)
+        for staff in staff_rows:
+            try:
+                slots = await AppointmentService.get_availability(db, staff.user_id, check_date)
+                if slots:
+                    return success(
+                        "Next available slot found",
+                        {
+                            "date": check_date.isoformat(),
+                            "slot": slots[0],
+                            "psychologist_id": str(staff.user_id),
+                            "psychologist_name": None,
+                        },
+                    )
+            except Exception:
+                continue
+    return success("No available slots found in the next 14 days", None)
+
+
 @router.get("/availability/{psychologist_id}")
 async def get_appointment_availability(
     psychologist_id: UUID,

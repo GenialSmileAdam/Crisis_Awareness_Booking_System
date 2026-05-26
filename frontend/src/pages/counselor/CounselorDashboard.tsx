@@ -1,7 +1,7 @@
-import { listAppointments, updateAppointment, type Appointment } from "@/api/appointments";
+import { listAppointments, updateAppointment, type Appointment, getAppointmentAvailability, bookStudentAppointment } from "@/api/appointments";
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
 // ... existing imports ...
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
@@ -44,6 +44,8 @@ export default function CounselorDashboard() {
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const [refreshingAppointments, setRefreshingAppointments] = useState(false);
+  const [calendarView, setCalendarView] = useState(false);
+  const [calWeekOffset, setCalWeekOffset] = useState(0);
   const navigate = useNavigate();
   
   const [students, setStudents] = useState<any[]>([]);
@@ -209,9 +211,15 @@ export default function CounselorDashboard() {
     { label: "Avg Campus WRS", value: (loading || analyticsLoading) ? "—" : avgCampusWrs, icon: Activity, action: () => document.getElementById("analytics-section")?.scrollIntoView({ behavior: "smooth" }) },
   ];
 
+  const pendingConfirmation = useMemo(() => {
+    return appointments.filter(
+      a => a.status === "booked" && a.booking_source === "student_portal" && new Date(a.start_time) > new Date()
+    );
+  }, [appointments]);
+
   const filteredAppointments = useMemo(() => {
     let r = [...appointments];
-    
+
     // Status Filter
     if (sessionFilter === "Upcoming") {
       r = r.filter(a => a.status === "booked" && new Date(a.start_time) > new Date());
@@ -223,7 +231,7 @@ export default function CounselorDashboard() {
 
     // Search Filter
     if (search) {
-      r = r.filter(a => 
+      r = r.filter(a =>
         (a.student_full_name || "").toLowerCase().includes(search.toLowerCase()) ||
         (a.student_id || "").toLowerCase().includes(search.toLowerCase())
       );
@@ -390,6 +398,64 @@ export default function CounselorDashboard() {
           </div>
         ) : (
           <div className="surface-card p-4 md:p-6 animate-fade-in">
+            {/* Pending confirmation requests */}
+            {pendingConfirmation.length > 0 && (
+              <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bell className="h-4 w-4 text-amber-500" />
+                  <span className="font-semibold text-sm text-amber-600 dark:text-amber-400">
+                    {pendingConfirmation.length} session request{pendingConfirmation.length > 1 ? "s" : ""} awaiting your confirmation
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {pendingConfirmation.map((a) => (
+                    <div key={a.id} className="flex items-center justify-between rounded-xl bg-background/60 px-3 py-2 text-sm">
+                      <div>
+                        <Link to={`/counselor/student/${a.student_id}`} className="font-medium hover:underline text-primary text-xs">
+                          {a.student_full_name}
+                        </Link>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(a.start_time).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          {" · "}
+                          {new Date(a.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 border border-emerald-500/20"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await updateAppointment(a.id, { status: "booked" } as any);
+                              toast.success(`Session with ${a.student_full_name} confirmed`);
+                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, booking_source: "psychologist_manual" as any } : x));
+                            } catch { toast.error("Failed to confirm"); }
+                          }}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1" /> Confirm
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                          onClick={async () => {
+                            try {
+                              await updateAppointment(a.id, { status: "cancelled" });
+                              toast.success("Session request declined");
+                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, status: "cancelled" as const } : x));
+                            } catch { toast.error("Failed to decline"); }
+                          }}
+                        >
+                          <XCircle className="h-3.5 w-3.5 mr-1" /> Decline
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
               <div>
                 <h2 className="font-display text-lg md:text-2xl font-bold">Session Schedule</h2>
@@ -397,6 +463,15 @@ export default function CounselorDashboard() {
               </div>
               
               <div className="flex flex-col md:flex-row items-center gap-3">
+                <Button
+                  onClick={() => setCalendarView(v => !v)}
+                  variant="outline"
+                  size="sm"
+                  className="h-10"
+                >
+                  <LayoutGrid className="h-4 w-4 mr-2" />
+                  {calendarView ? "List view" : "Calendar view"}
+                </Button>
                 <Button
                   onClick={async () => {
                     setRefreshingAppointments(true);
@@ -443,6 +518,75 @@ export default function CounselorDashboard() {
               </div>
             </div>
 
+            {calendarView ? (
+              (() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const weekStart = new Date(today);
+                weekStart.setDate(today.getDate() - today.getDay() + calWeekOffset * 7);
+                const weekDays = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(weekStart);
+                  d.setDate(weekStart.getDate() + i);
+                  return d;
+                });
+                const hours = Array.from({ length: 9 }, (_, i) => i + 9); // 9am-5pm
+                const apptsByDayHour = (day: Date, hour: number) =>
+                  filteredAppointments.filter(a => {
+                    const d = new Date(a.start_time);
+                    return d.toDateString() === day.toDateString() && d.getHours() === hour;
+                  });
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <Button size="sm" variant="outline" onClick={() => setCalWeekOffset(o => o - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                      <span className="text-sm font-semibold">
+                        {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                      <Button size="sm" variant="outline" onClick={() => setCalWeekOffset(o => o + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[700px]">
+                        <div className="grid grid-cols-8 gap-0 border border-border rounded-xl overflow-hidden text-xs">
+                          <div className="bg-muted/30 p-2 border-r border-border text-center text-muted-foreground font-medium">Time</div>
+                          {weekDays.map(day => (
+                            <div key={day.toDateString()} className={cn("bg-muted/30 p-2 text-center border-r last:border-r-0 border-border font-medium", day.toDateString() === new Date().toDateString() && "bg-primary/10")}>
+                              <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
+                              <div className="text-muted-foreground">{day.getDate()}</div>
+                            </div>
+                          ))}
+                          {hours.map(hour => (
+                            <>
+                              <div key={`hour-${hour}`} className="border-t border-r border-border p-2 text-right text-muted-foreground bg-muted/10">
+                                {hour === 12 ? "12 PM" : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                              </div>
+                              {weekDays.map(day => {
+                                const slotAppts = apptsByDayHour(day, hour);
+                                return (
+                                  <div key={day.toDateString() + hour} className={cn("border-t border-r last:border-r-0 border-border p-1 min-h-[48px]", day.toDateString() === new Date().toDateString() && "bg-primary/5")}>
+                                    {slotAppts.map(a => (
+                                      <Link key={a.id} to={`/counselor/student/${a.student_id}`} className={cn("block rounded px-1.5 py-1 mb-0.5 text-[10px] font-medium truncate", a.is_crisis ? "bg-destructive/15 text-destructive" : a.booking_source === "student_portal" ? "bg-amber-500/15 text-amber-600" : "bg-primary/15 text-primary")}>
+                                        {a.student_full_name || a.student_id}
+                                        {a.is_crisis && " 🔴"}
+                                        {a.booking_source === "student_portal" && " ⏳"}
+                                      </Link>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded bg-primary/30" /> Confirmed</div>
+                      <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded bg-amber-500/30" /> ⏳ Pending confirmation</div>
+                      <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded bg-destructive/30" /> 🔴 Crisis</div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -478,7 +622,9 @@ export default function CounselorDashboard() {
                         <td className="p-3">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium">{a.student_full_name}</span>
+                              <Link to={`/counselor/student/${a.student_id}`} className="font-medium hover:underline text-primary">
+                                {a.student_full_name}
+                              </Link>
                               {a.is_crisis && (
                                 <span className="bg-destructive/15 text-destructive text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
                                   🔴 Crisis
@@ -523,8 +669,9 @@ export default function CounselorDashboard() {
                 </tbody>
               </table>
             </div>
-            
-            {pagination && pagination.total > 10 && (
+            )}
+
+            {!calendarView && pagination && pagination.total > 10 && (
               <div className="flex justify-between items-center mt-6 pt-4 border-t border-border/60 text-xs text-muted-foreground">
                 <div>
                   Showing {offset + 1}-{Math.min(offset + 10, pagination.total)} of {pagination.total} sessions

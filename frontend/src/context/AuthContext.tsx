@@ -48,6 +48,18 @@ function decodeJWT(token: string): JWTPayload | null {
   }
 }
 
+// Helper: Returns true if the JWT is expired or within `thresholdSec` of expiry
+function isTokenExpiredOrExpiring(token: string, thresholdSec = 120): boolean {
+  try {
+    const decoded = decodeJWT(token);
+    if (!decoded || typeof (decoded as any).exp !== "number") return true;
+    const expiresIn = (decoded as any).exp - Math.floor(Date.now() / 1000);
+    return expiresIn < thresholdSec;
+  } catch {
+    return true;
+  }
+}
+
 // Helper: Validate that token and user both exist
 function hasValidSession(token: string | null, user: JWTPayload | null): boolean {
   return !!(token && token.trim() && user);
@@ -98,24 +110,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // ── Both token and user exist, attempt to refresh ──
+      // ── If JWT is still valid for 2+ minutes, skip the refresh round-trip ──
+      if (storedToken && !isTokenExpiredOrExpiring(storedToken)) {
+        setIsLoading(false);
+        return;
+      }
+
+      // ── Token expired or expiring soon — refresh via cookie ──
       try {
         const response = await refreshToken();
         const decoded = decodeJWT(response.access_token);
 
         if (decoded) {
-          // Refresh successful, update with new token
           setAccessToken(response.access_token);
           setUser(decoded);
           localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
           localStorage.setItem(USER_KEY, JSON.stringify(decoded));
         } else {
-          // Refresh returned invalid token, clear session
           clearAuthState();
         }
-      } catch (error) {
-        // Refresh failed (401, network error, etc.) → clear session
-        // but don't spam errors during initialization
+      } catch {
         clearAuthState();
       } finally {
         setIsLoading(false);

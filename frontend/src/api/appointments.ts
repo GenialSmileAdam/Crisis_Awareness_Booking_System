@@ -118,3 +118,17 @@ export async function updateAppointment(
 export async function deleteAppointment(id: string): Promise<void> {
   return apiRequest<void>("DELETE", `/appointments/${id}`);
 }
+
+export interface NextAvailableSlot {
+  date: string;
+  slot: string;
+  psychologist_id: string;
+  psychologist_name: string | null;
+}
+
+/**
+ * Find the next available appointment slot across all psychologists (student).
+ */
+export async function getNextAvailableSlot(): Promise<NextAvailableSlot | null> {
+  return apiRequest<NextAvailableSlot | null>("GET", "/appointments/next-available");
+}

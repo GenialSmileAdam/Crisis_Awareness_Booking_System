@@ -7,15 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ALERTS, FACULTY_WRS, STUDENTS, colorFromWrs, tierFromWrs, downloadCSV, trendData } from "@/data/mock";
-import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { getRiskAlerts, getRiskCohort } from "@/api/riskScores";
 import { listStudents } from "@/api/students";
 import { getRealAnalytics } from "@/api/analytics";
 import { adminSidebarItems } from "@/data/sidebar";
 import { AdminOnboardingSlides } from "@/components/AdminOnboardingSlides";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This Semester" } as const;
 type Range = keyof typeof RANGE_LABELS;
@@ -41,6 +43,11 @@ export default function AdminDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [insights, setInsights] = useState<any>({});
+  const [tierModal, setTierModal] = useState<{ tier: string; students: any[] } | null>(null);
+
+  // Derived from range — must be declared before the useEffect that depends on it
+  const days = range === "week" ? 7 : range === "month" ? 30 : 90;
+  const trend = useMemo(() => trendData(days), [days]);
 
   // Fetch all data on component mount
   useEffect(() => {
@@ -49,8 +56,8 @@ export default function AdminDashboard() {
         setLoading(true);
         setError(null);
         const [studentsData, alertsData, cohortData] = await Promise.all([
-          listStudents(10, 0),
-          getRiskAlerts(10, 0),
+          listStudents(100, 0),
+          getRiskAlerts(100, 0),
           getRiskCohort()
         ]);
         setStudents(studentsData.data || []);
@@ -75,11 +82,14 @@ export default function AdminDashboard() {
       }
     };
     fetchAll();
+  }, []);
 
+  useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         setAnalyticsLoading(true);
-        const data = await getRealAnalytics();
+        setAnalyticsError(false);
+        const data = await getRealAnalytics(days);
         setAnalytics(data.charts);
         setInsights(data.insights || {});
       } catch (err) {
@@ -89,10 +99,13 @@ export default function AdminDashboard() {
       }
     };
     fetchAnalytics();
-  }, []);
+  }, [days]);
 
-  const days = range === "week" ? 7 : range === "month" ? 30 : 90;
-  const trend = useMemo(() => trendData(days), [days]);
+  const openTierModal = (tierName: string) => {
+    const tierLower = tierName.toLowerCase();
+    const tierStudents = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
+    setTierModal({ tier: tierName, students: tierStudents });
+  };
 
   const tierData = useMemo(() => {
     // Count alerts by tier
@@ -373,18 +386,18 @@ export default function AdminDashboard() {
               <>
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3} onClick={(d: any) => { setTierFilter(d.name); setPagination(p => ({ ...p, offset: 0 })); }} cursor="pointer">
+                    <Pie data={riskDistributionData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3} onClick={(d: any) => { setTierFilter(d.name); setPagination(p => ({ ...p, offset: 0 })); openTierModal(d.name); }} cursor="pointer">
                       {riskDistributionData.map((d, i) => <Cell key={i} fill={d.color} opacity={tierFilter && tierFilter !== d.name ? 0.3 : 1} />)}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} 
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex flex-wrap justify-center gap-3 text-xs">
                   {riskDistributionData.map((d) => (
-                    <button key={d.name} onClick={() => { setTierFilter(d.name === tierFilter ? null : d.name); setPagination(p => ({ ...p, offset: 0 })); }} className="flex items-center gap-1.5">
+                    <button key={d.name} onClick={() => { setTierFilter(d.name === tierFilter ? null : d.name); setPagination(p => ({ ...p, offset: 0 })); openTierModal(d.name); }} className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full" style={{ background: d.color }} /> {d.name} ({d.value})
                     </button>
                   ))}
@@ -423,10 +436,10 @@ export default function AdminDashboard() {
                       contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
                     />
-                    <Bar dataKey="green" name="Green" stackId="a" fill="#A8FF3E" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
-                    <Bar dataKey="amber" name="Amber" stackId="a" fill="#FF8C42" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
-                    <Bar dataKey="red" name="Red" stackId="a" fill="#FF4560" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
-                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#B00020" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); }} />
+                    <Bar dataKey="green" name="Green" stackId="a" fill="#A8FF3E" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Green"); }} />
+                    <Bar dataKey="amber" name="Amber" stackId="a" fill="#FF8C42" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Amber"); }} />
+                    <Bar dataKey="red" name="Red" stackId="a" fill="#FF4560" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Red"); }} />
+                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#B00020" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Critical"); }} />
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="flex gap-4 text-xs mt-3 justify-center">
@@ -741,7 +754,11 @@ export default function AdminDashboard() {
                     
                     return (
                       <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
-                        <td className="p-3 font-medium">{a.student_id}</td>
+                        <td className="p-3 font-medium">
+                          <Link to={`/counselor/student/${a.student_id}`} className="hover:underline text-primary">
+                            {a.student_id}
+                          </Link>
+                        </td>
                         <td className="p-3 text-muted-foreground">—</td>
                         <td className="p-3 text-muted-foreground">{a.faculty || "—"}</td>
                         <td className="p-3"><span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>{formatWRS(a.wrs_score)}</span></td>
@@ -827,7 +844,88 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+        {/* WRS over time by faculty/department */}
+        {analytics?.wrs_by_faculty && analytics.wrs_by_faculty.length > 0 && (
+          <div className="glass border border-border rounded-3xl p-6">
+            <div className="label-eyebrow mb-1">WRS by department</div>
+            <div className="font-display text-lg font-bold mb-1">Wellness risk trend — per faculty</div>
+            <p className="text-xs text-muted-foreground mb-4">Average WRS over time for each academic department. Helps identify which faculties need additional counsellor support.</p>
+            {analyticsLoading ? (
+              <div className="h-60 bg-muted rounded-lg animate-pulse" />
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={analytics.wrs_by_faculty} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <defs>
+                      {(analytics.faculty_list || []).map((fac: string, i: number) => {
+                        const colors = ["#6C3FE8", "#FF8C42", "#A8FF3E", "#FF4560", "#38BDF8", "#F472B6"];
+                        const color = colors[i % colors.length];
+                        return (
+                          <linearGradient key={fac} id={`facGrad${i}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={color} stopOpacity={0} />
+                          </linearGradient>
+                        );
+                      })}
+                    </defs>
+                    <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} domain={[0, 100]} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                      formatter={(v: any) => [`${v} / 100`, ""]}
+                    />
+                    <Legend />
+                    {(analytics.faculty_list || []).map((fac: string, i: number) => {
+                      const colors = ["#6C3FE8", "#FF8C42", "#A8FF3E", "#FF4560", "#38BDF8", "#F472B6"];
+                      const color = colors[i % colors.length];
+                      return (
+                        <Area key={fac} type="monotone" dataKey={fac} name={fac} stroke={color} strokeWidth={2} fill={`url(#facGrad${i})`} dot={false} connectNulls />
+                      );
+                    })}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Tier students modal */}
+      <Dialog open={!!tierModal} onOpenChange={(o) => !o && setTierModal(null)}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              <span style={{ color: tierModal ? colorFromWrs(tierModal.tier === "Green" ? 20 : tierModal.tier === "Amber" ? 50 : tierModal.tier === "Red" ? 75 : 90) : undefined }}>
+                {tierModal?.tier}
+              </span>{" "}
+              tier students ({tierModal?.students.length ?? 0})
+            </DialogTitle>
+          </DialogHeader>
+          {tierModal?.students.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No students in this tier.</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {tierModal?.students.map((s: any) => {
+                const color = colorFromWrs(s.wrs_score || 0);
+                return (
+                  <div key={s.student_id} className="flex items-center justify-between py-3">
+                    <div>
+                      <Link to={`/counselor/student/${s.student_id}`} onClick={() => setTierModal(null)} className="font-medium text-sm hover:underline text-primary">
+                        {s.student_id}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">{s.faculty || "—"}</div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>
+                      {formatWRS(s.wrs_score)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
     </>
   );

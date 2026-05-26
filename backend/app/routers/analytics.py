@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -10,10 +10,11 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/real-data")
 async def get_real_analytics(
+    days: int = Query(default=30, ge=7, le=365),
     db: AsyncSession = Depends(get_db),
     current_user: dict = require_roles("admin", "psychologist"),
 ):
-    charts = await get_real_chart_data(db)
+    charts = await get_real_chart_data(db, days=days)
     insights = generate_ai_insights(charts)
     return {"success": True, "data": {"charts": charts, "insights": insights}}
 

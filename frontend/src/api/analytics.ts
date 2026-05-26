@@ -26,6 +26,6 @@ export async function getSummaryReport(): Promise<any> {
   return apiRequest<any>("GET", "/analytics/summary-report");
 }
 
-export async function getRealAnalytics(): Promise<any> {
-  return apiRequest("GET", "/analytics/real-data");
+export async function getRealAnalytics(days = 30): Promise<any> {
+  return apiRequest("GET", `/analytics/real-data?days=${days}`);
 }
