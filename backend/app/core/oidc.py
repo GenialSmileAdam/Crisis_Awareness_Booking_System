@@ -61,8 +61,8 @@ class OIDCProvider:
             if not key_data:
                 raise JWTError(f"Key {kid} not found in JWKS")
 
-            # Verify the token
-            payload = jwt.verify(
+            # python-jose verifies signature and claims during decode.
+            payload = jwt.decode(
                 token,
                 key_data,
                 algorithms=["RS256"],

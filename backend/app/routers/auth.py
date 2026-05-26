@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 import secrets
 import base64
 import hashlib
+from urllib.parse import urlencode
 
 from app.core.database import get_db
 from app.core.limiter import limiter
@@ -271,7 +272,11 @@ async def auth_callback(
         from app.core.config import settings
         frontend_url = settings.FRONTEND_URL
 
-        redirect_url = f"{frontend_url}?access_token={our_access_token}&user_type={'student' if user.role.value == 'student' else 'staff'}"
+        redirect_params = urlencode({
+            "access_token": our_access_token,
+            "user_type": "student" if user.role.value == "student" else "staff",
+        })
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{redirect_params}"
         response.status_code = 302
         response.headers["location"] = redirect_url
         return response
