@@ -61,8 +61,8 @@ export default function AuthCallback() {
           detail: { token: accessToken, user: decoded }
         }));
 
-        // Determine redirect URL based on user role
-        const role = decoded.user_type || userType;
+        // Determine redirect URL based on the 'role' field (from backend's determine_effective_role)
+        const role = decoded.role || decoded.user_type || userType;
         let redirectUrl = "/";
 
         if (role === "student") {
@@ -73,9 +73,12 @@ export default function AuthCallback() {
           redirectUrl = "/admin";
         }
 
-        // Navigate without page reload for seamless transition
-        navigate(redirectUrl);
-        toast.success("Welcome! You've been signed in with Campus One.");
+        // Wait for React to process the state update before navigating
+        // This ensures AuthContext has updated user state before StudentRoute/ProtectedRoute checks it
+        setTimeout(() => {
+          navigate(redirectUrl);
+          toast.success("Welcome! You've been signed in with Campus One.");
+        }, 100);
       } catch (err) {
         console.error("Auth callback error:", err);
         toast.error("An error occurred during authentication");

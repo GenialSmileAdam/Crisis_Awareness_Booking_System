@@ -72,7 +72,8 @@ function hasValidSession(token: string | null, user: JWTPayload | null): boolean
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize state from localStorage with safe parsing
   const [user, setUser] = useState<JWTPayload | null>(() => {
-    return safeParseJSON(localStorage.getItem(USER_KEY), null);
+    const stored = localStorage.getItem(USER_KEY);
+    return safeParseJSON(stored, null);
   });
 
   const [accessToken, setAccessToken] = useState<string | null>(() => {
@@ -112,6 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(USER_KEY);
         setIsLoading(false);
         return;
+      }
+
+      // ── If we have a token and user from localStorage, update state immediately ──
+      if (storedToken && storedUser) {
+        setAccessToken(storedToken);
+        setUser(storedUser);
       }
 
       // ── If JWT is still valid for 2+ minutes, skip the refresh round-trip ──
@@ -161,8 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token, user: userData } = customEvent.detail;
 
       if (token && userData) {
+        // Immediately update both token and user
         setAccessToken(token);
         setUser(userData);
+        // Ensure loading is false so routes can render
+        setIsLoading(false);
       }
     };
 
