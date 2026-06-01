@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 import secrets
 import base64
 import hashlib
+import logging
 from urllib.parse import urlencode
 
 from app.core.database import get_db
@@ -131,21 +132,27 @@ async def campus_one_authorize(request: Request):
 
     # Store in session (use secure, httponly cookie)
     response = Response()
+
+    # Determine if we're in development (localhost)
+    is_dev = request.url.hostname == "localhost" or request.url.hostname == "127.0.0.1"
+
     response.set_cookie(
         key="oidc_state",
         value=state,
         httponly=True,
-        secure=True,
+        secure=not is_dev,  # Only require secure in production
         samesite="lax",
         max_age=600,  # 10 min expiry
+        path="/",
     )
     response.set_cookie(
         key="oidc_code_verifier",
         value=code_verifier,
         httponly=True,
-        secure=True,
+        secure=not is_dev,  # Only require secure in production
         samesite="lax",
         max_age=600,
+        path="/",
     )
 
     auth_url = oidc_provider.get_authorization_url(state, code_challenge)
@@ -159,40 +166,44 @@ async def auth_callback(
     code: str = None,
     state: str = None,
     error: str = None,
+    error_description: str = None,
     request: Request = None,
     response: Response = None,
     db = Depends(get_db),
 ):
     """Campus One OIDC callback handler."""
+    from app.core.config import settings
+
+    frontend_url = settings.FRONTEND_URL
+
+    # Handle Campus One errors
     if error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Campus One error: {error}",
-        )
+        error_msg = error_description or error
+        logging.warning(f"Campus One OAuth error: {error_msg}")
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
+        response.status_code = 302
+        response.headers["location"] = redirect_url
+        return response
 
     if not code or not state:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing code or state parameter",
-        )
-
-    # Verify state
-    stored_state = request.cookies.get("oidc_state")
-    if not stored_state or stored_state != state:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="State mismatch - possible CSRF attack",
-        )
-
-    # Get code verifier
-    code_verifier = request.cookies.get("oidc_code_verifier")
-    if not code_verifier:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Code verifier not found",
-        )
+        error_msg = "Missing authorization code or state"
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
+        response.status_code = 302
+        response.headers["location"] = redirect_url
+        return response
 
     try:
+        # Verify state for CSRF protection
+        stored_state = request.cookies.get("oidc_state")
+        if not stored_state or stored_state != state:
+            logging.warning("CSRF attack attempt detected: state mismatch")
+            raise ValueError("State mismatch - possible CSRF attack")
+
+        # Get code verifier for PKCE
+        code_verifier = request.cookies.get("oidc_code_verifier")
+        if not code_verifier:
+            raise ValueError("Code verifier not found in session")
+
         # Exchange code for tokens
         token_response = await oidc_provider.exchange_code_for_token(
             code, code_verifier
@@ -200,10 +211,7 @@ async def auth_callback(
         id_token = token_response.get("id_token")
 
         if not id_token:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No ID token in response",
-            )
+            raise ValueError("No ID token in Campus One response")
 
         # Verify and decode ID token
         claims = await oidc_provider.verify_id_token(id_token)
@@ -217,22 +225,21 @@ async def auth_callback(
         from app.services.auth_service import AuthService
         identity = await AuthService._get_identity_claims(db, user)
 
-        # Generate our own access token
+        # Generate our own access token with user info
         our_access_token = create_access_token(
             user_id=str(user.id),
             user_type=identity["user_type"],
             full_name=user.full_name,
             is_admin=identity["is_admin"],
-            staff_type=identity["staff_type"],
-            staff_id=identity["staff_id"],
-            student_id=identity["student_id"],
+            staff_type=identity.get("staff_type"),
+            staff_id=identity.get("staff_id"),
+            student_id=identity.get("student_id"),
         )
 
-        # Create our own refresh token
+        # Create and store refresh token
         from app.core.security import create_refresh_token, hash_token
         from datetime import datetime, timedelta, timezone
         from app.models.refresh_tokens import RefreshToken
-        from app.core.config import settings
 
         our_refresh_token = create_refresh_token(str(user.id))
         token_hash = hash_token(our_refresh_token)
@@ -253,7 +260,7 @@ async def auth_callback(
         response.delete_cookie("oidc_state", httponly=True, secure=True)
         response.delete_cookie("oidc_code_verifier", httponly=True, secure=True)
 
-        # Set our refresh token cookie
+        # Set refresh token cookie for automatic token refresh
         response.set_cookie(
             key="refresh_token",
             value=our_refresh_token,
@@ -264,17 +271,9 @@ async def auth_callback(
         )
 
         # Redirect to frontend with access token
-        frontend_url = f"{request.url.scheme}://{request.url.netloc}" if not request.headers.get(
-            "x-forwarded-proto"
-        ) else f"{request.headers.get('x-forwarded-proto')}://{request.headers.get('x-forwarded-host')}"
-
-        # Try to determine frontend URL from environment or referrer
-        from app.core.config import settings
-        frontend_url = settings.FRONTEND_URL
-
         redirect_params = urlencode({
             "access_token": our_access_token,
-            "user_type": "student" if user.role.value == "student" else "staff",
+            "user_type": identity["user_type"],
         })
         redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{redirect_params}"
         response.status_code = 302
@@ -283,8 +282,9 @@ async def auth_callback(
 
     except Exception as e:
         import logging
-        logging.error(f"Campus One callback error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Authentication failed: {str(e)}",
-        )
+        logging.error(f"Campus One callback error: {type(e).__name__}: {str(e)}")
+        error_msg = "Authentication failed. Please try again."
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
+        response.status_code = 302
+        response.headers["location"] = redirect_url
+        return response

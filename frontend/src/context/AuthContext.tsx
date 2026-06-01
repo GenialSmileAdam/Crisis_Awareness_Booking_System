@@ -154,6 +154,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, []);
 
+  // Listen for Campus One callback event
+  useEffect(() => {
+    const handleCampusOneCallback = (event: Event) => {
+      const customEvent = event as CustomEvent<{ token: string; user: JWTPayload }>;
+      const { token, user: userData } = customEvent.detail;
+
+      if (token && userData) {
+        setAccessToken(token);
+        setUser(userData);
+      }
+    };
+
+    window.addEventListener("auth:campus-one-callback", handleCampusOneCallback);
+    return () => window.removeEventListener("auth:campus-one-callback", handleCampusOneCallback);
+  }, []);
+
   const login = async (role: string, identifier: string, password: string): Promise<void> => {
     let response;
     if (role === "student") {
