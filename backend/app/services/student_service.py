@@ -125,6 +125,8 @@ class StudentService:
         )
         if filters.get("class_level"):
             query = query.where(Student.class_level == filters["class_level"])
+        if filters.get("faculty"):
+            query = query.where(Student.faculty == filters["faculty"])
         if filters.get("student_id_query"):
             student_id_query = filters["student_id_query"].strip()
             query = query.where(
@@ -137,7 +139,7 @@ class StudentService:
             query = query.where(Student.crisis_flag == filters["crisis_flag"])
         if filters.get("assigned_psychologist_id"):
             query = query.where(Student.assigned_psychologist_id == filters["assigned_psychologist_id"])
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Student.assigned_psychologist_id == current_user["id"])
 
         total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
@@ -146,6 +148,12 @@ class StudentService:
             {
                 "student_id": row.Student.student_id,
                 "class_level": row.Student.class_level,
+                "faculty": row.Student.faculty,
+                "department": row.Student.department,
+                "program": row.Student.program,
+                "phone_number": row.Student.phone_number,
+                "gender": row.Student.gender,
+                "year_of_study": row.Student.year_of_study,
                 "assigned_psychologist_id": row.Student.assigned_psychologist_id,
                 "guidance_counselor": row.Student.guidance_counselor,
                 "emergency_contact": row.Student.emergency_contact,
@@ -182,7 +190,7 @@ class StudentService:
             .join(users_table, users_table.c.id == Student.user_id)
             .where(Student.student_id == student_id, users_table.c.deleted_at.is_(None))
         )
-        if current_user and current_user.get("user_type") == "staff":
+        if current_user and current_user.get("role") == "psychologist":
             query = query.where(Student.assigned_psychologist_id == current_user["id"])
         row = (await db.execute(query)).first()
         if not row:
@@ -190,6 +198,12 @@ class StudentService:
         return {
             "student_id": row.Student.student_id,
             "class_level": row.Student.class_level,
+            "faculty": row.Student.faculty,
+            "department": row.Student.department,
+            "program": row.Student.program,
+            "phone_number": row.Student.phone_number,
+            "gender": row.Student.gender,
+            "year_of_study": row.Student.year_of_study,
             "assigned_psychologist_id": row.Student.assigned_psychologist_id,
             "guidance_counselor": row.Student.guidance_counselor,
             "emergency_contact": row.Student.emergency_contact,

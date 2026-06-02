@@ -1,29 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.services import analytics_service as service
-from app.routers.dependencies import require_roles
+
 from app.core.database import get_db
+from app.routers.dependencies import require_roles
+from app.services.analytics_service import generate_ai_insights, get_real_chart_data
 
-router = APIRouter(prefix="/analytics", tags=["Analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-class DashboardData(BaseModel):
-    charts: Dict[str, Any]  # e.g., {"risk_trend": [data points], "session_freq": [data points]}
 
-@router.post("/insights", dependencies=[require_roles("staff", "admin")])
-def get_dashboard_insights(data: DashboardData):
-    try:
-        insights = service.generate_insights(data.charts)
-        return {"insights": insights}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/real-data")
+async def get_real_analytics(
+    days: int = Query(default=30, ge=7, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("admin", "psychologist"),
+):
+    charts = await get_real_chart_data(db, days=days)
+    insights = generate_ai_insights(charts)
+    return {"success": True, "data": {"charts": charts, "insights": insights}}
 
-@router.get("/real-data", dependencies=[require_roles("staff", "admin")])
-async def get_real_analytics_data(db: AsyncSession = Depends(get_db)):
-    try:
-        chart_data = await service.get_real_chart_data(db)
-        insights = service.generate_insights(chart_data)
-        return {"charts": chart_data, "insights": insights}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/university")
+async def get_university_analytics(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("admin"),
+):
+    charts = await get_real_chart_data(db)
+    return {"success": True, "data": {"charts": charts, "insights": {}}}
+
+
+@router.get("/department/{dept_id}")
+async def get_department_analytics(
+    dept_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("admin", "psychologist"),
+):
+    charts = await get_real_chart_data(db, dept_id=dept_id)
+    return {"success": True, "data": {"charts": charts, "insights": {}}}
+
+
+@router.get("/summary-report")
+async def get_summary_report(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("admin"),
+):
+    charts = await get_real_chart_data(db)
+    return {"success": True, "data": {"charts": charts, "insights": {}}}

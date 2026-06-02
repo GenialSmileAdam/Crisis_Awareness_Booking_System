@@ -12,11 +12,14 @@ from app.models.wellness_checkins import WellnessCheckin, WellnessCheckinType
 from app.models.notifications import Notification
 from app.models.refresh_tokens import RefreshToken
 from app.models.audit_logs import AuditLog
+from app.models.session import Session
 from app.models.tables import sessions_table, users_table
 from app.models.feedback import Feedback
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 
 __all__ = [
     "User",
+    "Session",
     "Student",
     "Staff",
     "StaffType",
@@ -40,4 +43,6 @@ __all__ = [
     "sessions_table",
     "users_table",
     "feedbacks",
+    "PsychologistAvailability",
+    "PsychologistBusyBlock",
 ]

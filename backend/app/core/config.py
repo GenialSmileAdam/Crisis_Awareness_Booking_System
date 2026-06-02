@@ -18,16 +18,33 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str
 
-    GROQ_API_KEY: str
-    AI_ENABLED: bool = True
+    GROQ_API_KEY: str = ""
+    AI_ENABLED: bool = False
 
     GCAL_ENABLED: bool = False
     SMS_ENABLED: bool = False
 
-    EMAIL_ENABLED: bool = True
-    RESEND_API_KEY: str
-    EMAIL_FROM: str
-    EMAIL_TO: str
+    EMAIL_ENABLED: bool = False
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = ""
+    EMAIL_TO: str = ""
+
+    SAFESPACE_NOTIF: bool = True
+    SAFESPACE_CAMPUS_ONE_NOTIF: bool = True
+
+    # Campus One OIDC
+    CAMPUS_ONE_CLIENT_ID: str = ""
+    CAMPUS_ONE_CLIENT_SECRET: str = ""
+    CAMPUS_ONE_WEBHOOK_SECRET: str = ""
+    CAMPUS_ONE_ISSUER: str = "https://auth.campusone.com.ng"
+    CAMPUS_ONE_DISCOVERY_URL: str = "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration"
+    CAMPUS_ONE_JWKS_URL: str = "https://auth.campusone.com.ng/api/auth/jwks"
+    CAMPUS_ONE_SCOPES: str = "openid email profile academic notifications offline_access"
+    CAMPUS_ONE_REDIRECT_URI: str = ""
+
+    # Deployment URLs
+    FRONTEND_URL: str = "http://localhost:5173"
+    BACKEND_URL: str = "http://localhost:8000"
 
     class Config:
         env_file = (str(_repo_env_path), str(_backend_env_path))

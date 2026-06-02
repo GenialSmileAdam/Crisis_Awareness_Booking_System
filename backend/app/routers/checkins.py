@@ -1,227 +1,159 @@
-from datetime import datetime, timezone
-from typing import Any
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.students import Student
-from app.models.wellness_checkins import WellnessCheckin, WellnessCheckinType
-from app.utils.pagination import paginate
-from app.utils.response import success
-
+from app.models import WellnessCheckin, RiskScore
+from app.models.wellness_checkins import WellnessCheckinType
+from app.models.risk_scores import RiskTier
+from app.models.users import User
+from app.routers.auth import get_current_user
+from app.schemas.wellness_checkins import TestSubmission, TestResultResponse
+from app.services.risk_simple import calculate_wrs_and_tier
 
 router = APIRouter()
 
-
-class CheckinSubmit(BaseModel):
-    type: WellnessCheckinType
-    responses: dict[str, Any]
-
-
-def _score_checkin(
-    checkin_type: WellnessCheckinType, responses: dict[str, int]
-) -> tuple[int | None, str | None]:
-    if checkin_type not in {WellnessCheckinType.phq9, WellnessCheckinType.gad7}:
-        return None, None
-
-    score = sum(responses.values())
-
-    if checkin_type == WellnessCheckinType.phq9:
-        if score <= 4:
-            return score, "Minimal"
-        if score <= 9:
-            return score, "Mild"
-        if score <= 14:
-            return score, "Moderate"
-        if score <= 19:
-            return score, "Moderately Severe"
-        return score, "Severe"
-
-    if score <= 4:
-        return score, "Minimal"
-    if score <= 9:
-        return score, "Mild"
-    if score <= 14:
-        return score, "Moderate"
-    return score, "Severe"
-
-
-def _serialize_checkin(checkin: WellnessCheckin) -> dict[str, Any]:
-    return {
-        "id": str(checkin.id),
-        "student_id": checkin.student_id,
-        "type": checkin.type.value,
-        "responses": checkin.responses,
-        "score": checkin.score,
-        "severity_label": checkin.severity_label,
-        "submitted_at": checkin.submitted_at.isoformat(),
-    }
-
-
-def _current_week_bounds(now: datetime) -> tuple[datetime, datetime]:
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=now.weekday())
-    end = start + timedelta(days=7)
-    return start, end
-
-
-def _current_month_bounds(now: datetime) -> tuple[datetime, datetime]:
-    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if start.month == 12:
-        end = start.replace(year=start.year + 1, month=1)
-    else:
-        end = start.replace(month=start.month + 1)
-    return start, end
-
-
-from datetime import timedelta
-
-
-@router.post("")
-async def submit_checkin(
-    payload: CheckinSubmit,
+@router.post("/submit", response_model=TestResultResponse)
+async def submit_test(
+    data: TestSubmission,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ):
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-    student_id = current_user.get("student_id")
-    score, severity_label = _score_checkin(payload.type, payload.responses)
-
+    """
+    Submit a wellness test (PHQ-9, GAD-7, or pulse).
+    Saves the check-in and updates the student's risk score.
+    """
+    # 1. Save the check-in
     checkin = WellnessCheckin(
-        student_id=student_id,
-        type=payload.type,
-        responses=payload.responses,
-        score=score,
-        severity_label=severity_label,
+        student_id=data.student_id,
+        type=data.test_type,
+        responses=data.responses,
+        score=data.score,
     )
     db.add(checkin)
+    
+    # 2. Calculate WRS and tier (only for PHQ-9/GAD-7 that have a score)
+    wrs_score = 50.0
+    risk_tier = RiskTier.green
+    if data.score is not None and data.test_type in ("phq9", "gad7"):
+        wrs_score, tier_str = calculate_wrs_and_tier(data.test_type, data.score)
+        risk_tier = RiskTier(tier_str)  # Convert string to enum
+        
+        # Save risk score to history
+        risk = RiskScore(
+            student_id=data.student_id,
+            wrs_score=wrs_score,
+            tier=risk_tier
+        )
+        db.add(risk)
+    
     await db.commit()
-    await db.refresh(checkin)
-
-    response_data = _serialize_checkin(checkin)
-    response_data["crisis_escalation_required"] = payload.type == WellnessCheckinType.crisis
-    return success("Check-in submitted successfully", response_data)
-
+    
+    return TestResultResponse(
+        student_id=data.student_id,
+        test_type=data.test_type.value,  # Convert enum to string
+        wrs_score=wrs_score,
+        risk_tier=risk_tier.value  # Convert enum to string
+    )
 
 @router.get("/student/{student_id}")
-async def get_student_checkins(
+async def list_student_checkins(
     student_id: str,
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: int = 10,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ):
-    role = current_user["role"]
-    if role not in {"admin", "psychologist", "student"}:
+    """Get check-in history for a student."""
+    # Check permissions
+    if current_user["role"] not in ("admin", "psychologist") and current_user.get("student_id") != student_id:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    if role == "student" and current_user.get("student_id") != student_id:
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-    student_exists = await db.execute(select(Student.student_id).where(Student.student_id == student_id))
-    if student_exists.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    total = (
-        await db.execute(
-            select(func.count()).select_from(
-                select(WellnessCheckin.id)
-                .where(WellnessCheckin.student_id == student_id)
-                .subquery()
-            )
-        )
-    ).scalar_one()
-
-    rows = (
-        await db.execute(
-            select(WellnessCheckin)
-            .where(WellnessCheckin.student_id == student_id)
-            .order_by(WellnessCheckin.submitted_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-    ).scalars().all()
-
-    result = paginate(
-        data=[_serialize_checkin(row) for row in rows],
-        total=total,
-        limit=limit,
-        offset=offset,
+         
+    query = (
+        select(WellnessCheckin)
+        .where(WellnessCheckin.student_id == student_id)
+        .order_by(WellnessCheckin.submitted_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
-    return success("Check-ins retrieved successfully", result)
-
+    
+    total_query = select(func.count(WellnessCheckin.id)).where(WellnessCheckin.student_id == student_id)
+    
+    results = await db.execute(query)
+    total = await db.execute(total_query)
+    
+    checkins = results.scalars().all()
+    total_count = total.scalar()
+    
+    return {
+        "data": checkins,
+        "pagination": {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_next": offset + limit < total_count
+        }
+    }
 
 @router.get("/pending")
-async def get_pending_checkins(
+async def list_pending_checkins(
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    """Get pending check-ins for the current student."""
+    if current_user.get("role") != "student":
+        return []
 
     student_id = current_user.get("student_id")
+    if not student_id:
+        from app.models.students import Student
+        student = (await db.execute(
+            select(Student).where(Student.user_id == current_user["id"])
+        )).scalar_one_or_none()
+        if not student:
+            return []
+        student_id = student.student_id
+
+    from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
-    week_start, week_end = _current_week_bounds(now)
-    month_start, month_end = _current_month_bounds(now)
+    one_day_ago = now - timedelta(days=1)
 
-    pulse_exists = (
-        await db.execute(
-            select(WellnessCheckin.id).where(
+    # Check if they have submitted any check-ins today
+    recent_checkins = (await db.execute(
+        select(WellnessCheckin).where(
+            WellnessCheckin.student_id == student_id,
+            WellnessCheckin.submitted_at >= one_day_ago
+        )
+    )).scalars().all()
+
+    pending = []
+
+    if not recent_checkins:
+        pending.append({
+            "type": "pulse",
+            "message": "It's time for your daily wellness pulse check!"
+        })
+
+    # If student is elevated risk and hasn't assessed in 7 days, suggest a full test
+    from app.models.risk_scores import RiskScore
+    latest_score = (await db.execute(
+        select(RiskScore).where(RiskScore.student_id == student_id)
+        .order_by(RiskScore.computed_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    if latest_score and latest_score.tier in (RiskTier.amber, RiskTier.red, RiskTier.critical):
+        seven_days_ago = now - timedelta(days=7)
+        recent_tests = (await db.execute(
+            select(WellnessCheckin).where(
                 WellnessCheckin.student_id == student_id,
-                WellnessCheckin.type == WellnessCheckinType.pulse,
-                WellnessCheckin.submitted_at >= week_start,
-                WellnessCheckin.submitted_at < week_end,
+                WellnessCheckin.type.in_((WellnessCheckinType.phq9, WellnessCheckinType.gad7)),
+                WellnessCheckin.submitted_at >= seven_days_ago
             )
-        )
-    ).first() is not None
+        )).scalars().all()
 
-    phq9_exists = (
-        await db.execute(
-            select(WellnessCheckin.id).where(
-                WellnessCheckin.student_id == student_id,
-                WellnessCheckin.type == WellnessCheckinType.phq9,
-                WellnessCheckin.submitted_at >= month_start,
-                WellnessCheckin.submitted_at < month_end,
-            )
-        )
-    ).first() is not None
+        if not recent_tests:
+            pending.append({
+                "type": "phq9",
+                "message": f"Based on your latest {latest_score.tier.value} risk score, we recommend taking a new PHQ-9 wellness assessment."
+            })
 
-    gad7_exists = (
-        await db.execute(
-            select(WellnessCheckin.id).where(
-                WellnessCheckin.student_id == student_id,
-                WellnessCheckin.type == WellnessCheckinType.gad7,
-                WellnessCheckin.submitted_at >= month_start,
-                WellnessCheckin.submitted_at < month_end,
-            )
-        )
-    ).first() is not None
-
-    pending: list[dict[str, str]] = []
-    if not pulse_exists:
-        pending.append(
-            {
-                "type": WellnessCheckinType.pulse.value,
-                "message": "Weekly pulse check-in is pending for the current week.",
-            }
-        )
-    if not phq9_exists:
-        pending.append(
-            {
-                "type": WellnessCheckinType.phq9.value,
-                "message": "Monthly PHQ-9 check-in is pending for the current month.",
-            }
-        )
-    if not gad7_exists:
-        pending.append(
-            {
-                "type": WellnessCheckinType.gad7.value,
-                "message": "Monthly GAD-7 check-in is pending for the current month.",
-            }
-        )
-
-    return success("Pending check-ins retrieved successfully", pending)
+    return pending

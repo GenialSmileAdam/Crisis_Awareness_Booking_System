@@ -18,7 +18,7 @@ async def upload_students_csv(
     request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin", "staff"),
+    _: dict = require_roles("admin", "psychologist"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
@@ -37,18 +37,20 @@ async def upload_students_csv(
 async def list_students(
     student_id: str | None = None,
     class_level: str | None = None,
+    faculty: str | None = None,
     crisis_flag: bool | None = None,
     assigned_psychologist_id: UUID | None = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     result = await StudentService.get_all(
         db,
         {
             "student_id_query": student_id,
             "class_level": class_level,
+            "faculty": faculty,
             "crisis_flag": crisis_flag,
             "assigned_psychologist_id": assigned_psychologist_id,
         },
@@ -65,7 +67,7 @@ async def search_students_by_student_id(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     try:
         result = await StudentService.search_by_student_id(db, q, limit, offset, current_user=current_user)
@@ -78,7 +80,7 @@ async def search_students_by_student_id(
 async def get_student(
     id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     try:
         result = await StudentService.get_by_id(db, id, current_user=current_user)
@@ -94,7 +96,7 @@ async def update_student(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
@@ -132,7 +134,7 @@ async def get_student_sessions(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     try:
         result = await StudentService.get_sessions(db, id, limit, offset, current_user=current_user)
@@ -145,7 +147,7 @@ async def get_student_sessions(
 async def get_student_crisis_logs(
     id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "staff"),
+    current_user: dict = require_roles("admin", "psychologist"),
 ):
     try:
         result = await StudentService.get_crisis_logs(db, id, current_user=current_user)

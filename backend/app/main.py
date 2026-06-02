@@ -5,6 +5,7 @@ from app.routers import (
     analytics,
     appointments,
     auth,
+    availability,
     checkins,
     consent,
     forum,
@@ -46,9 +47,33 @@ app.include_router(consent.router, prefix="/consent", tags=["Consent"])
 app.include_router(checkins.router, prefix="/checkins", tags=["Check-ins"])
 app.include_router(risk_scores.router, prefix="/risk-scores", tags=["Risk Scores"])
 app.include_router(analytics.router)
+app.include_router(availability.router)
 app.include_router(forum.router)
 app.include_router(feedback.router)
 
 @app.get("/")
 async def root():
     return {"message": "PsyUnit API is running"}
+
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"Database connection or operation failed: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "success": False,
+            "error": {
+                "code": "SERVICE_UNAVAILABLE",
+                "message": "The database service is currently unavailable. Please try again later."
+            }
+        }
+    )

@@ -49,7 +49,7 @@ async def list_staff(
 @router.get("/psychologists")
 async def list_psychologists(
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin", "staff"),
+    _: dict = require_roles("admin", "staff", "student"),
 ):
     result = await StaffService.get_psychologists(db)
     return success("Psychologists retrieved successfully", result)

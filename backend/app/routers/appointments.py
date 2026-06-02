@@ -42,7 +42,7 @@ async def create_appointment(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("staff", "admin"),
+    current_user: dict = require_roles("psychologist", "admin"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
@@ -97,8 +97,12 @@ async def list_appointments(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("staff", "admin"),
+    current_user: dict = require_roles("psychologist", "admin", "student"),
 ):
+    # Students may only see their own appointments
+    if current_user.get("role") == "student":
+        student_id = current_user.get("student_id")
+
     result = await AppointmentService.get_all(
         db,
         {
@@ -114,6 +118,50 @@ async def list_appointments(
         current_user=current_user,
     )
     return success("Appointments retrieved successfully", result)
+
+
+@router.get("/next-available")
+async def get_next_available_slot(
+    db: AsyncSession = Depends(get_db),
+    _: dict = require_roles("student", "admin", "psychologist"),
+):
+    """Return the earliest available slot across all active psychologists."""
+    from app.models.staff import Staff, StaffType
+    from app.models.tables import users_table
+    from sqlalchemy import select as sa_select
+    from datetime import date as date_cls, timedelta as td
+
+    staff_rows = (
+        await db.execute(
+            sa_select(Staff)
+            .join(users_table, users_table.c.id == Staff.user_id)
+            .where(
+                Staff.staff_type == StaffType.psychologist,
+                users_table.c.is_active.is_(True),
+                users_table.c.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+
+    today = date_cls.today()
+    for offset in range(14):  # search up to 2 weeks ahead
+        check_date = today + td(days=offset)
+        for staff in staff_rows:
+            try:
+                slots = await AppointmentService.get_availability(db, staff.user_id, check_date)
+                if slots:
+                    return success(
+                        "Next available slot found",
+                        {
+                            "date": check_date.isoformat(),
+                            "slot": slots[0],
+                            "psychologist_id": str(staff.user_id),
+                            "psychologist_name": None,
+                        },
+                    )
+            except Exception:
+                continue
+    return success("No available slots found in the next 14 days", None)
 
 
 @router.get("/availability/{psychologist_id}")
@@ -134,7 +182,7 @@ async def get_appointment_availability(
 async def get_appointment(
     id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("staff", "admin"),
+    current_user: dict = require_roles("psychologist", "admin"),
 ):
     try:
         result = await AppointmentService.get_by_id(db, id, current_user=current_user)
@@ -150,7 +198,7 @@ async def update_appointment(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("staff", "admin"),
+    current_user: dict = require_roles("psychologist", "admin"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
