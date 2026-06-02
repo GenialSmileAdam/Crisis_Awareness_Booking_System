@@ -1,0 +1,4067 @@
+# AI Integration (/docs/ai-integration)
+
+
+
+These docs are available in machine-readable form so AI agents — both chat assistants and IDE copilots — can answer questions about Campus One accurately, without you having to copy-paste.
+
+## Endpoints [#endpoints]
+
+| URL                                                                                                               | Format                                       | Use it for                                           |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| [docs.campusone.com.ng/llms.txt](https://docs.campusone.com.ng/llms.txt)                                          | Index of every page (title + summary + link) | Quick context — feed this when token budget is tight |
+| [docs.campusone.com.ng/llms-full.txt](https://docs.campusone.com.ng/llms-full.txt)                                | Every page concatenated as plain text        | Full context — feed this for thorough Q\&A           |
+| `docs.campusone.com.ng/llms.mdx/docs/{slug}` ([example](https://docs.campusone.com.ng/llms.mdx/docs/permissions)) | One page as raw markdown                     | Targeted questions about a specific topic            |
+
+The format follows the [llms.txt convention](https://llmstxt.org), so any tooling that already understands `llms.txt` (Cursor, Continue, etc.) picks it up automatically.
+
+## Chat assistants [#chat-assistants]
+
+### ChatGPT / Claude.ai [#chatgpt--claudeai]
+
+Paste this prompt to start a session:
+
+```
+You are helping me integrate with Campus One, Nile University's identity
+platform. Use the documentation at https://docs.campusone.com.ng/llms-full.txt
+as the source of truth. If a question isn't answered there, say so instead
+of guessing.
+
+My question: <your question>
+```
+
+Both products can fetch URLs on demand, so they'll pull the file when needed.
+
+### IDE copilots (Claude Code, Cursor, Windsurf, Copilot) [#ide-copilots-claude-code-cursor-windsurf-copilot]
+
+Drop a rules file in your repo so your coding agent always treats these docs as the source of truth. The [`AGENTS.md`](https://agents.md) convention is read by most modern agents (Claude Code also reads `CLAUDE.md`; Cursor reads `.cursor/rules`):
+
+```md
+# Campus One integration
+
+This project integrates with Campus One (Nile University's identity platform)
+over OpenID Connect.
+
+## Source of truth
+- Index of docs: https://docs.campusone.com.ng/llms.txt
+- A single page as markdown: https://docs.campusone.com.ng/llms.mdx/docs/{slug}
+- Full corpus: https://docs.campusone.com.ng/llms-full.txt
+
+## Rules
+- Fetch and follow the docs above. Do NOT guess endpoint names, scope names,
+  permission flags, claim names, or webhook event names — verify against the docs.
+- OIDC is the only live SSO protocol. Do not implement SAML or plain OAuth flows.
+- PKCE (S256) is mandatory on all clients.
+- Keep the client secret and webhook secret server-side only.
+```
+
+## API agents (programmatic) [#api-agents-programmatic]
+
+Fetch the full corpus once and inject it as a **cached** system block — the docs are large and static, so prompt caching cuts cost and latency dramatically across turns:
+
+```ts
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic();
+
+const docs = await fetch("https://docs.campusone.com.ng/llms-full.txt")
+	.then((r) => r.text());
+
+const response = await client.messages.create({
+	model: "claude-opus-4-8",
+	max_tokens: 1024,
+	system: [
+		{
+			type: "text",
+			text: "You are an integration assistant for Campus One, Nile University's identity platform. Answer only from the reference docs below; if something isn't covered, say so instead of guessing.",
+		},
+		{
+			type: "text",
+			text: docs,
+			// Cache the docs corpus so repeat calls reuse it (5-minute TTL,
+			// refreshed on each hit). Huge savings vs. resending every turn.
+			cache_control: { type: "ephemeral" },
+		},
+	],
+	messages: [{ role: "user", content: userQuestion }],
+});
+```
+
+For larger apps, fetch the page index from `llms.txt` and selectively pull only the pages relevant to the user's question via `llms.mdx/docs/{slug}` — keeps your token bill predictable.
+
+## A ready-to-use system prompt [#a-ready-to-use-system-prompt]
+
+Paste this as the system prompt for any assistant helping with Campus One:
+
+```
+You are an expert integration engineer for Campus One, Nile University's
+identity platform. Your single source of truth is the documentation at
+https://docs.campusone.com.ng/llms-full.txt (fetch it if you can).
+
+Hard rules:
+- OpenID Connect is the only live SSO protocol. Never propose SAML or a bespoke
+  OAuth implementation — they are not available yet.
+- PKCE with S256 is mandatory on every client.
+- Verify endpoint paths, scope names (openid, profile, email, offline_access,
+  academic, calendar, notifications, roles, events), claim names, permission
+  flags, and webhook event names against the docs. Never invent them.
+- Secrets (client secret, webhook secret) stay server-side.
+- If the docs don't answer a question, say so rather than guessing.
+```
+
+## Updating [#updating]
+
+Both endpoints are regenerated whenever the docs are deployed. You don't need to refresh manually, but you may want to invalidate any local caches your tooling holds.
+
+***
+
+## AI Migration Prompts [#ai-migration-prompts]
+
+If you are pair-programming with an AI coding agent (such as Antigravity, Codex, Claude Code, Cursor, or Copilot) to integrate or migrate your Nile University application's authentication system, you can use these high-fidelity prompts to automate the code changes.
+
+These prompts instruct your coding agent to analyze your existing authentication codebase, replace it with the secure Campus One OIDC PKCE flow, and **safely delete all custom/legacy login screens, signup forms, and password recovery pages**.
+
+### 1. Master Prompt: Next.js Fullstack Apps (NextAuth / Auth.js / Better-Auth) [#1-master-prompt-nextjs-fullstack-apps-nextauth--authjs--better-auth]
+
+Copy and feed this prompt directly into your AI coding tool:
+
+```markdown
+Analyze this Next.js project and migrate our authentication layer to use Campus One SSO (OpenID Connect).
+
+Refer to the Campus One OIDC documentation at https://docs.campusone.com.ng/llms-full.txt as the absolute source of truth.
+
+Task requirements:
+1. Identify our current custom authentication code (e.g., credentials provider, email/password logic, NextAuth/Auth.js configuration, or Better-Auth setup).
+2. Replace it with the Campus One OIDC configuration using the generic OIDC/OAuth provider:
+   - Issuer: https://auth.campusone.com.ng
+   - Discovery URL: https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration
+   - Scopes: "openid", "profile", "email", "academic", "roles", "offline_access"
+   - Map student profile attributes from the decoded JWT claims: `student_id`, `study_level`, `level`, `faculty_id`, `department_id`, and `role`.
+3. Locate all custom/manual authentication UI views, such as:
+   - Login page / form (`/login`, `/signin`)
+   - Register page / form (`/register`, `/signup`)
+   - Password recovery / reset screens (`/forgot-password`, `/reset-password`)
+4. Completely delete these legacy login screens and routes. Do NOT replace them with our own login page — Campus One IS the login experience. Instead, make route guards / middleware AUTO-REDIRECT any unauthenticated visitor straight to the Campus One OIDC authorize flow. Because the student already has a Campus One session, they return signed in with no credential prompt (seamless SSO). Keep at most a single "Continue with Campus One" redirect link as a fallback for explicitly signed-out entry points — never a form.
+5. Update server-side middleware and route guards to enforce roles based on the primary `role` claim.
+6. Verify and compile the code to ensure strict TypeScript type safety.
+```
+
+***
+
+### 2. Template-Specific Micro-Prompts [#2-template-specific-micro-prompts]
+
+If you are using one of our integration templates, select the prompt below that matches your specific stack:
+
+#### Next.js + Supabase [#nextjs--supabase]
+
+```markdown
+You are an AI coding agent. We need to replace our custom Supabase email/password credentials sign-in with Campus One OIDC SSO.
+
+First, fetch and read Nile's Campus One OIDC integration documentation at https://docs.campusone.com.ng/llms-full.txt to understand exactly how Nile's OIDC authorization flow (with PKCE, scope consent checkpoints, and custom student claims) works and how it should be integrated.
+
+Analyze our Next.js + Supabase auth integration.
+1. Add Campus One as a Generic OIDC Provider (OAuth) inside our Supabase auth config.
+2. In our middleware and database hooks, capture the returned JWT claims (`student_id`, `study_level`, `level`, `faculty_id`, `department_id`) and store/sync them into our `public.profiles` database schema.
+3. Locate all of our custom email/password inputs, signup forms, and forgot password modals in `/app` or `/pages` and delete them entirely — do NOT build a replacement login page.
+4. Auto-redirect unauthenticated users straight into the Campus One flow via `supabase.auth.signInWithOAuth({ provider: 'keycloak', options: { redirectTo: '...', scopes: 'openid profile email academic roles' } })` pointing to the Campus One OIDC discovery endpoints at https://auth.campusone.com.ng. Trigger it from route guards/middleware so a student with an existing Campus One session is signed in automatically; keep only an optional single "Continue with Campus One" link for signed-out entry points.
+```
+
+#### Next.js + Express [#nextjs--express]
+
+```markdown
+You are an AI coding agent. Refactor our Next.js frontend and Express backend authentication to use Campus One SSO.
+
+First, fetch and read Nile's Campus One OIDC integration documentation at https://docs.campusone.com.ng/llms-full.txt to understand exactly how Nile's OIDC authorization flow (with PKCE, scope consent checkpoints, and custom student claims) works and how it should be integrated.
+
+1. In the Express backend, replace local session/passport email-password tactics with `openid-client` or generic JWT verification pointing to the Campus One JWKS (`https://auth.campusone.com.ng/api/auth/jwks`).
+2. Verify all incoming `Authorization: Bearer <JWT>` tokens using `jose` or `jsonwebtoken`, checking issuer (`https://auth.campusone.com.ng`) and audience.
+3. In the Next.js frontend, delete all custom login forms, password reset modules, and signup inputs — do NOT build a replacement login page.
+4. Auto-redirect unauthenticated users to the Express SSO login handler `/api/auth/login`, which initiates the OIDC PKCE redirect flow to Campus One. Drive this from route guards/middleware so a student with an existing Campus One session is signed in automatically (no credential prompt); keep at most a single "Continue with Campus One" link for signed-out entry points.
+```
+
+#### Next.js + Flask [#nextjs--flask]
+
+```markdown
+You are an AI coding agent. Refactor our Next.js frontend and Python/Flask backend to migrate from custom local authentication to Campus One OIDC.
+
+First, fetch and read Nile's Campus One OIDC integration documentation at https://docs.campusone.com.ng/llms-full.txt to understand exactly how Nile's OIDC authorization flow (with PKCE, scope consent checkpoints, and custom student claims) works and how it should be integrated.
+
+1. In Flask, replace local SQL/password hashing auth with `authlib` or standard JWT signature validation.
+2. Configure JWT decoding using Nile's Campus One JWKS endpoint (`https://auth.campusone.com.ng/api/auth/jwks`) to verify user integrity.
+3. Capture user claims: `student_id`, `level`, `faculty_id`, `department_id`, and `role` to populate Flask's `g.user` state.
+4. In Next.js, delete all custom sign-in sheets, credentials layouts, and signup panels — do NOT build a replacement login page.
+5. Auto-redirect unauthenticated users to Flask's OIDC authorize URL from route guards/middleware, so a student with an existing Campus One session is signed in automatically with no credential prompt. Keep at most a single "Continue with Campus One" link for signed-out entry points.
+```
+
+#### Next.js + Go [#nextjs--go]
+
+```markdown
+You are an AI coding agent. We want to clean up our Go API backend and Next.js frontend, switching from manual sign-ins to Campus One SSO.
+
+First, fetch and read Nile's Campus One OIDC integration documentation at https://docs.campusone.com.ng/llms-full.txt to understand exactly how Nile's OIDC authorization flow (with PKCE, scope consent checkpoints, and custom student claims) works and how it should be integrated.
+
+1. In the Go backend, integrate `coreos/go-oidc/v3` or generic JWT validation using the JWKS endpoint `https://auth.campusone.com.ng/api/auth/jwks`.
+2. Extract student attributes and roles directly from the parsed OIDC ID Token to construct context-based middleware.
+3. In the Next.js frontend, delete all custom login/register forms and reset endpoints — do NOT build a replacement login page.
+4. Auto-redirect unauthenticated users into the OIDC flow via the Go `/login` endpoint (which initializes the PKCE code-challenge redirect), driven from route guards/middleware so a student with an existing Campus One session is signed in automatically. Keep at most a single "Continue with Campus One" link for signed-out entry points.
+```
+
+#### React Router + Express [#react-router--express]
+
+```markdown
+You are an AI coding agent. Migrate our React Router SPA and Express API server from manual credential cookies to Campus One SSO.
+
+First, fetch and read Nile's Campus One OIDC integration documentation at https://docs.campusone.com.ng/llms-full.txt to understand exactly how Nile's OIDC authorization flow (with PKCE, scope consent checkpoints, and custom student claims) works and how it should be integrated.
+
+1. In the Express backend, remove standard credentials database verification. Mount an OIDC client middleware pointing to the Campus One OIDC provider at https://auth.campusone.com.ng.
+2. In the React Router app, remove all custom signup, signin, and reset-password routes and views — do NOT build a replacement login page.
+3. Auto-redirect unauthenticated users to the backend `/auth/sso` endpoint (which generates PKCE credentials and initiates the OIDC authorization code flow) from a route guard / loader, so a student with an existing Campus One session is signed in automatically with no credential prompt. Keep at most a single "Continue with Campus One" link for signed-out entry points.
+```
+
+***
+
+## AI Feature Prompts [#ai-feature-prompts]
+
+Auth is only the start. Once a student is signed in, your app can push to their Campus One dashboard, react to platform events, and gate features on custom roles. Use these prompts to have an agent implement each capability against the docs. They all assume your OIDC integration already works.
+
+### Send in-app notifications [#send-in-app-notifications]
+
+```markdown
+Add Campus One in-app notifications to this app.
+
+Source of truth: fetch https://docs.campusone.com.ng/llms.mdx/docs/notifications
+and https://docs.campusone.com.ng/llms.mdx/docs/app-api before writing code.
+
+Requirements:
+1. The user must have authorized the `notifications` scope and our app must have
+   the `permNotifications` flag enabled — surface a clear error if a 403 comes back.
+2. Implement a server-side `sendNotification({ title, body, type?, targetUrl? })`
+   helper that POSTs to https://api.campusone.com.ng/api/apps/notifications with the
+   user's `Authorization: Bearer <access_token>`. Do NOT send a userId — it is
+   resolved from the token.
+3. Respect field limits: title ≤ 128 chars, body ≤ 512 chars; type is one of
+   info | success | warning | action_required (use action_required only for items
+   needing explicit student action).
+4. Pass a stable `Idempotency-Key` header on every send so retries don't duplicate.
+5. Handle responses: 200 returns the created Notification record; 400/401/403 carry
+   a { code, status, message } error — log and surface appropriately.
+```
+
+### Push calendar events [#push-calendar-events]
+
+```markdown
+Add Campus One calendar events to this app so our schedules appear on students'
+Campus One dashboards (Upcoming / This Week).
+
+Source of truth: fetch https://docs.campusone.com.ng/llms.mdx/docs/events first.
+
+Requirements:
+1. Require the `events` scope AND our app's `permEvents` flag (it is OFF by default —
+   note in the README that an admin must enable it).
+2. Implement `createEvent({ title, description?, startsAt, endsAt?, location?, url? })`
+   that POSTs to https://api.campusone.com.ng/api/apps/events with the user's Bearer
+   token. startsAt/endsAt must be ISO 8601 strings. title ≤ 200, description ≤ 1000,
+   location ≤ 300 chars.
+3. Always send an `Idempotency-Key` derived from our internal event id so re-syncs
+   don't create duplicates.
+4. On 200, store the returned event id mapped to our internal record.
+```
+
+### Receive webhooks [#receive-webhooks]
+
+```markdown
+Implement a Campus One webhook receiver in our backend.
+
+Source of truth: fetch https://docs.campusone.com.ng/llms.mdx/docs/webhooks first.
+
+Requirements:
+1. Expose a single HTTPS POST endpoint (e.g. /webhooks/campus-one).
+2. Verify the `X-Campus-One-Signature` header (HMAC-SHA256 of the RAW body, keyed
+   with CAMPUS_ONE_WEBHOOK_SECRET) BEFORE parsing. Mount the raw body parser ahead
+   of any JSON middleware. Prefer the published verifier:
+   `import { verifyWebhook } from "@campus-one/auth/webhooks"`.
+3. Reject invalid signatures with 401. Respond 2xx quickly (within 5s) and process
+   asynchronously — delivery is fire-and-forget with no retries.
+4. Deduplicate using the `X-Campus-One-Delivery` id; order by `occurredAt`.
+5. Handle these events: user.created, user.updated, user.deleted, user.role_changed,
+   session.signed_in, session.signed_out. On session.signed_out, clear the user's
+   local session immediately (single logout). On user.role_changed, refresh the
+   user's cached role.
+   Do NOT handle events that aren't in the docs.
+```
+
+### Authorize with roles & external access [#authorize-with-roles--external-access]
+
+```markdown
+Add role-based authorization using Campus One claims.
+
+Source of truth: fetch https://docs.campusone.com.ng/llms.mdx/docs/external-access
+and https://docs.campusone.com.ng/llms.mdx/docs/permissions first.
+
+Requirements:
+1. Request the `roles` scope so the ID token includes `role` (primary), `roles`
+   (all global roles), and `custom_roles` (our app-specific roles like editor/tutor).
+   The top-level `role` claim is always present even without the scope.
+2. Build route guards: requireRole(...) checks the primary `role`; requireAppRole(...)
+   checks membership in `custom_roles`. Return 403 with a clear message on failure.
+3. Treat `role === "external"` (non-Nile users) explicitly — serve the appropriate
+   restricted views and never assume a student_id is present for them.
+4. Read identifiers (faculty_id, department_id, student_id) only when the `academic`
+   scope is granted; they may be absent for staff/external users.
+```
+
+### Review an existing integration [#review-an-existing-integration]
+
+```markdown
+Audit this codebase's Campus One integration against the official docs.
+
+Fetch https://docs.campusone.com.ng/llms-full.txt and use it as the source of truth.
+
+Check and report findings for:
+- OIDC: PKCE present (S256), state/CSRF protection, ID token verified against the
+  JWKS with iss + aud + exp checks, secrets kept server-side.
+- Scopes/claims: only valid scopes requested; no reliance on claims that require an
+  ungranted scope; no invented claim names.
+- App API: correct base URL, Bearer auth, field limits respected, Idempotency-Key on
+  writes, 200/400/401/403 handled.
+- Webhooks: raw-body signature verification, fast 2xx + async processing,
+  deduplication, single-logout handling.
+- Anything implementing SAML or a bespoke OAuth flow (these are NOT supported — flag
+  for removal in favour of OIDC).
+
+For each issue, cite the relevant doc section and propose a concrete fix. Do not
+change code yet — produce a prioritized findings list first.
+```
+
+
+# Public App API Reference (/docs/app-api)
+
+
+
+
+
+# Connected App API Reference [#connected-app-api-reference]
+
+Campus One exposes a RESTful gateway for registered third-party applications. Using this gateway, connected apps can interact programmatically with Nile's digital campus—pushing real-time notifications and weekly calendar events directly to students who have consented.
+
+To help developers build and debug integrations rapidly, our entire App API is self-documenting and strictly compliant with the **OpenAPI 3.0 specification**.
+
+***
+
+## Live OpenAPI Documentation [#live-openapi-documentation]
+
+Campus One hosts an interactive Reference UI and a raw JSON specification directly on the API server. These endpoints are completely public so that integration developers can explore schemas, return codes, and test payloads without requiring an access token:
+
+* **Interactive Reference UI**: [`https://api.campusone.com.ng/api/apps/docs`](https://api.campusone.com.ng/api/apps/docs)
+* **Raw OpenAPI Spec JSON**: [`https://api.campusone.com.ng/api/apps/spec.json`](https://api.campusone.com.ng/api/apps/spec.json)
+
+> \[!TIP]
+> You can import the raw `spec.json` directly into **Postman**, **Insomnia**, or code generation toolchains (e.g., OpenAPI Generator, Orval, or Swagger Codegen) to quickly scaffold client SDKs for your applications.
+
+***
+
+## Global Authentication [#global-authentication]
+
+All secure routes under `/api/apps/*` require token-based authentication using the student's OIDC access token.
+
+* **Header Name**: `Authorization`
+* **Format**: `Bearer <access_token>`
+
+The access token must be obtained through the [SSO Authorization flow](/docs/sso/oidc). The token securely encodes the authorizing student's ID and your registered client application ID, meaning you never need to supply sensitive identifiers (like a `userId`) inside request payloads.
+
+```http
+POST /api/apps/notifications HTTP/1.1
+Host: api.campusone.com.ng
+Authorization: Bearer c1_act_abc123xyz
+Content-Type: application/json
+```
+
+***
+
+## Safe Retries with Idempotency [#safe-retries-with-idempotency]
+
+Network failures or server timeouts can occasionally leave your application unsure if a write request succeeded. Re-sending the request blindly could cause unwanted side-effects (e.g., sending duplicate notifications or calendar events).
+
+To prevent duplicates, all write endpoints support safe retries via **Idempotency Keys**:
+
+* **Header Name**: `Idempotency-Key`
+* **Value**: A unique string of your choice (e.g., a UUID or a composite string like `booking-event-12345`).
+* **Scope**: Scoped uniquely per-app and per-endpoint.
+
+### How it Works [#how-it-works]
+
+When the API gateway receives a request with an `Idempotency-Key` header:
+
+1. **Cache Lookup**: The gateway checks our Cloudflare KV cache for an existing result associated with your client ID and that specific key.
+2. **Cache Hit**: If a matching key is found, the server immediately returns the *originally saved result* and status code directly from the cache—without executing any database writes or downstream actions.
+3. **Cache Miss**: If no matching key is found, the server processes the request, commits the database write, and saves the successful response payload in the cache (expires after **24 hours**) before returning the response.
+
+> \[!WARNING]
+> Idempotency keys must be unique. Sending different request payloads with the same `Idempotency-Key` will return the cached response of the *first* request, not the updated data.
+
+***
+
+## Status Codes & Errors [#status-codes--errors]
+
+Successful write requests return &#x2A;*`200 OK`** with the full created record as the JSON body.
+
+There are two error body shapes depending on where the request is rejected:
+
+**Authentication failures (`401`)** are rejected at the gateway and return a simple object:
+
+```json
+{ "error": "Invalid access token" }
+```
+
+**Validation and authorization failures (`400` / `403`)** come from the endpoint and return the richer error object (`code`, `status`, `message`, and — for validation — a `data.issues` array):
+
+```json
+{
+  "defined": false,
+  "code": "FORBIDDEN",
+  "status": 403,
+  "message": "Token lacks 'notifications' scope"
+}
+```
+
+| Status | Body shape                        | Meaning                                                                                         |
+| :----- | :-------------------------------- | :---------------------------------------------------------------------------------------------- |
+| `200`  | created record                    | Request succeeded; body is the created resource.                                                |
+| `400`  | `{ code, status, message, data }` | Payload failed validation (`data.issues` lists the offending fields).                           |
+| `401`  | `{ error }`                       | Bearer token missing, invalid, expired, or not bound to a user.                                 |
+| `403`  | `{ code, status, message }`       | Token is valid but lacks the required scope, or the app's matching permission flag is disabled. |
+
+The [interactive reference UI](https://api.campusone.com.ng/api/apps/docs) and [`spec.json`](https://api.campusone.com.ng/api/apps/spec.json) are the authoritative, always-current source for every schema and status code.
+
+***
+
+## Core API Endpoints [#core-api-endpoints]
+
+Explore detailed references for the core functional REST endpoints:
+
+* [Programmatic Notifications API](/docs/notifications): Send real-time push alerts to user shells.
+* [App Events API](/docs/events): Push calendar schedules and timetable bookings to student dashboards.
+
+
+# Application Management (/docs/app-management)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Welcome to the visual walkthrough of the **Campus One Developer Workspace**. This guide is designed to take you step-by-step through creating a new application, managing its configurations inside the app drawer, verifying subdomains, subscribing to webhooks, and understanding the user consent screen.
+
+***
+
+## The Developer Console [#the-developer-console]
+
+When you log in to the developer console at `http://localhost:3001/developer/apps`, you are welcomed by the **Developer Workspace Dashboard**. Here you can view all of your active applications, their categories, developer details, client identifiers, and real-time status badges (e.g., `live`, `beta`, `pending`).
+
+<img src="/images/portal/developer_dashboard.png" alt="Developer Dashboard" loading="eager" />
+
+To register a new application, click on the **Connect new app** button on the top right to launch the registration wizard.
+
+***
+
+## Application Registration Wizard [#application-registration-wizard]
+
+The wizard will guide you through a clean, multi-step process to securely register your application.
+
+<Steps>
+  <Step>
+    ### Step 1: General Info & Identity [#step-1-general-info--identity]
+
+    In this step, specify the core identity and look of your application. These details will be displayed to students on their login consent screens:
+
+    * **Name**: The display name of your application (e.g., `Clearance Tracker`).
+    * **Tagline**: A short, clear headline explaining what the application does.
+    * **Description**: A comprehensive paragraph explaining the purpose of the application.
+    * **Maintained By**: Select your maintaining department or unit (e.g., `Registrar Office`, `Bursary`, `Library`).
+    * **Accent Color & Initial**: Customize the theme color of your application's portal cards and login initials to align with your brand.
+    * **Category**: Select the primary focus area of your application (e.g., `Academic`, `Finance`, `Services`).
+
+        <img alt="Wizard Step 1: General Info & Identity" src="__img0" />
+  </Step>
+
+  <Step>
+    ### Step 2: Enrolling Endpoints & Subdomains [#step-2-enrolling-endpoints--subdomains]
+
+    Next, define how and where your application is hosted:
+
+    * **Homepage URL (Required)**: The public frontend home page of your application. Once configured, this becomes the primary launch link.
+    * **Redirect URL (OIDC Callback)**: The backend authentication callback endpoint where Campus One redirects users with verification tokens after successful sign-in.
+    * **Campus One Subdomain**: Request a custom subdomain under `*.campusone.com.ng` (e.g., `clearance`). This provides a seamless, trusted branding experience.
+    * **CNAME Target**: Specify your hosting target (e.g., `cname.vercel-dns.com` or custom server IP) to enable automated DNS mapping.
+
+        <img alt="Wizard Step 2: Enrolling Endpoints & Subdomains" src="__img1" />
+  </Step>
+
+  <Step>
+    ### Step 3: SSO Protocol & Scope Permissions [#step-3-sso-protocol--scope-permissions]
+
+    Choose your secure authentication protocol and request the specific student datasets required for your application to function:
+
+    * **Protocol**: Select **OIDC** — currently the only live protocol. SAML 2.0 and OAuth 2.0 are selectable as placeholders but are [planned, not yet available](/docs/sso/saml), so choose OIDC for any app you intend to ship.
+    * **Scope Permissions Checklist**: Check the specific scopes needed. Minimum recommended: `Profile` (display name) and `Email`. Additional scopes include `Academic` (student ID, level, faculty, department), `Notifications`, `Events`, `Calendar`, and `Roles`. See the full [permissions reference](/docs/permissions).
+
+        <img alt="Wizard Step 3: SSO Protocol & Scope Permissions" src="__img2" />
+  </Step>
+
+  <Step>
+    ### Step 4: Final Summary Review [#step-4-final-summary-review]
+
+    Review your application details, protocol selections, and requested scopes. Click **Connect app** to finalize the registration and save it to the database.
+
+        <img alt="Wizard Step 4: Final Summary Review" src="__img3" />
+  </Step>
+</Steps>
+
+***
+
+## Configuring Applications via the App Drawer [#configuring-applications-via-the-app-drawer]
+
+Once your application is created, clicking on its card in the Developer Dashboard opens a robust **Slide-out App Drawer** on the right side of the screen. The drawer organizes configurations into distinct tabs.
+
+### 1. Branding Tab [#1-branding-tab]
+
+Manage public metadata and branding styles. You can update the tagline, category, accent color, maintaining owner department, and the required **Homepage URL** here.
+
+> \[!WARNING]
+> Once a custom Campus One subdomain is approved and verified, editing the Homepage URL is locked by default to ensure routing integrity.
+
+<img alt="App Drawer: Branding Tab" src="__img4" />
+
+### 2. SSO Credentials Tab [#2-sso-credentials-tab]
+
+Retrieve and manage your client credentials.
+
+* **Client ID**: The public identifier for your app.
+* **Client Secret**: The sensitive key used to sign exchange tokens. Store this securely in your `.env` as `CAMPUS_ONE_CLIENT_SECRET`.
+* **Credential Rotation**: Click **Rotate client secret** or **Rotate encryption key** in case of credential leaks.
+
+<img alt="App Drawer: SSO Credentials Tab" src="__img5" />
+
+### 3. Scope Permissions Tab [#3-scope-permissions-tab]
+
+Add or remove requested scopes as your application evolves. Toggling permissions here dynamically updates the list of attributes requested on the user authorization screen.
+
+<img alt="App Drawer: Permissions Tab" src="__img6" />
+
+### 4. Custom Domain Tab [#4-custom-domain-tab]
+
+Manage your custom `*.campusone.com.ng` subdomain.
+
+* **Real-time DNS check**: Campus One utilizes Cloudflare's DoH (DNS-over-HTTPS) API to verify CNAME and TXT propagation.
+* **Self-Service Verification**: Once CNAME records are propagated, click the verification button. Successfully propagated domains automatically lock the fields to prevent accidental edits.
+* **Throttling Protection**: Visual status cards include a 15-second visual cooldown and a 5-check limit per drawer session to prevent API rate-limiting issues.
+
+<img alt="App Drawer: Custom Domain Tab" src="__img7" />
+
+### 5. Webhooks Tab [#5-webhooks-tab]
+
+Expose an HTTPS endpoint on your backend to receive real-time updates from Campus One:
+
+* Subscribe to important events (e.g. `user.role_changed`, `user.created`).
+* Copy the **Webhook Secret** to verify headers securely.
+
+<img alt="App Drawer: Webhooks Tab" src="__img8" />
+
+***
+
+## Student Consent & Authorization Screen [#student-consent--authorization-screen]
+
+When a student signs in to your application for the first time via Campus One, they are presented with a premium, reassuring **OIDC User Consent Dialog**.
+
+This screen:
+
+1. Dynamically pulls and renders your application's custom accent colors and brand initials.
+2. Lists the exact permissions requested by your application.
+3. Empowers students to explicitly **Allow access** or **Cancel** authentication.
+
+<img alt="OIDC Student Consent Screen" src="__img9" />
+
+***
+
+## Best Practices for Developers [#best-practices-for-developers]
+
+> \[!TIP]
+>
+> * Always run your production applications over `HTTPS` to prevent token interception.
+> * Store the Client Secret and Webhook Secret in secure environment variables, never commit them to public code repositories.
+> * Implement state parameters in your OIDC authentication requests to protect against CSRF (Cross-Site Request Forgery).
+
+
+# App Events API (/docs/events)
+
+
+
+
+
+# App Events API [#app-events-api]
+
+Connected applications can push calendar and scheduling events directly into a consented user's Campus One dashboard. Events appear in the **Upcoming** card (showing the next event) and in the **This Week** section (showing all events in the current calendar week).
+
+***
+
+## Architectural Flow [#architectural-flow]
+
+<Mermaid
+  chart="sequenceDiagram
+    autonumber
+    participant App as Connected App (3rd Party)
+    participant Auth as Campus One Identity (OIDC)
+    participant API as REST Gateway (POST /api/apps/events)
+    participant DB as Postgres Database
+    participant Shell as Campus One User Shell
+
+    App->>Auth: Request access token with scope &#x22;events&#x22;
+    Auth-->>App: Return OAuth Access Token
+    App->>API: POST /api/apps/events (Bearer Token)
+    API->>DB: Validate Token & Scope (&#x22;events&#x22;)
+    API->>DB: Write AppEvent (userId, appId, title, startsAt, …)
+    DB-->>API: Confirm Save
+    API-->>App: 200 OK (AppEvent record)
+    API->>Shell: Event appears in Upcoming / This Week on next dashboard load"
+/>
+
+***
+
+## Authentication & Authorization [#authentication--authorization]
+
+All event requests require standard OIDC **User Access Tokens**.
+
+* **Required Scope**: `events`
+* **Method**: Bearer Token Authentication
+* **Header format**: `Authorization: Bearer <access_token>`
+* **Admin prerequisite**: The `permEvents` flag must be enabled for your app in the Campus One admin console under **SSO Config → Permissions**.
+
+The recipient user and origin app are resolved from the access token — apps do not supply a `userId` in the request body, preventing spoofing.
+
+> \[!WARNING]
+> If the token is expired, lacks the `events` scope, or the app's `permEvents` flag is disabled, the gateway returns `401 Unauthorized` or `403 Forbidden`.
+
+***
+
+## REST API Reference [#rest-api-reference]
+
+### Create Event [#create-event]
+
+Push a calendar event to the authenticated user.
+
+`POST /api/apps/events`
+
+#### Headers [#headers]
+
+| Header            | Type     | Description                                                                                                                             |
+| :---------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authorization`   | `string` | **Required**. `Bearer <access_token>` with the `events` scope.                                                                          |
+| `Content-Type`    | `string` | **Required**. Must be `application/json`.                                                                                               |
+| `Idempotency-Key` | `string` | Optional. Supply a unique key to prevent duplicate events if the request is retried. Keys are scoped per app and expire after 24 hours. |
+
+#### Request Payload [#request-payload]
+
+| Field         | Type     | Required | Description                                                            |
+| :------------ | :------- | :------- | :--------------------------------------------------------------------- |
+| `title`       | `string` | **Yes**  | Event title (maximum 200 characters).                                  |
+| `description` | `string` | No       | Additional details about the event (maximum 1 000 characters).         |
+| `startsAt`    | `string` | **Yes**  | ISO 8601 datetime when the event begins (e.g. `2026-06-15T14:00:00Z`). |
+| `endsAt`      | `string` | No       | ISO 8601 datetime when the event ends.                                 |
+| `location`    | `string` | No       | Venue or meeting link (maximum 300 characters).                        |
+| `url`         | `string` | No       | Deep-link back into your app for full event details.                   |
+
+***
+
+## Example Integration [#example-integration]
+
+<Tabs items="['cURL', 'Node.js', 'Python']">
+  <Tab value="cURL">
+    ```bash
+    curl -X POST https://api.campusone.com.ng/api/apps/events \
+      -H "Authorization: Bearer c1_act_abc123xyz" \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: club-niletech-hackathon-2026" \
+      -d '{
+        "title": "NileTech Hackathon Finals",
+        "description": "Final round of the 2026 NileTech Hackathon. Teams present to judges.",
+        "startsAt": "2026-06-15T09:00:00+01:00",
+        "endsAt": "2026-06-15T17:00:00+01:00",
+        "location": "Engineering Lecture Theatre, Block C",
+        "url": "https://nilehub.nileuniversity.edu.ng/events/hackathon-2026"
+      }'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const createEvent = async () => {
+      const response = await fetch('https://api.campusone.com.ng/api/apps/events', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer c1_act_abc123xyz',
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'club-niletech-hackathon-2026'
+        },
+        body: JSON.stringify({
+          title: 'NileTech Hackathon Finals',
+          description: 'Final round of the 2026 NileTech Hackathon.',
+          startsAt: '2026-06-15T09:00:00+01:00',
+          endsAt: '2026-06-15T17:00:00+01:00',
+          location: 'Engineering Lecture Theatre, Block C',
+          url: 'https://nilehub.nileuniversity.edu.ng/events/hackathon-2026'
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`Failed to create event: ${err.message}`);
+      }
+
+      const result = await response.json();
+      console.log('Event created:', result.id);
+    };
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    headers = {
+        "Authorization": "Bearer c1_act_abc123xyz",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "club-niletech-hackathon-2026"
+    }
+
+    payload = {
+        "title": "NileTech Hackathon Finals",
+        "description": "Final round of the 2026 NileTech Hackathon.",
+        "startsAt": "2026-06-15T09:00:00+01:00",
+        "endsAt": "2026-06-15T17:00:00+01:00",
+        "location": "Engineering Lecture Theatre, Block C",
+        "url": "https://nilehub.nileuniversity.edu.ng/events/hackathon-2026"
+    }
+
+    res = requests.post(
+        "https://api.campusone.com.ng/api/apps/events",
+        json=payload,
+        headers=headers
+    )
+
+    if res.status_code == 201:
+        print("Event created! ID:", res.json()["id"])
+    else:
+        print("Failed:", res.status_code, res.text)
+    ```
+  </Tab>
+</Tabs>
+
+***
+
+## Response Schemas [#response-schemas]
+
+> \[!NOTE]
+> The live, always-accurate schemas are published at the [interactive API reference](https://api.campusone.com.ng/api/apps/docs). The example below is illustrative — IDs are opaque strings (cuids) with no fixed prefix.
+
+### 200 OK [#200-ok]
+
+The response body is the full created `AppEvent` record.
+
+```json
+{
+  "id": "clh83kf1a0001st09k4m2p9zx",
+  "userId": "clx8z2abc1230009ab12cd34",
+  "appId": "clw7a1def4560002gh56ij78",
+  "title": "NileTech Hackathon Finals",
+  "description": "Final round of the 2026 NileTech Hackathon.",
+  "startsAt": "2026-06-15T08:00:00.000Z",
+  "endsAt": "2026-06-15T16:00:00.000Z",
+  "location": "Engineering Lecture Theatre, Block C",
+  "url": "https://nilehub.nileuniversity.edu.ng/events/hackathon-2026",
+  "createdAt": "2026-05-28T10:00:00.000Z",
+  "updatedAt": "2026-05-28T10:00:00.000Z"
+}
+```
+
+### Error responses [#error-responses]
+
+A `401` (authentication) is rejected at the gateway and returns `{ "error": "..." }`. A `400` (validation) or `403` (authorization) comes from the endpoint and returns the richer `{ code, status, message }` object. See [Status Codes & Errors](/docs/app-api#status-codes--errors) for the canonical reference.
+
+| Status | Body                              | Cause                                                                                  |
+| :----- | :-------------------------------- | :------------------------------------------------------------------------------------- |
+| `400`  | `{ code, status, message, data }` | Required fields missing or invalid (e.g. `startsAt` is not a valid ISO 8601 datetime). |
+| `401`  | `{ error }`                       | Bearer token missing, invalid, expired, or not bound to a user.                        |
+| `403`  | `{ code, status, message }`       | Token lacks the `events` scope, or the app's `permEvents` flag is disabled.            |
+
+***
+
+## How Events Surface in the Dashboard [#how-events-surface-in-the-dashboard]
+
+| Section               | Behaviour                                                                                                                                                                                       |
+| :-------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Upcoming card**     | Shows the single next event with `startsAt ≥ now`, sorted ascending.                                                                                                                            |
+| **This Week section** | Shows all events whose `startsAt` falls within the current Monday–Sunday window. If no events exist this week, the section is retitled **Upcoming** and shows the next 5 future events instead. |
+
+Events from all apps the student has consented to are merged and sorted together by `startsAt`.
+
+***
+
+## Scope & Permission Requirements [#scope--permission-requirements]
+
+| Requirement                                 | Where it is set                                                                                                |
+| :------------------------------------------ | :------------------------------------------------------------------------------------------------------------- |
+| `events` scope in the OIDC token            | The student grants this during the OAuth consent flow.                                                         |
+| `permEvents = true` on the app's SSO Config | An admin enables this in the Campus One admin console under **Apps → \[Your App] → SSO Config → Permissions**. |
+
+Both must be satisfied for `POST /api/apps/events` to succeed.
+
+
+# External Access & Roles (/docs/external-access)
+
+
+
+# External Access & Roles [#external-access--roles]
+
+Campus One supports dynamic **External Access** controls, allowing developers to expand their applications beyond standard student and faculty groups to registered external (non-university) members.
+
+This guide details how to toggle external user support in the developer portal, how the global `"external"` user role behaves, and how OIDC token claims are mapped during the SSO integration flow.
+
+***
+
+## Enabling External Access [#enabling-external-access]
+
+By default, newly registered applications are hidden from non-university users. To allow external users to discover and sign into your application:
+
+1. Open the developer dashboard and click on your application.
+2. Navigate to the **Sign-In** tab.
+3. Scroll down to the **External access** card and toggle the switch to **Enabled**.
+
+```
+[ External Access Switch (Enabled) ]
+Let self-registered external (non-Nile) users discover and use this app without an explicit invite.
+```
+
+When enabled, your application is added to the public catalog of the external users' app directory, permitting self-registration and SSO login flows.
+
+***
+
+## How the `"external"` Role Works [#how-the-external-role-works]
+
+The &#x2A;*`"external"`** role is specifically designed for users who are **not affiliated with Nile University** (i.e., they are not university students, staff members, or administrators). This includes guest collaborators, external program assessors, or third-party service providers who require temporary or restricted access to specific campus applications.
+
+Unlike standard university students or faculty members, external users have restricted, opt-in access control constraints:
+
+* **Discovery**: They only see and load applications in their directory if the app's **External Access** switch is turned **ON**.
+* **Explicit Grants**: If the External Access switch is **OFF**, they can only access the application if an administrator explicitly grants them access via an **App Access Grant** (e.g. by sending them an invite link).
+
+***
+
+## Token Claims & Roles Mapping [#token-claims--roles-mapping]
+
+When an external user authenticates via SSO with your connected application, their global academic role and assigned custom roles are mapped into the OIDC ID Token payload.
+
+To access these roles, ensure your application requests the &#x2A;*`roles`** scope during the OIDC authorization flow:
+
+```
+scope=openid profile email roles
+```
+
+### OIDC Token Payload Claims [#oidc-token-payload-claims]
+
+When the `roles` scope is granted, the following claims are returned:
+
+1. **`role` (String)**: The user's primary academic role. For all invited or self-registered non-university users, this claim is always set to:
+   ```json
+   "role": "external"
+   ```
+2. **`roles` (Array of Strings)**: Merges the primary academic role (`"external"`) with any app-specific custom roles you have defined in the developer console (e.g., `"tutor"`, `"editor"`).
+   ```json
+   "roles": ["external", "editor", "moderator"]
+   ```
+3. **`custom_roles` (Array of Strings)**: Contains *only* your app-specific roles assigned to this user, excluding global roles.
+   ```json
+   "custom_roles": ["editor", "moderator"]
+   ```
+
+***
+
+## Example OIDC Decoded Token [#example-oidc-decoded-token]
+
+Below is an example of a decoded OIDC token returned for an invited external user with custom app roles:
+
+```json
+{
+  "iss": "https://auth.campusone.com.ng",
+  "sub": "usr_clx8z2abc123",
+  "aud": "app_client_id_456",
+  "exp": 1780000000,
+  "name": "Kenechi Nwosu",
+  "email": "kenechi.nwosu@example.com",
+  "role": "external",
+  "roles": [
+    "external",
+    "editor"
+  ],
+  "custom_roles": [
+    "editor"
+  ]
+}
+```
+
+Connected applications can safely leverage `role === "external"` or inspect the `custom_roles` array to authorize actions or serve specialized views within their user interfaces.
+
+
+# Campus One Developer Portal (/docs)
+
+
+
+Campus One is the central identity platform for Nile University. It lets students sign in once and access every connected campus app — no separate accounts needed.
+
+As a developer, you can register your app, obtain SSO credentials, and use Campus One as your identity provider in minutes.
+
+## What you get [#what-you-get]
+
+* **Single sign-on** — students authenticate with their Campus One account; your app receives a verified identity token over **OpenID Connect** (SAML 2.0 and OAuth 2.0 are planned)
+* **Rich user attributes** — access name, email, student ID, study level, faculty, and department (with student consent)
+* **Push to the student shell** — send in-app [notifications](/docs/notifications) and [calendar events](/docs/events) straight to a consenting student's dashboard
+* **Webhooks** — receive real-time events for profile and role changes, sign-in/out, and account lifecycle
+* **Custom roles & external access** — assign app-specific roles and open your app to non-Nile users
+* **Shared UI library** — install our shadcn components, theme, and fonts into your own project
+* **AI-ready docs** — `llms.txt` endpoints and ready-made prompts so ChatGPT, Claude, Cursor, and IDE copilots integrate accurately
+* **Developer dashboard** — manage credentials, monitor sign-in health, and update permissions from one place
+
+## Getting started [#getting-started]
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart" description="Connect an app and sign in a test user in a few minutes" />
+
+  <Card title="SSO Overview" href="/docs/sso" description="Understand the sign-in flow and token lifecycle" />
+
+  <Card title="OpenID Connect" href="/docs/sso/oidc" description="Set up OIDC — the live protocol for all new apps" />
+
+  <Card title="Permissions" href="/docs/permissions" description="See what data each scope returns and how to request it" />
+
+  <Card title="App API" href="/docs/app-api" description="Push notifications and calendar events to students via REST" />
+
+  <Card title="Notifications" href="/docs/notifications" description="Send real-time in-app notifications to consenting users" />
+
+  <Card title="Events" href="/docs/events" description="Push calendar events into the student dashboard" />
+
+  <Card title="Webhooks" href="/docs/webhooks" description="Receive real-time events from Campus One" />
+
+  <Card title="External Access & Roles" href="/docs/external-access" description="Open your app to external users and use custom roles" />
+
+  <Card title="Troubleshooting" href="/docs/troubleshooting" description="Fix common OIDC, API, and webhook errors fast" />
+
+  <Card title="Design System" href="/docs/design-system" description="Use our shadcn components, theme, and fonts in your own app" />
+
+  <Card title="AI Integration" href="/docs/ai-integration" description="Feed these docs to ChatGPT, Claude, Cursor, or any agent via llms.txt" />
+</Cards>
+
+## Onboarding flow [#onboarding-flow]
+
+1. An admin invites you as a developer — you receive a link to set your password
+2. Log in to the Campus One developer dashboard at `/developer/apps`
+3. Click **Connect app** and follow the wizard (choose protocol → add branding → enter endpoints → set permissions)
+4. Copy your **Client ID** and **Client Secret** (OIDC/OAuth 2.0) or download the **IdP metadata** (SAML)
+5. Configure your app with these credentials and point it at the Campus One endpoints
+6. Test a sign-in — the student is redirected back to your app with a verified token
+
+## Support [#support]
+
+Contact the Campus One platform team or open a ticket through the admin console.
+
+
+# Programmatic Notifications (/docs/notifications)
+
+
+
+
+
+# Programmatic Notifications API [#programmatic-notifications-api]
+
+Connected applications can dispatch transactional notifications directly to their authorized users' Campus One app shell in real-time. This guide details the integration flow, required authentication scopes, REST API specifications, and standard code examples.
+
+***
+
+## Architectural Flow [#architectural-flow]
+
+The notifications mechanism follows a secure OAuth/OIDC authorization model. Connected apps must be granted the `notifications` scope by the user during sign-in to dispatch messages.
+
+<Mermaid
+  chart="sequenceDiagram
+    autonumber
+    participant App as Connected App (3rd Party)
+    participant Auth as Campus One Identity (OIDC)
+    participant API as REST Gateway (POST /api/apps/notifications)
+    participant DB as Postgres Database
+    participant Shell as Campus One User Shell
+
+    App->>Auth: Request access token with scope &#x22;notifications&#x22;
+    Auth-->>App: Return OAuth Access Token
+    App->>API: POST /api/apps/notifications (Bearer Token)
+    API->>DB: Validate Token & Scope (&#x22;notifications&#x22;)
+    API->>DB: Write Notification (userId, appId, title, body, type, targetUrl)
+    DB-->>API: Confirm Save
+    API-->>App: 200 OK (Notification record)
+    API->>Shell: Real-time update (React Query refetch & unread count badge increment)"
+/>
+
+***
+
+## Authentication & Authorization [#authentication--authorization]
+
+All notification requests require standard OIDC **User Access Tokens**.
+
+* **Required Scope**: `notifications`
+* **Method**: Bearer Token Authentication
+* **Header format**: `Authorization: Bearer <access_token>`
+* **Admin prerequisite**: The `permNotifications` flag must be enabled for your app (it is on by default) under **Permissions** in the developer dashboard.
+
+When a connected app sends a notification, the **recipient user** and **origin app** are securely resolved from the OIDC Access Token record (`userId` is mapped to the token's authenticated owner, and `appId` is mapped to the registered client application). Therefore, connected apps do not need to supply a `userId` in the body payload—preventing any unauthorized spoofing of notifications.
+
+> \[!WARNING]
+> Access tokens are verified in real-time against active sessions. If the token is expired, revoked, or does not contain the `notifications` scope, the gateway immediately returns `401 Unauthorized` or `403 Forbidden`.
+
+***
+
+## REST API Reference [#rest-api-reference]
+
+### Send Notification [#send-notification]
+
+Send a push notification to a specific user.
+
+`POST /api/apps/notifications`
+
+#### Headers [#headers]
+
+| Header            | Type     | Description                                                                                                                                                                    |
+| :---------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authorization`   | `string` | **Required**. `Bearer <access_token>` containing the `notifications` scope.                                                                                                    |
+| `Content-Type`    | `string` | **Required**. Must be `application/json`.                                                                                                                                      |
+| `Idempotency-Key` | `string` | Optional. Supply a unique key to make retries safe — a repeated key returns the original notification instead of creating a duplicate. Scoped per app, expires after 24 hours. |
+
+#### Request Payload [#request-payload]
+
+| Field       | Type     | Required | Description                                                                                                         |
+| :---------- | :------- | :------- | :------------------------------------------------------------------------------------------------------------------ |
+| `title`     | `string` | **Yes**  | The notification title (Maximum 128 characters).                                                                    |
+| `body`      | `string` | **Yes**  | Detailed notification body message (Maximum 512 characters).                                                        |
+| `type`      | `string` | No       | Color theme identifier. Can be `info`, `success`, `warning`, or `action_required`. (Default: `info`).               |
+| `targetUrl` | `string` | No       | Destination deep-link/URL. Opens in a new secure tab when the user clicks the notification's primary action button. |
+
+> \[!NOTE]
+> &#x2A;*`action_required`** surfaces the notification prominently in the student dashboard's Action Required carousel — use it for time-sensitive items that need the student to take an explicit action (e.g. clearance steps, outstanding fees, consent forms). All other types (`info`, `success`, `warning`) appear only in the Recent Activity feed.
+
+***
+
+## Example Integration [#example-integration]
+
+<Tabs items="['cURL', 'Node.js', 'Python']">
+  <Tab value="cURL">
+    ```bash
+    curl -X POST https://api.campusone.com.ng/api/apps/notifications \
+      -H "Authorization: Bearer c1_act_abc123xyz" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "title": "Assignment Graded",
+        "body": "Your submission for CSC 401 has been reviewed. Grade: A-",
+        "type": "success",
+        "targetUrl": "https://portal.nileuniversity.edu.ng/courses/csc401"
+      }'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const sendNotification = async () => {
+      const response = await fetch('https://api.campusone.com.ng/api/apps/notifications', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer c1_act_abc123xyz',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: 'Assignment Graded',
+          body: 'Your submission for CSC 401 has been reviewed. Grade: A-',
+          type: 'success',
+          targetUrl: 'https://portal.nileuniversity.edu.ng/courses/csc401'
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`Failed to send notification: ${err.message}`);
+      }
+
+      const result = await response.json();
+      console.log('Notification dispatched:', result.id);
+    };
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    headers = {
+        "Authorization": "Bearer c1_act_abc123xyz",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "title": "Assignment Graded",
+        "body": "Your submission for CSC 401 has been reviewed. Grade: A-",
+        "type": "success",
+        "targetUrl": "https://portal.nileuniversity.edu.ng/courses/csc401"
+    }
+
+    res = requests.post(
+        "https://api.campusone.com.ng/api/apps/notifications",
+        json=payload,
+        headers=headers
+    )
+
+    if res.status_code == 200:
+        print("Notification sent successfully! ID:", res.json()["id"])
+    else:
+        print("Failed to dispatch:", res.status_code, res.text)
+    ```
+  </Tab>
+</Tabs>
+
+***
+
+## Response Schemas [#response-schemas]
+
+> \[!NOTE]
+> The live, always-accurate schemas are published at the [interactive API reference](https://api.campusone.com.ng/api/apps/docs). The examples below are illustrative.
+
+### 200 OK [#200-ok]
+
+Returned when the notification is created. The response body is the full created `Notification` record (the `id`, `unread` state and timestamps are server-generated).
+
+```json
+{
+  "id": "clh83kf1a0001st09k4m2p9zx",
+  "userId": "clx8z2abc1230009ab12cd34",
+  "appId": "clw7a1def4560002gh56ij78",
+  "title": "Assignment Graded",
+  "body": "Your submission for CSC 401 has been reviewed. Grade: A-",
+  "type": "success",
+  "unread": true,
+  "targetUrl": "https://portal.nileuniversity.edu.ng/courses/csc401",
+  "createdAt": "2026-05-28T10:00:00.000Z",
+  "updatedAt": "2026-05-28T10:00:00.000Z"
+}
+```
+
+### Error responses [#error-responses]
+
+A `401` (authentication) is rejected at the gateway and returns `{ "error": "..." }`. A `400` (validation) or `403` (authorization) comes from the endpoint and returns the richer `{ code, status, message }` object. See [Status Codes & Errors](/docs/app-api#status-codes--errors) for the canonical reference.
+
+```json
+{ "defined": false, "code": "FORBIDDEN", "status": 403, "message": "Token lacks 'notifications' scope" }
+```
+
+| Status | Body                              | Cause                                                                                     |
+| :----- | :-------------------------------- | :---------------------------------------------------------------------------------------- |
+| `400`  | `{ code, status, message, data }` | Payload fails validation (missing field, string too long, invalid `type` or `targetUrl`). |
+| `401`  | `{ error }`                       | Bearer token missing, malformed, expired, revoked, or not bound to a user.                |
+| `403`  | `{ code, status, message }`       | Token lacks the `notifications` scope, or the app's `permNotifications` flag is disabled. |
+
+
+# Permissions & Scopes (/docs/permissions)
+
+
+
+When you connect an app to Campus One, an admin selects which data scopes your app is allowed to request. Students are shown a consent screen listing the granted scopes when they first sign in.
+
+> \[!NOTE]
+> Scopes are delivered today via **OpenID Connect** — the only live SSO protocol. The SAML attribute mapping at the bottom of this page describes a *planned* SAML integration that is not yet available.
+
+## Scope reference [#scope-reference]
+
+### `openid` (always required) [#openid-always-required]
+
+Always present. Returns the user's stable unique identifier (`sub`). This is a random opaque string — it is not the student ID.
+
+```json
+{ "sub": "clx8z2abc123" }
+```
+
+### `profile` [#profile]
+
+Returns profile attributes. The standard `name` claim is always included; the `profile` scope adds the user's preferred display name and phone number (when set).
+
+```json
+{
+  "name": "Salih Ibrahim",
+  "preferred_username": "Salih I.",
+  "phone_number": "+234..."
+}
+```
+
+**Default**: enabled for new apps (controlled by the app's `permProfile` flag).
+
+### `email` [#email]
+
+Returns the student's university email address.
+
+```json
+{
+  "email": "256240001@nileuniversity.edu.ng",
+  "email_verified": true
+}
+```
+
+**Default**: enabled for new apps (part of `permIdentity`).
+
+### `academic` [#academic]
+
+Returns academic record data. Useful for apps that need to know a student's department, faculty or level.
+
+```json
+{
+  "student_id": "256240001",
+  "study_level": "undergraduate",
+  "level": 300,
+  "faculty_id": "fac_eng",
+  "department_id": "dept_cs"
+}
+```
+
+`faculty_id` and `department_id` are stable Campus One identifiers, not display names. Resolve them through your own lookup if you need human-readable labels.
+
+**Default**: enabled for new apps (controlled by `permAcademic`).
+
+### `calendar` [#calendar]
+
+Read-only access to the student's timetable.
+
+**Default**: disabled — must be explicitly enabled by an admin (`permCalendar`).
+
+### `notifications` [#notifications]
+
+Allows your app to send notifications to the student through Campus One's notification pipeline. See the [Notifications API](/docs/notifications).
+
+**Default**: enabled for new apps (`permNotifications`).
+
+### `events` [#events]
+
+Allows your app to push calendar events into the student's Campus One dashboard. See the [Events API](/docs/events).
+
+**Default**: disabled — must be explicitly enabled by an admin (`permEvents`).
+
+### `roles` [#roles]
+
+Returns the user's full role set. Adds a `roles` array (every role assigned to the user) and a `custom_roles` array (your app-specific roles). The top-level `role` claim — the user's primary role — is always present regardless of this scope. See [External Access & Roles](/docs/external-access).
+
+**Default**: disabled — must be requested.
+
+### `offline_access` [#offline_access]
+
+Returns a refresh token so your app can mint new access tokens without redirecting the user again. See [token lifecycle](/docs/sso#token-lifecycle).
+
+**Default**: disabled — must be requested.
+
+## Scopes ↔ app permission flags [#scopes--app-permission-flags]
+
+Each scope is gated by a permission flag on your app's SSO config. A scope is only fulfilled when **both** the admin has enabled the flag **and** your app requests the scope. Toggle these in the developer dashboard under your app → **Permissions**.
+
+| Scope                     | Permission flag        | Default                     |
+| ------------------------- | ---------------------- | --------------------------- |
+| `openid`, `email`         | `permIdentity`         | Enabled                     |
+| `profile`                 | `permProfile`          | Enabled                     |
+| `academic`                | `permAcademic`         | Enabled                     |
+| `notifications`           | `permNotifications`    | Enabled                     |
+| `calendar`                | `permCalendar`         | Disabled                    |
+| `events`                  | `permEvents`           | Disabled                    |
+| `roles`, `offline_access` | — (always requestable) | Disabled by default in apps |
+
+## SAML attribute mapping [#saml-attribute-mapping]
+
+> \[!WARNING]
+> &#x2A;*Planned — not yet available.** SAML 2.0 is not implemented yet; Campus One issues identity exclusively over OIDC today. The mapping below documents the intended future SAML assertion attributes.
+
+For future SAML integrations, the same data will be delivered as assertion attributes:
+
+| Scope                   | SAML attribute URN                  |
+| ----------------------- | ----------------------------------- |
+| `email`                 | `urn:oid:1.2.840.113549.1.9.1`      |
+| `profile` (name)        | `urn:oid:2.16.840.1.113730.3.1.241` |
+| `academic` (student ID) | `urn:campusone:student_id`          |
+| `academic` (programme)  | `urn:campusone:programme`           |
+| `academic` (cohort)     | `urn:campusone:cohort`              |
+| `academic` (year)       | `urn:campusone:year_of_study`       |
+
+## Requesting scopes at runtime [#requesting-scopes-at-runtime]
+
+Specify scopes in your authorization request. Only scopes that an admin has granted for your app will be fulfilled — requesting an ungranted scope returns `error=invalid_scope`.
+
+```
+scope=openid profile email academic
+```
+
+## Updating permissions [#updating-permissions]
+
+Request scope changes through the developer dashboard: open your app → Permissions tab → toggle the desired scopes → Save. Changes take effect for new sign-in sessions immediately but do not invalidate existing tokens.
+
+***
+
+## Dynamic App Access Grants & Custom Roles [#dynamic-app-access-grants--custom-roles]
+
+Campus One supports dynamic **App Access Grants** and **Custom Role Assignments** per registered application. This allows administrators to assign specific custom roles (e.g. `editor`, `tutor`, `moderator`) directly to users for your application.
+
+When a student or staff member signs in to your connected application:
+
+1. **Scope Verification**: If your client requests the `roles` scope during the OIDC flow, their assigned roles are dynamically injected into their OIDC tokens.
+2. **Access Token Claims**:
+   * `role`: The user's primary academic role (e.g., `"student"` or `"staff"`).
+   * `roles` (Array): Merges their global academic role with your app-specific custom roles (e.g., `["student", "editor"]`).
+   * `custom_roles` (Array): Contains *only* your app-specific roles assigned to this user (e.g., `["editor"]`).
+
+Connected applications can parse these claims from the access token and utilize them in route guards or API authorization policies.
+
+
+# Quickstart (/docs/quickstart)
+
+
+
+
+
+This is the fastest path from zero to seamless sign-in. It uses **OpenID Connect** — the live SSO protocol — and a library that auto-configures from our discovery URL, so you write very little code.
+
+> \[!IMPORTANT]
+> &#x2A;*Don't build a login page.** Campus One is the login experience. Your app should never render its own email/password, signup, or password-reset screens — instead it **redirects unauthenticated visitors straight to Campus One**, and because the student already has a Campus One session, they come back signed in **without typing anything**. See [Seamless single sign-on](#seamless-single-sign-on-no-login-page) below.
+
+> \[!TIP]
+> Already know OIDC? You only need three things: the discovery URL `https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration`, your **Client ID**, and your **Client Secret**. Point any OIDC library at them and you're done. The rest of this page walks through it.
+
+## Before you start [#before-you-start]
+
+You need a **developer account**. An admin invites you (you'll get a link to set your password), then you sign in to the developer dashboard at `https://app.campusone.com.ng/developer/apps`. See [Application Management](/docs/app-management) for the full dashboard tour.
+
+<Steps>
+  <Step>
+    ### Register your app [#register-your-app]
+
+    In the developer dashboard, click **Connect new app** and complete the wizard:
+
+    * **Protocol**: **OIDC**
+    * **Redirect URL**: where Campus One sends users back after login — e.g. `http://localhost:3000/api/auth/callback/campus-one` for local development. You can add production URLs later.
+    * **Scopes**: start with `profile` and `email`; add `academic`, `notifications`, `events`, or `roles` if you need them (see [Permissions](/docs/permissions)).
+
+    > \[!NOTE]
+    > Apps work **immediately** in `Pending` status — you do **not** need admin approval to start testing OIDC sign-in, consent, and token issuance.
+  </Step>
+
+  <Step>
+    ### Copy your credentials [#copy-your-credentials]
+
+    Open your app → **Sign-in** tab and copy:
+
+    ```bash
+    CAMPUS_ONE_CLIENT_ID="…"        # shown at the top of the tab
+    CAMPUS_ONE_CLIENT_SECRET="…"    # click "Reveal" — shown once; rotate if lost
+    ```
+
+    Keep the secret server-side. Never ship it in a client bundle or commit it.
+  </Step>
+
+  <Step>
+    ### Wire up an OIDC client [#wire-up-an-oidc-client]
+
+    Point your framework's OIDC support at the discovery URL. Two common setups:
+
+    ```ts
+    // Auth.js / NextAuth — app/api/auth/[...nextauth]/route.ts
+    import NextAuth from "next-auth";
+
+    export const { handlers, auth } = NextAuth({
+      providers: [
+        {
+          id: "campus-one",
+          name: "Campus One",
+          type: "oidc",
+          issuer: "https://auth.campusone.com.ng",
+          wellKnown:
+            "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration",
+          clientId: process.env.CAMPUS_ONE_CLIENT_ID,
+          clientSecret: process.env.CAMPUS_ONE_CLIENT_SECRET,
+          authorization: { params: { scope: "openid profile email academic" } },
+        },
+      ],
+    });
+    ```
+
+    ```ts
+    // Better Auth (consumer side)
+    import { betterAuth } from "better-auth";
+    import { genericOAuth } from "better-auth/plugins/generic-oauth";
+
+    export const auth = betterAuth({
+      plugins: [
+        genericOAuth({
+          config: [
+            {
+              providerId: "campus-one",
+              discoveryUrl:
+                "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration",
+              clientId: process.env.CAMPUS_ONE_CLIENT_ID!,
+              clientSecret: process.env.CAMPUS_ONE_CLIENT_SECRET!,
+              scopes: ["openid", "profile", "email", "academic"],
+              pkce: true, // required
+            },
+          ],
+        }),
+      ],
+    });
+    ```
+
+    PKCE is **required** on all clients. Mainstream libraries handle it automatically; if you're rolling your own flow, follow the [OIDC guide](/docs/sso/oidc#4-authorization-request).
+  </Step>
+
+  <Step>
+    ### Auto-redirect unauthenticated users (no login page) [#auto-redirect-unauthenticated-users-no-login-page]
+
+    Instead of a login screen, guard your protected routes: when there's no local session, **immediately start the OIDC redirect**. The student is bounced to Campus One and — if they already have a Campus One session — straight back to your app, signed in, with nothing to type.
+
+    ```ts
+    // Example: middleware / route guard (pseudo-code, framework-agnostic)
+    export function middleware(request) {
+      const session = getLocalSession(request);
+      if (!session) {
+        // No app-side login UI — kick off the OIDC flow right here.
+        return redirectToCampusOne(request.url); // -> /api/auth/signin/campus-one
+      }
+    }
+    ```
+
+    For the rare signed-out entry point (e.g. a public marketing page with a "Go to dashboard" action), a single redirect link is all you need — never a form:
+
+    ```tsx
+    <a href="/api/auth/signin/campus-one">Continue with Campus One</a>
+    ```
+
+    After login your app receives an ID token containing the user's identity — `sub`, `email`, `name`, `role`, and (with the `academic` scope) `student_id`, `level`, `faculty_id`, `department_id`. Use the top-level `role` claim for authorization without an extra request. Full claim list: [OIDC claims](/docs/sso/oidc#3-scopes-and-claims).
+  </Step>
+</Steps>
+
+## Seamless single sign-on (no login page) [#seamless-single-sign-on-no-login-page]
+
+The whole point of Campus One is that students sign in **once**. When they open your connected app, they shouldn't see a login form or re-enter credentials — they should just be *in*. Here's how to get that:
+
+* **Don't build auth UI.** No login, signup, or password-reset pages. Your app's only job is to redirect unauthenticated visitors to Campus One (the previous step) and read the returned identity.
+* **An existing Campus One session means automatic login.** Campus One keeps a session for the signed-in student; when your app redirects to the authorize endpoint, Campus One sees that session and sends the student straight back with an authorization code — **no credential prompt**. (Apps served on a `*.campusone.com.ng` subdomain even share the session cookie directly.)
+* **Skip the consent screen for trusted apps.** First-party/internal apps can be marked **Trusted app** in the developer dashboard so returning students aren't shown the scope-consent dialog at all. Otherwise, consent is shown once and then remembered until your scopes change.
+* **Want zero redirect flash? Use `prompt=none`.** Add `prompt=none` to the authorize request to attempt a fully silent sign-in. If the student has a Campus One session you get a code back invisibly; if not, Campus One returns `error=login_required` — catch that and fall back to a normal redirect. See [Automatic & silent sign-in](/docs/sso/oidc#automatic--silent-sign-in).
+
+The result: a student who is logged into Campus One lands in your app already authenticated, every time.
+
+## Testing your integration [#testing-your-integration]
+
+You can fully exercise the integration locally before you have a production `campusone.com.ng` subdomain.
+
+* **Pending apps are live.** Authorization, the consent screen, and token issuance all work while your app is in `Pending` status — no approval needed.
+* **Register a separate staging app.** Keep one app for local/staging (with `localhost` and preview redirect URLs) and a second for production. That gives you independent test keys you can rotate freely. See [Multi-app strategy](/docs/sso/oidc#localhost--staging-environment-testing).
+* **Localhost just works.** Over `http://localhost`, the auth server relaxes secure-cookie and cross-subdomain rules automatically, so sessions hold without browser cookie warnings. Register the exact callback your framework uses, e.g. `http://localhost:3000/api/auth/callback/campus-one`.
+* **Use test users.** Sign in with any seeded student, staff, developer, or admin account on the staging deployment to verify role-based behaviour. (Ask your Campus One admin for test credentials — they aren't published here.)
+* **Verify the token.** Always validate the ID token signature against the [JWKS](/docs/sso/oidc#6-validating-the-id-token) and check `iss`, `aud`, and `exp`.
+
+## Next steps [#next-steps]
+
+<Cards>
+  <Card title="OpenID Connect" href="/docs/sso/oidc" description="The full OIDC reference: endpoints, scopes, token exchange, refresh" />
+
+  <Card title="Permissions" href="/docs/permissions" description="What each scope returns and how flags gate them" />
+
+  <Card title="Notifications" href="/docs/notifications" description="Push in-app notifications to your users" />
+
+  <Card title="Webhooks" href="/docs/webhooks" description="React to sign-in, role changes, and account events" />
+
+  <Card title="Troubleshooting" href="/docs/troubleshooting" description="Fixes for the most common integration errors" />
+
+  <Card title="AI Integration" href="/docs/ai-integration" description="Let an AI agent do the integration for you" />
+</Cards>
+
+
+# Custom Subdomains & DNS (/docs/subdomains)
+
+
+
+Connected applications can request custom branding subdomains under `*.campusone.com.ng` (e.g., `clearance.campusone.com.ng`) to provide students with a trusted, seamless single-sign-on experience.
+
+This guide details the subdomain lifecycle, CNAME mapping, TXT domain ownership validation, and how our automated background verification agent operates.
+
+***
+
+## Subdomain Lifecycle [#subdomain-lifecycle]
+
+The subdomain setup process involves four distinct stages:
+
+<Mermaid
+  chart="graph TD
+    A[1. Request Subdomain & CNAME Target] -->|Developer Console| B[2. Pending DNS Activation]
+    B -->|Admin Approval| C[3. CNAME & TXT Provisioned in Cloudflare]
+    C -->|DNS-over-HTTPS Verification| D[4. Active & Live Homepage Promoted]"
+/>
+
+### 1. Requesting a Subdomain [#1-requesting-a-subdomain]
+
+When registering or updating your application inside the Developer Console, specify:
+
+* **Campus One Subdomain**: Your requested name (e.g., `bursary-portal`).
+* **CNAME Target**: The destination hosting server where your app is hosted (e.g., `cname.vercel-dns.com`, `custom-alb.amazonaws.com`, etc.).
+
+### 2. DNS Record Provisioning (Admin Approval) [#2-dns-record-provisioning-admin-approval]
+
+Once an administrator reviews and approves the application, Campus One programmatically registers two records in our central Cloudflare DNS zone:
+
+1. **CNAME Record**: Maps your requested subdomain (`[subdomain].campusone.com.ng`) to your specified **CNAME Target**.
+2. **TXT Record**: Provisions a randomized validation token to confirm domain delegation and ownership mapping.
+
+***
+
+## Asynchronous Propagation Agent [#asynchronous-propagation-agent]
+
+DNS updates can take time to propagate across global nameservers. Rather than requiring developers to manually check or refresh repeatedly, Campus One employs an automated **Propagation Agent** running in the background.
+
+<Mermaid
+  chart="sequenceDiagram
+    autonumber
+    participant Cron as Scheduled Trigger (Cron Job)
+    participant API as Hono Server (/api/cron/check-dns)
+    participant DB as Postgres Database
+    participant DoH as Cloudflare 1.1.1.1 (DNS-over-HTTPS)
+    participant Email as Cloudflare Email Sending
+    participant Dev as Developer In-App Shell
+
+    Cron->>API: POST /api/cron/check-dns (Secure Token)
+    API->>DB: Query approved apps where homepageUrl is not promoted
+    loop For each unpropagated App
+        API->>DoH: Verify CNAME propagation (DoH Lookup)
+        alt CNAME Resolves Successfully
+            API->>DB: Update homepageUrl = https://subdomain.campusone.com.ng
+            API->>DB: Create in-app Notification record
+            API->>Email: Send &#x22;Subdomain Live&#x22; congratulatory email
+            API->>Dev: Live real-time UI update!
+        else DNS Not Yet Propagated
+            API->>API: Keep pending status, skip to next app
+        end
+    end"
+/>
+
+### Verification via DNS-over-HTTPS (DoH) [#verification-via-dns-over-https-doh]
+
+To prevent server caching issues and bypass standard local ISP resolver lag, Campus One performs real-time queries using Cloudflare's &#x2A;*DNS-over-HTTPS (DoH)** API directly from our Worker edge nodes:
+
+```bash
+curl -H "accept: application/dns-json" \
+  "https://cloudflare-dns.com/dns-query?name=clearance.campusone.com.ng&type=CNAME"
+```
+
+Our system validates that the resolved CNAME alias matches the developer's requested CNAME target. Once verified, the app's official `homepageUrl` is updated to the newly active subdomain.
+
+***
+
+## Developer Steps for Domain Setup [#developer-steps-for-domain-setup]
+
+To ensure successful propagation, connect your web host provider to your Campus One custom subdomain:
+
+### Step 1: Add Custom Domain to Your Web Host [#step-1-add-custom-domain-to-your-web-host]
+
+In your hosting console (e.g., Vercel, Netlify, AWS Amplify, or custom Nginx virtual host):
+
+1. Navigate to **Domain Settings**.
+2. Add the custom domain: `[your-subdomain].campusone.com.ng`.
+
+### Step 2: Configure DNS Settings [#step-2-configure-dns-settings]
+
+Since Campus One acts as the DNS authority for `campusone.com.ng`, our system creates the DNS records on Cloudflare pointing to your target. You do **not** need to add records to standard registrars. Just ensure your hosting console is configured to expect traffic arriving from `[your-subdomain].campusone.com.ng`.
+
+### Step 3: Wait for Propagation & Alert [#step-3-wait-for-propagation--alert]
+
+Once approved, the background propagation agent checks the status every 10 minutes. When successful:
+
+1. You will receive an in-app notification badge.
+2. A congratulatory email will arrive in your developer inbox.
+3. Your student login portal's launch link will automatically point to `https://[your-subdomain].campusone.com.ng`.
+
+***
+
+## Troubleshooting [#troubleshooting]
+
+> \[!WARNING]
+> **Subdomain Lock**: Once a subdomain has been verified and marked active, the subdomain and CNAME target inputs are locked in the branding configuration to prevent broken links and session Hijacking. If you need to migrate your CNAME target, contact the system administrator.
+
+> \[!TIP]
+> **SSL/TLS Certificates**: Ensure your hosting provider is configured to auto-renew SSL certificates (e.g., Let's Encrypt) for the custom subdomain. If traffic fails to load over `HTTPS`, double check your web host's SSL settings.
+
+
+# Troubleshooting (/docs/troubleshooting)
+
+
+
+A quick reference for the errors developers hit most often. Each entry lists the symptom, the usual cause, and the fix.
+
+## Sign-in & OIDC [#sign-in--oidc]
+
+### `redirect_uri` mismatch / "invalid redirect" [#redirect_uri-mismatch--invalid-redirect]
+
+**Symptom:** Campus One refuses to redirect back, or you see an `invalid_request` / redirect URI error on the authorize step.
+
+**Cause:** The `redirect_uri` your app sends must **exactly** match one of the URLs registered on your app (scheme, host, port, and path all count — `http` vs `https`, a trailing slash, or `localhost` vs `127.0.0.1` will all fail).
+
+**Fix:** Open your app → **Sign-in** tab → **Redirect URLs** and add the exact callback your framework uses, e.g. `http://localhost:3000/api/auth/callback/campus-one`. Redirect URL changes take effect immediately.
+
+### `error=invalid_scope` [#errorinvalid_scope]
+
+**Symptom:** The authorize request is rejected with `invalid_scope`.
+
+**Cause:** You requested a scope the admin hasn't enabled for your app, or a scope that doesn't exist. Valid scopes are `openid`, `profile`, `email`, `offline_access`, `academic`, `calendar`, `notifications`, `roles`, `events`.
+
+**Fix:** Request only scopes your app is granted (see [Permissions](/docs/permissions)). `calendar` and `events` are off by default — ask an admin to enable the matching `perm*` flag.
+
+### PKCE errors (`code_verifier` / `code_challenge`) [#pkce-errors-code_verifier--code_challenge]
+
+**Symptom:** The token exchange fails with a PKCE or `invalid_grant` error.
+
+**Cause:** PKCE is **mandatory**. Either you didn't send a `code_challenge` on the authorize request, or the `code_verifier` at token exchange doesn't match the original challenge (often because the verifier wasn't persisted across the redirect).
+
+**Fix:** Use `code_challenge_method=S256`, store the `code_verifier` in a secure cookie/session before redirecting, and send it back unchanged at the token step. Most OIDC libraries do this automatically — prefer one over a hand-rolled flow.
+
+### Missing claims (no `student_id`, `role`, etc.) [#missing-claims-no-student_id-role-etc]
+
+**Symptom:** The ID token is valid but a claim you expected is absent.
+
+**Cause:** Claims are gated by both scope and the app's permission flag. `student_id`/`level`/`faculty_id`/`department_id` need the `academic` scope **and** `permAcademic`. The `roles` array and `custom_roles` only appear with the `roles` scope. Some fields are simply empty for that user (e.g. a staff member has no `student_id`).
+
+**Fix:** Confirm the scope is requested **and** granted, then re-consent. Note the top-level `role` claim is always present — you don't need the `roles` scope just to read the primary role. See [OIDC claims](/docs/sso/oidc#3-scopes-and-claims).
+
+### Consent screen shows every time [#consent-screen-shows-every-time]
+
+**Symptom:** The student re-approves on each sign-in.
+
+**Cause:** Consent is re-prompted when the requested scope set changes. For internal first-party apps you may not want any prompt.
+
+**Fix:** Keep your scope set stable. For trusted internal apps, toggle **Trusted app** in the dashboard to skip the consent screen entirely.
+
+### Session drops locally / cookies rejected [#session-drops-locally--cookies-rejected]
+
+**Symptom:** Login succeeds but the session doesn't stick in local dev.
+
+**Cause:** Secure-cookie or cross-subdomain settings fighting `http://localhost`.
+
+**Fix:** Use `http://localhost` (not a custom hostname) for local testing — the auth server automatically relaxes secure/cross-subdomain cookie rules there. See [localhost testing](/docs/sso/oidc#localhost--staging-environment-testing).
+
+## App API (notifications & events) [#app-api-notifications--events]
+
+### `401 Unauthorized` [#401-unauthorized]
+
+**Cause:** The Bearer token is missing, malformed, **expired** (access tokens live \~1 hour), revoked (the user signed out or disconnected your app), or not bound to a user.
+
+**Fix:** Send `Authorization: Bearer <access_token>`. If expired, refresh it (requires the `offline_access` scope). If the user disconnected, restart the sign-in flow. A `401` body is the gateway shape `{ "error": "..." }` (not the `{ code, status, message }` shape used by `400`/`403`). See [App API auth](/docs/app-api#global-authentication).
+
+### `403 Forbidden` [#403-forbidden]
+
+**Cause:** The token is valid but lacks the required **scope**, or your app's matching **permission flag** is off. Notifications need the `notifications` scope + `permNotifications`; events need the `events` scope + `permEvents`.
+
+**Fix:** Ensure the user authorized the scope **and** an admin enabled the flag (`permEvents` is off by default). The `message` field tells you which one is missing.
+
+### `400 Bad Request` [#400-bad-request]
+
+**Cause:** Payload validation failed — a missing required field, a string over its limit (`title` 128 / `body` 512 for notifications; `title` 200 / `description` 1000 for events), an invalid notification `type`, or a `startsAt` that isn't ISO 8601.
+
+**Fix:** Check the field limits in the [Notifications](/docs/notifications) and [Events](/docs/events) references, or the live [spec](https://api.campusone.com.ng/api/apps/docs).
+
+### Duplicate notifications/events after a retry [#duplicate-notificationsevents-after-a-retry]
+
+**Cause:** A network blip made you resend a write that actually succeeded.
+
+**Fix:** Send an `Idempotency-Key` header (a UUID or stable composite). A repeated key returns the original record instead of creating a duplicate; keys are cached per app for 24 hours.
+
+## Webhooks [#webhooks]
+
+### Signature verification fails [#signature-verification-fails]
+
+**Symptom:** Your HMAC check never matches `X-Campus-One-Signature`.
+
+**Cause:** Almost always a body-parsing issue — you hashed the **parsed/re-serialized** JSON instead of the exact raw bytes Campus One signed.
+
+**Fix:** Verify against the **raw request body**, before any JSON middleware runs. In Express, mount `express.raw({ type: "application/json" })` on the webhook route ahead of `express.json()`. Use the published verifier:
+
+```ts
+import { verifyWebhook } from "@campus-one/auth/webhooks";
+```
+
+See the [webhooks guide](/docs/webhooks#signature-verification).
+
+### Events arrive late, out of order, or not at all [#events-arrive-late-out-of-order-or-not-at-all]
+
+**Cause:** Delivery is **fire-and-forget** today — a 5-second timeout, no automatic retries. Deliveries aren't ordered.
+
+**Fix:** Respond `2xx` fast and process asynchronously. Deduplicate on the `X-Campus-One-Delivery` id and resolve conflicts with `occurredAt`. Don't rely on webhooks as your only source of truth — reconcile via sign-in / the REST API. Failed deliveries increment your app's `errorCount` on the dashboard.
+
+### Users aren't signed out across apps [#users-arent-signed-out-across-apps]
+
+**Cause:** You're not honouring `session.signed_out`.
+
+**Fix:** Subscribe to `session.signed_out` and clear the local session immediately. Even without it, access ends when the current token expires (Campus One revokes tokens on logout, so refresh fails). See [single logout](/docs/webhooks#single-logout-slo).
+
+## Custom subdomains & DNS [#custom-subdomains--dns]
+
+### Subdomain stuck "pending" / not going live [#subdomain-stuck-pending--not-going-live]
+
+**Cause:** DNS hasn't propagated yet, or the CNAME doesn't resolve to your registered target. The propagation agent checks every \~10 minutes.
+
+**Fix:** Confirm your host points the subdomain at the CNAME target you registered, then wait for a check cycle. You can verify resolution yourself:
+
+```bash
+curl -H "accept: application/dns-json" \
+  "https://cloudflare-dns.com/dns-query?name=yourapp.campusone.com.ng&type=CNAME"
+```
+
+When it resolves, the app's homepage URL is promoted automatically and you get an in-app notification + email. See [Subdomains](/docs/subdomains).
+
+### Can't edit subdomain or homepage URL [#cant-edit-subdomain-or-homepage-url]
+
+**Cause:** Once a custom subdomain is verified and active, the subdomain, CNAME target, and homepage URL inputs lock to protect routing integrity.
+
+**Fix:** Contact a Campus One admin to migrate a verified subdomain or CNAME target.
+
+## Still stuck? [#still-stuck]
+
+* The [interactive API reference](https://api.campusone.com.ng/api/apps/docs) is the authoritative source for App API schemas and status codes.
+* Feed the docs to an AI assistant via [AI Integration](/docs/ai-integration) and ask it to diagnose against the source of truth.
+* Contact the Campus One platform team or open a ticket through the admin console.
+
+
+# Webhooks (/docs/webhooks)
+
+
+
+Webhooks let Campus One push events to your app as they happen — no polling required. Configure a webhook URL in the developer dashboard under your app's **Webhooks** tab.
+
+## Setup [#setup]
+
+1. Expose an HTTPS endpoint on your server (e.g. `https://ct.campusone.com.ng/webhooks/campus-one`)
+2. Open the developer dashboard → your app → **Webhooks** tab
+3. Paste the URL and select the events you want to receive
+4. Copy your **Webhook Secret** — it is generated when your app is created and shown once. Store it as `CAMPUS_ONE_WEBHOOK_SECRET`. Rotate via **Rotate webhook secret** if leaked.
+
+## Request format [#request-format]
+
+Each event is an HTTP `POST` with a JSON body and these headers:
+
+```
+Content-Type: application/json
+X-Campus-One-Event: user.role_changed
+X-Campus-One-Signature: sha256=abc123...
+X-Campus-One-Delivery: 6f4d2c3a-...
+```
+
+Example payload:
+
+```json
+{
+  "id": "6f4d2c3a-1a2b-4c5d-9e8f-0a1b2c3d4e5f",
+  "event": "user.role_changed",
+  "occurredAt": "2026-05-21T14:22:00.000Z",
+  "data": {
+    "user_id": "user_abc123",
+    "email": "256240001@nileuniversity.edu.ng",
+    "previous_role": "student",
+    "new_role": "mentor"
+  }
+}
+```
+
+## Signature verification [#signature-verification]
+
+Always verify the `X-Campus-One-Signature` header before processing a webhook. The signature is an HMAC-SHA256 of the raw request body, keyed with your `CAMPUS_ONE_WEBHOOK_SECRET`.
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verifyWebhook(rawBody: string, secret: string, header: string): boolean {
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  const a = Buffer.from(header);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+app.post(
+  "/webhooks/campus-one",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const sig = req.headers["x-campus-one-signature"] as string;
+    if (!verifyWebhook(req.body.toString(), process.env.CAMPUS_ONE_WEBHOOK_SECRET!, sig)) {
+      return res.status(401).send("Invalid signature");
+    }
+    const event = JSON.parse(req.body.toString());
+    // handle event...
+    res.status(200).send("ok");
+  }
+);
+```
+
+Use `timingSafeEqual` to prevent timing attacks. Campus One also publishes a ready-made verifier you can use directly:
+
+```ts
+import { verifyWebhook } from "@campus-one/auth/webhooks";
+```
+
+## Events reference [#events-reference]
+
+| Event                | When it fires                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `user.created`       | A new user is provisioned in Campus One.                                                      |
+| `user.updated`       | The user's profile (name, email, programme, etc.) changes.                                    |
+| `user.deleted`       | The user's account is permanently removed.                                                    |
+| `user.role_changed`  | The user's primary role changes — re-fetch the id\_token or call `/userinfo` to re-authorise. |
+| `session.signed_in`  | The user signed in to Campus One — useful for analytics/audit.                                |
+| `session.signed_out` | The user signed out.                                                                          |
+
+Payloads include a `data` object with the relevant fields for the event. All events share the envelope shown above (`id`, `event`, `occurredAt`, `data`).
+
+## Single logout (SLO) [#single-logout-slo]
+
+When a user signs out of Campus One, you should sign them out of your app on the same device. Campus One drives this two ways:
+
+1. **Central token revocation.** On sign-out (and on RP-initiated logout via the `end_session_endpoint`), Campus One **deletes all of the user's access and refresh tokens**. Any attempt to refresh an expired token afterwards will fail — so even apps that don't subscribe to webhooks lose access at the next token refresh.
+2. **The `session.signed_out` webhook.** Subscribe to this event to clear the user's session in your app **immediately**. The `data.user_id` identifies who signed out. This fires both when the user signs out of Campus One and when any connected app initiates logout, so every subscribed app is notified.
+
+To let your users sign out of Campus One *from your app&#x2A; (and thereby propagate to their other apps), redirect them to the OIDC &#x2A;*`end_session_endpoint`** (advertised in `/.well-known/openid-configuration`):
+
+```
+GET https://<campus-one>/api/auth/oauth2/endsession
+  ?id_token_hint=<the id_token you received at login>
+  &post_logout_redirect_uri=<one of your registered redirect URLs>
+```
+
+This clears the Campus One session, revokes the user's tokens, fans out `session.signed_out` to other apps, then redirects back to your `post_logout_redirect_uri`.
+
+> \[!NOTE]
+> Campus One does not implement OIDC back-channel or front-channel logout. Immediate cross-app sign-out relies on your app honouring the `session.signed_out` webhook; without it, access ends when the current token expires and cannot be refreshed.
+
+## Delivery semantics [#delivery-semantics]
+
+* Deliveries time out after **5 seconds**. Endpoints should respond `2xx` quickly and process asynchronously if needed.
+* The current implementation is **fire-and-forget** — failed deliveries increment your app's `errorCount` (shown on the developer dashboard) but are not retried automatically. A retry queue is on the roadmap; in the meantime, design your handler to be tolerant of missed events and reconcile via the REST API on reconnect.
+* Deliveries are not ordered. Use the `id` header to deduplicate and the `occurredAt` timestamp to resolve conflicts.
+
+## Testing [#testing]
+
+While the dashboard's **Send test event** button is being built, you can verify your endpoint locally by signing a sample payload with your webhook secret and POSTing it yourself:
+
+```sh
+BODY='{"id":"test","event":"user.created","occurredAt":"2026-05-21T00:00:00Z","data":{}}'
+SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$CAMPUS_ONE_WEBHOOK_SECRET" -hex | cut -d' ' -f2)"
+curl -X POST https://ct.campusone.com.ng/webhooks/campus-one \
+  -H "Content-Type: application/json" \
+  -H "X-Campus-One-Event: user.created" \
+  -H "X-Campus-One-Signature: $SIG" \
+  -H "X-Campus-One-Delivery: $(uuidgen)" \
+  -d "$BODY"
+```
+
+
+# Components (/docs/design-system/components)
+
+
+
+Each component is a self-contained file. Install one with `npx shadcn@latest add @campus-one/<name>` once you've [registered our registry](/docs/design-system/installation). Most components depend on the [theme](/docs/design-system/theme) and the `cn()` util — these come along automatically.
+
+## Forms & inputs [#forms--inputs]
+
+| Component     | Install                                           |
+| ------------- | ------------------------------------------------- |
+| Button        | `npx shadcn@latest add @campus-one/button`        |
+| Button Group  | `npx shadcn@latest add @campus-one/button-group`  |
+| Calendar      | `npx shadcn@latest add @campus-one/calendar`      |
+| Checkbox      | `npx shadcn@latest add @campus-one/checkbox`      |
+| Combobox      | `npx shadcn@latest add @campus-one/combobox`      |
+| Field         | `npx shadcn@latest add @campus-one/field`         |
+| Form          | `npx shadcn@latest add @campus-one/form`          |
+| Input         | `npx shadcn@latest add @campus-one/input`         |
+| Input Group   | `npx shadcn@latest add @campus-one/input-group`   |
+| Input OTP     | `npx shadcn@latest add @campus-one/input-otp`     |
+| Label         | `npx shadcn@latest add @campus-one/label`         |
+| Native Select | `npx shadcn@latest add @campus-one/native-select` |
+| Radio Group   | `npx shadcn@latest add @campus-one/radio-group`   |
+| Select        | `npx shadcn@latest add @campus-one/select`        |
+| Slider        | `npx shadcn@latest add @campus-one/slider`        |
+| Switch        | `npx shadcn@latest add @campus-one/switch`        |
+| Textarea      | `npx shadcn@latest add @campus-one/textarea`      |
+| Toggle        | `npx shadcn@latest add @campus-one/toggle`        |
+| Toggle Group  | `npx shadcn@latest add @campus-one/toggle-group`  |
+
+## Overlays & dialogs [#overlays--dialogs]
+
+| Component     | Install                                           |
+| ------------- | ------------------------------------------------- |
+| Alert Dialog  | `npx shadcn@latest add @campus-one/alert-dialog`  |
+| Context Menu  | `npx shadcn@latest add @campus-one/context-menu`  |
+| Dialog        | `npx shadcn@latest add @campus-one/dialog`        |
+| Drawer        | `npx shadcn@latest add @campus-one/drawer`        |
+| Dropdown Menu | `npx shadcn@latest add @campus-one/dropdown-menu` |
+| Hover Card    | `npx shadcn@latest add @campus-one/hover-card`    |
+| Menubar       | `npx shadcn@latest add @campus-one/menubar`       |
+| Popover       | `npx shadcn@latest add @campus-one/popover`       |
+| Sheet         | `npx shadcn@latest add @campus-one/sheet`         |
+| Tooltip       | `npx shadcn@latest add @campus-one/tooltip`       |
+
+## Navigation [#navigation]
+
+| Component       | Install                                             |
+| --------------- | --------------------------------------------------- |
+| Breadcrumb      | `npx shadcn@latest add @campus-one/breadcrumb`      |
+| Command         | `npx shadcn@latest add @campus-one/command`         |
+| Kbd             | `npx shadcn@latest add @campus-one/kbd`             |
+| Navigation Menu | `npx shadcn@latest add @campus-one/navigation-menu` |
+| Pagination      | `npx shadcn@latest add @campus-one/pagination`      |
+| Sidebar         | `npx shadcn@latest add @campus-one/sidebar`         |
+| Tabs            | `npx shadcn@latest add @campus-one/tabs`            |
+
+## Data display [#data-display]
+
+| Component   | Install                                         |
+| ----------- | ----------------------------------------------- |
+| Accordion   | `npx shadcn@latest add @campus-one/accordion`   |
+| Alert       | `npx shadcn@latest add @campus-one/alert`       |
+| App Icon    | `npx shadcn@latest add @campus-one/app-icon`    |
+| Avatar      | `npx shadcn@latest add @campus-one/avatar`      |
+| Badge       | `npx shadcn@latest add @campus-one/badge`       |
+| Card        | `npx shadcn@latest add @campus-one/card`        |
+| Chart       | `npx shadcn@latest add @campus-one/chart`       |
+| Collapsible | `npx shadcn@latest add @campus-one/collapsible` |
+| Empty       | `npx shadcn@latest add @campus-one/empty`       |
+| Item        | `npx shadcn@latest add @campus-one/item`        |
+| Progress    | `npx shadcn@latest add @campus-one/progress`    |
+| Skeleton    | `npx shadcn@latest add @campus-one/skeleton`    |
+| Spinner     | `npx shadcn@latest add @campus-one/spinner`     |
+| Table       | `npx shadcn@latest add @campus-one/table`       |
+
+## Layout [#layout]
+
+| Component    | Install                                          |
+| ------------ | ------------------------------------------------ |
+| Aspect Ratio | `npx shadcn@latest add @campus-one/aspect-ratio` |
+| Resizable    | `npx shadcn@latest add @campus-one/resizable`    |
+| Scroll Area  | `npx shadcn@latest add @campus-one/scroll-area`  |
+| Separator    | `npx shadcn@latest add @campus-one/separator`    |
+
+## Misc [#misc]
+
+| Component       | Install                                       |
+| --------------- | --------------------------------------------- |
+| Carousel        | `npx shadcn@latest add @campus-one/carousel`  |
+| Direction       | `npx shadcn@latest add @campus-one/direction` |
+| Sonner (toasts) | `npx shadcn@latest add @campus-one/sonner`    |
+
+## Hooks & utils [#hooks--utils]
+
+| Item             | Install                                        |
+| ---------------- | ---------------------------------------------- |
+| `cn()` utility   | `npx shadcn@latest add @campus-one/utils`      |
+| `useMobile` hook | `npx shadcn@latest add @campus-one/use-mobile` |
+
+## Installing multiple at once [#installing-multiple-at-once]
+
+shadcn accepts a list:
+
+```bash
+npx shadcn@latest add @campus-one/card @campus-one/button @campus-one/dialog
+```
+
+Or install the theme and everything you'd typically need for a dashboard:
+
+```bash
+npx shadcn@latest add @campus-one/theme @campus-one/sidebar \
+	@campus-one/card @campus-one/button @campus-one/input \
+	@campus-one/dropdown-menu @campus-one/avatar @campus-one/badge
+```
+
+
+# Fonts (/docs/design-system/fonts)
+
+
+
+The theme sets three font stacks via Tailwind tokens:
+
+| Token        | Stack                                                         |
+| ------------ | ------------------------------------------------------------- |
+| `font-sans`  | `"Inter Variable", "Inter", sans-serif`                       |
+| `font-serif` | `"Instrument Serif", "Iowan Old Style", Georgia, serif`       |
+| `font-mono`  | `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace` |
+
+The fallbacks are good enough on most systems, but if you want the exact Campus One look, load the webfonts.
+
+## Option 1 — Google Fonts (recommended) [#option-1--google-fonts-recommended]
+
+Add this link to your `<head>`:
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+	href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+	rel="stylesheet"
+/>
+```
+
+## Option 2 — Next.js `next/font` [#option-2--nextjs-nextfont]
+
+If you're on Next.js, prefer `next/font/google` — it self-hosts the fonts at build time, eliminates render-blocking, and avoids the layout shift:
+
+```tsx title="app/layout.tsx"
+import { Inter, Instrument_Serif } from "next/font/google";
+
+const inter = Inter({
+	subsets: ["latin"],
+	variable: "--font-inter",
+});
+
+const instrumentSerif = Instrument_Serif({
+	subsets: ["latin"],
+	weight: "400",
+	style: ["normal", "italic"],
+	variable: "--font-instrument-serif",
+});
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+	return (
+		<html lang="en" className={`${inter.variable} ${instrumentSerif.variable}`}>
+			<body>{children}</body>
+		</html>
+	);
+}
+```
+
+Then in your `globals.css`, point the theme tokens at the CSS variables:
+
+```css
+@theme inline {
+	--font-sans: var(--font-inter), sans-serif;
+	--font-serif: var(--font-instrument-serif), Georgia, serif;
+}
+```
+
+## Option 3 — `font-mono` [#option-3--font-mono]
+
+We don't load JetBrains Mono by default — the system mono fallback (`ui-monospace`) is great on every modern OS. Add it via Google Fonts if you want consistency in screenshots or marketing material.
+
+
+# Design System (/docs/design-system)
+
+
+
+Campus One ships its UI library as a public **shadcn registry**. If your project already uses [shadcn/ui](https://ui.shadcn.com), you can install any of our components, the full theme, hooks, or utilities with a single CLI command — no copy-paste, no fork.
+
+## What's in the registry [#whats-in-the-registry]
+
+* **60+ components** — the full shadcn/ui set (Button, Card, Dialog, etc.) plus our own additions: `app-icon`, `button-group`, `combobox`, `empty`, `field`, `input-group`, `item`, `kbd`, `native-select`, `spinner`
+* **The Campus One theme** — Nile blue brand palette, light + dark tokens, status colors, and density variables (regular + compact)
+* **Hooks** — currently `use-mobile`
+* **Utilities** — the `cn()` helper
+
+Every item is hosted at `https://docs.campusone.com.ng/r/<name>.json` and ready for `shadcn add`.
+
+## Quick start [#quick-start]
+
+```bash
+npx shadcn@latest add https://docs.campusone.com.ng/r/theme.json
+npx shadcn@latest add https://docs.campusone.com.ng/r/button.json
+```
+
+The CLI fetches the JSON, drops the files into the right place based on your `components.json` aliases, installs any npm dependencies, and pulls in any registry dependencies (like the `cn()` util).
+
+## Where to go next [#where-to-go-next]
+
+<Cards>
+  <Card title="Installation" href="/docs/design-system/installation" description="Set up shadcn in your project and point at the Campus One registry" />
+
+  <Card title="Theme" href="/docs/design-system/theme" description="Brand palette, dark mode, status tokens, density variables" />
+
+  <Card title="Fonts" href="/docs/design-system/fonts" description="Load Inter and Instrument Serif from Google Fonts" />
+
+  <Card title="Components" href="/docs/design-system/components" description="Browse every component with its install command" />
+</Cards>
+
+
+# Installation (/docs/design-system/installation)
+
+
+
+You need a project that already has [shadcn/ui](https://ui.shadcn.com) initialised. If you don't, run `npx shadcn@latest init` first and pick **neutral** as the base color so our tokens line up.
+
+## 1. Add the registry [#1-add-the-registry]
+
+Open your project's `components.json` and add Campus One under `registries`:
+
+```json title="components.json"
+{
+	"$schema": "https://ui.shadcn.com/schema.json",
+	"style": "new-york",
+	"tailwind": {
+		"baseColor": "neutral",
+		"cssVariables": true
+	},
+	"aliases": {
+		"components": "@/components",
+		"ui": "@/components/ui",
+		"lib": "@/lib",
+		"hooks": "@/hooks",
+		"utils": "@/lib/utils"
+	},
+	"registries": {
+		"@campus-one": "https://docs.campusone.com.ng/r/{name}.json"
+	}
+}
+```
+
+## 2. Install items [#2-install-items]
+
+Once the registry is registered, you can refer to items with the `@campus-one/` prefix:
+
+```bash
+npx shadcn@latest add @campus-one/theme
+npx shadcn@latest add @campus-one/button
+npx shadcn@latest add @campus-one/card @campus-one/dialog @campus-one/dropdown-menu
+```
+
+Or you can skip step 1 and reference the full URL directly:
+
+```bash
+npx shadcn@latest add https://docs.campusone.com.ng/r/button.json
+```
+
+## 3. Install the theme first [#3-install-the-theme-first]
+
+Most components depend on CSS variables from the theme. Install it once before adding components:
+
+```bash
+npx shadcn@latest add @campus-one/theme
+```
+
+This drops our `globals.css` into your project (defaulting to `app/globals.css`) and pulls in the `cn()` helper. After that, components will style themselves correctly out of the box.
+
+## Verifying [#verifying]
+
+After installing a component, you can render it as you would any shadcn component:
+
+```tsx
+import { Button } from "@/components/ui/button";
+
+export default function Demo() {
+	return <Button variant="default">Sign in</Button>;
+}
+```
+
+The component file lives in your repo — edit it freely; you're not locked into our version.
+
+## Updating [#updating]
+
+shadcn doesn't auto-update installed components. Re-run `npx shadcn@latest add @campus-one/<name>` to pull the latest version (it'll ask before overwriting).
+
+
+# Theme (/docs/design-system/theme)
+
+
+
+The theme is a single registry item that ships our `globals.css` as-is — brand palette, light + dark tokens, status colors, and density variables — plus the `cn()` utility.
+
+```bash
+npx shadcn@latest add @campus-one/theme
+```
+
+By default this writes to `app/globals.css`. If your project uses a different path, the shadcn CLI will ask before overwriting.
+
+## What you get [#what-you-get]
+
+### Brand palette — Nile blue [#brand-palette--nile-blue]
+
+Nine shades from `--brand-50` through `--brand-900`, plus the default `--brand` (= `--brand-500` = `#1e499d`). Exposed as Tailwind utilities:
+
+```html
+<div class="bg-brand-50 text-brand-900">…</div>
+<button class="bg-brand text-white">Sign in</button>
+```
+
+### Semantic tokens [#semantic-tokens]
+
+The full shadcn token set — `background`, `foreground`, `card`, `primary`, `muted`, `accent`, `border`, `ring`, etc. — mapped to the brand. Light and dark modes are both defined; toggle with `class="dark"` on `<html>` or use `next-themes`.
+
+### Status tokens [#status-tokens]
+
+For success / warning / info states that aren't covered by shadcn's destructive variant:
+
+| Variable    | Light     | Dark      |
+| ----------- | --------- | --------- |
+| `--success` | `#2f7a4d` | `#4ea273` |
+| `--warning` | `#b8722b` | `#d49355` |
+| `--info`    | `#1e499d` | `#5a7fc6` |
+
+Each one has a matching `*-bg` variant for tinted backgrounds.
+
+### Density variables [#density-variables]
+
+Two densities — `regular` (default) and `compact` — controlled by `[data-density="compact"]` on any ancestor element:
+
+```tsx
+<div data-density="compact">
+	{/* All inputs, cards, rows shrink */}
+</div>
+```
+
+Affects `--space-input-y`, `--space-input-x`, `--space-card-pad`, `--space-row-y`, `--control-h`, `--control-h-sm`.
+
+## Customising [#customising]
+
+The values live in CSS variables, so override them in your own stylesheet after the import:
+
+```css title="app/globals.css"
+@import "tailwindcss";
+/* … the rest of @campus-one/theme … */
+
+:root {
+	--brand: #c0392b; /* override to a different brand color */
+	--primary: var(--brand);
+}
+```
+
+Or fork the file — once installed, it's yours to edit.
+
+
+# SSO Overview (/docs/sso)
+
+
+
+Campus One is an &#x2A;*identity provider (IdP)**. Your app is the &#x2A;*relying party (RP)**. When a student wants to sign in to your app, the request flows through Campus One, which authenticates the student and returns a verified identity to your app.
+
+## Supported protocols [#supported-protocols]
+
+| Protocol           | Status      | Best for                      | Token format                  |
+| ------------------ | ----------- | ----------------------------- | ----------------------------- |
+| **OpenID Connect** | ✅ Available | New apps, mobile, SPAs        | JWT (ID token + access token) |
+| **SAML 2.0**       | 🚧 Planned  | Enterprise and legacy systems | XML assertion                 |
+| **OAuth 2.0**      | 🚧 Planned  | API-only integrations         | Bearer access token           |
+
+> \[!NOTE]
+> **OpenID Connect is the only live protocol today** — and it's what you want for virtually every new integration (it's built on OAuth 2.0, so plain OAuth flows work through the same endpoints). SAML 2.0 is planned for enterprise/legacy systems; until it ships, integrate over [OIDC](/docs/sso/oidc).
+
+> \[!TIP]
+> Campus One is the login experience — &#x2A;*connected apps don't build their own login pages.** A student who already has a Campus One session is signed into your app **automatically**, with no credential prompt. See [Automatic & silent sign-in](/docs/sso/oidc#automatic--silent-sign-in).
+
+## Sign-in flow (OIDC) [#sign-in-flow-oidc]
+
+Choose between a high-level overview or the full architectural details of the OpenID Connect flow:
+
+<Tabs items="['Complete Flow', 'Simple Flow']">
+  <Tab value="Complete Flow">
+    Below is the complete sequence diagram detailing how Campus One's OpenID Connect flow operates, including the user consent checks, PKCE code challenges, and token exchanges:
+
+    <Mermaid
+      chart="sequenceDiagram
+    autonumber
+    actor Student as Student
+    participant App as Developer App (RP)
+    participant C1 as Campus One auth (IdP)
+    participant C1_DB as Campus One DB
+
+    Student->>App: Clicks &#x22;Sign in with Campus One&#x22;
+    Note over App: Generate state & PKCE code_challenge<br/>Store code_verifier in secure cookie
+    App->>Student: Redirect to /api/auth/oauth2/authorize
+    Student->>C1: Navigate to /authorize?client_id=...&code_challenge=...
+    alt User not logged in
+        C1->>Student: Render Login Screen
+        Student->>C1: Enter credentials
+        C1->>C1_DB: Verify & establish session
+    end
+    alt Consent not yet granted / Scopes changed
+        C1->>Student: Redirect to /oauth/consent
+        Student->>C1: Click &#x22;Approve&#x22; (Grant Scopes)
+        C1->>C1_DB: Store OauthConsent record
+    end
+    C1->>Student: Redirect back to Developer redirect_uri with auth ?code=...&state=...
+    Student->>App: GET /callback?code=...&state=...
+    App->>C1: POST /api/auth/oauth2/token (client_id, code, code_verifier)
+    C1->>C1_DB: Validate code, verifier & client configuration
+    C1_DB-->>C1: Valid
+    C1->>App: Return tokens: id_token (JWT), access_token, refresh_token
+    Note over App: Verify id_token signature using JWKS<br/>Establish local app session
+    App->>Student: Redirect to authenticated dashboard (Logged In!)"
+    />
+  </Tab>
+
+  <Tab value="Simple Flow">
+    Here is a simplified, high-level summary of the sign-in journey:
+
+    <Mermaid
+      chart="sequenceDiagram
+    autonumber
+    actor Student as 👤 Student
+    participant App as 🚀 Your App
+    participant C1 as 🏛️ Campus One SSO
+
+    Student->>App: Clicks &#x22;Sign in with Campus One&#x22;
+    App->>Student: Sends them to Campus One with a Client ID
+    Student->>C1: Logs in & approves permissions (academic, profile, etc.)
+    C1->>Student: Redirects back to Your App with a temporary Auth Code
+    Student->>App: Delivers the Auth Code automatically
+    App->>C1: Behind the scenes: exchanges Auth Code + Client Secret
+    C1-->>App: Delivers Access Token & User Profile 🔑
+    App->>Student: &#x22;Welcome back! You are successfully signed in 🎉&#x22;"
+    />
+  </Tab>
+</Tabs>
+
+## Token lifecycle [#token-lifecycle]
+
+| Token              | Lifetime   | Purpose                                        |
+| ------------------ | ---------- | ---------------------------------------------- |
+| Authorization code | 10 minutes | One-time exchange for tokens                   |
+| ID token           | 1 hour     | Identifies the authenticated user              |
+| Access token       | 1 hour     | Authorizes calls to `/userinfo`                |
+| Refresh token      | 7 days     | Issued only when `offline_access` is requested |
+
+Tokens are signed with Campus One's rotating RSA key. Verify signatures using the public JWKS:
+
+```
+https://auth.campusone.com.ng/api/auth/jwks
+```
+
+## User attribute mapping [#user-attribute-mapping]
+
+Campus One includes user attributes in the `id_token` and at the `/userinfo` endpoint. Which attributes are present depends on the [permissions](/docs/permissions) granted for your app and the scopes you request.
+
+```json
+{
+  "iss": "https://auth.campusone.com.ng",
+  "aud": "your-client-id",
+  "sub": "user_abc123",
+  "email": "256240001@nileuniversity.edu.ng",
+  "email_verified": true,
+  "name": "Aisha Mohammed",
+  "role": "student",
+  "roles": ["student", "mentor"],
+  "student_id": "256240001",
+  "study_level": "undergraduate",
+  "level": 300,
+  "faculty_id": "fac_eng",
+  "department_id": "dept_cs",
+  "exp": 1735689600,
+  "iat": 1735686000
+}
+```
+
+## Discovery document [#discovery-document]
+
+All endpoint URLs are published at:
+
+```
+https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration
+```
+
+Most OIDC libraries can auto-configure from this URL.
+
+## Integration examples [#integration-examples]
+
+End-to-end implementations for common stacks:
+
+* [Next.js + Supabase](/docs/sso/examples/nextjs-supabase)
+* [Next.js + Express backend](/docs/sso/examples/nextjs-express)
+* [Next.js + Python/Flask backend](/docs/sso/examples/nextjs-flask)
+* [Next.js + Go backend](/docs/sso/examples/nextjs-go)
+* [React Router + Express](/docs/sso/examples/react-router-express)
+
+
+# OpenID Connect (/docs/sso/oidc)
+
+
+
+OpenID Connect (OIDC) is the recommended protocol for integrating with Campus One. It is built on OAuth 2.0 and returns a signed **ID token** (JWT) that your app can trust without a round-trip to Campus One.
+
+Campus One acts as the **OpenID Provider** at `https://auth.campusone.com.ng`. Your app is the **Relying Party**.
+
+## 1. Register your app [#1-register-your-app]
+
+Sign in to the developer dashboard at `https://app.campusone.com.ng/developer/apps` and create a new app:
+
+| Field             | Value for an app hosted at `ct.campusone.com.ng`                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Protocol**      | OIDC                                                                                                         |
+| **Redirect URLs** | `https://ct.campusone.com.ng/api/auth/callback/campus-one` (and any other callback URLs your framework uses) |
+
+Once the app is created, open the **Sign-in** tab of the app drawer to copy:
+
+* `CAMPUS_ONE_CLIENT_ID` — the `clientId` shown at the top of the tab.
+* `CAMPUS_ONE_CLIENT_SECRET` — click **Reveal** and copy it. It is shown once; rotate via the **Rotate client secret** action if lost.
+* `CAMPUS_ONE_WEBHOOK_SECRET` — see [webhooks](/docs/webhooks). Found on the **Webhooks** tab of the same drawer.
+
+Keep the client and webhook secrets out of client-side bundles and version control.
+
+### Localhost & Staging Environment Testing [#localhost--staging-environment-testing]
+
+You can fully test the OIDC integration in your local environment or deployed staging sites before your app has been given an official `campusone.com.ng` production subdomain.
+
+> \[!NOTE]
+> **Pending status apps are fully functional**: OIDC authorization, user consent screens, and token generation are completely active even when your app is in `Pending` status. You do not need to wait for admin approval to start testing.
+
+#### 1. Multi-App Strategy (Staging vs. Production Keys) [#1-multi-app-strategy-staging-vs-production-keys]
+
+We recommend registering two separate applications under your developer account:
+
+* **My App (Staging/Dev)**: Configured with your local or staging callback URLs. This provides you with dedicated **test keys** (Client ID and Client Secret) to use during active development.
+* **My App (Production)**: Created once you are ready to coordinate with Campus One admins to deploy onto a production `campusone.com.ng` subdomain. This provides you with your **production keys**.
+
+#### 2. Registering Callback URLs [#2-registering-callback-urls]
+
+You can register any valid URL (including `localhost` or custom staging domains) under the **Redirect URLs** list of your test app:
+
+* **Localhost**: `http://localhost:3000/api/auth/callback/campus-one` (or the port/path your framework uses).
+* **Deployed Staging**: `https://staging.myapp.com/api/auth/callback/campus-one` or `https://my-app-branch.vercel.app/api/auth/callback/campus-one`.
+
+#### 3. How the Authentication Layer Handles Localhost [#3-how-the-authentication-layer-handles-localhost]
+
+To make local testing completely seamless, the authentication server dynamically detects development setups:
+
+* When standard HTTP `localhost` is used for testing, cross-subdomain cookie scopes are automatically bypassed.
+* Secure cookie attributes are relaxed (`secure: false`) so that your local session remains active and you don't encounter cookie rejection warnings in your browser.
+
+## 2. Discovery + endpoints [#2-discovery--endpoints]
+
+Most OIDC libraries auto-configure from the discovery URL:
+
+```
+https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration
+```
+
+The discovery document advertises the following endpoints:
+
+| Endpoint           | URL                                                       |
+| ------------------ | --------------------------------------------------------- |
+| Authorization      | `https://auth.campusone.com.ng/api/auth/oauth2/authorize` |
+| Token exchange     | `https://auth.campusone.com.ng/api/auth/oauth2/token`     |
+| User info          | `https://auth.campusone.com.ng/api/auth/oauth2/userinfo`  |
+| JWKS (public keys) | `https://auth.campusone.com.ng/api/auth/jwks`             |
+
+The issuer (`iss`) advertised in id\_tokens is `https://auth.campusone.com.ng`.
+
+## 3. Scopes and claims [#3-scopes-and-claims]
+
+Request scopes in the `scope` parameter of the authorization URL:
+
+| Scope            | Returns on the id\_token / userinfo                                 | Default                |
+| ---------------- | ------------------------------------------------------------------- | ---------------------- |
+| `openid`         | `sub` (required)                                                    | Always                 |
+| `profile`        | `name`, `picture`, `preferred_username`, `phone_number`             | Yes                    |
+| `email`          | `email`, `email_verified`                                           | Yes                    |
+| `offline_access` | Returns a refresh token                                             | No — must be requested |
+| `academic`       | `student_id`, `study_level`, `level`, `faculty_id`, `department_id` | Yes                    |
+| `calendar`       | Permission to read the user's timetable                             | No — must be requested |
+| `notifications`  | Permission to send the user notifications                           | Yes                    |
+| `roles`          | `roles` (array of every role assigned to the user)                  | No — must be requested |
+
+### Role claims [#role-claims]
+
+Every id\_token includes a top-level `role` claim with the user's **primary** role (one of `admin`, `student`, `staff`, `developer`, `employer`, `consultant`, `therapist`, `founder`, `mentor`, `alumni`, `auditor`). This claim is always present whenever the `openid` scope is granted — your app can authorise users from the id\_token alone without an extra `/userinfo` call.
+
+If a user has multiple roles, the additional roles are exposed as the `roles` claim **only when the `roles` scope is requested and granted**. Request `roles` if your app needs to make authorization decisions based on more than the primary role.
+
+Example payload (decoded id\_token):
+
+```json
+{
+  "iss": "https://auth.campusone.com.ng",
+  "aud": "your-client-id",
+  "sub": "user_abc123",
+  "email": "256240001@nileuniversity.edu.ng",
+  "email_verified": true,
+  "name": "Aisha Mohammed",
+  "role": "student",
+  "roles": ["student", "mentor"],
+  "student_id": "256240001",
+  "study_level": "undergraduate",
+  "level": 300,
+  "faculty_id": "fac_eng",
+  "department_id": "dept_cs",
+  "exp": 1735689600,
+  "iat": 1735686000
+}
+```
+
+## 4. Authorization request [#4-authorization-request]
+
+Campus One requires PKCE on all clients (OAuth 2.1). Generate a `code_verifier` and `code_challenge`, then redirect the user to:
+
+```
+https://auth.campusone.com.ng/api/auth/oauth2/authorize
+  ?response_type=code
+  &client_id=YOUR_CLIENT_ID
+  &redirect_uri=https://ct.campusone.com.ng/api/auth/callback/campus-one
+  &scope=openid%20profile%20email%20academic%20roles%20offline_access
+  &state=RANDOM_STATE_VALUE
+  &code_challenge=BASE64URL_SHA256_OF_VERIFIER
+  &code_challenge_method=S256
+```
+
+Always include `state` (CSRF protection). The user will be shown the Campus One consent screen on first authorisation; **trusted** internal apps can skip consent by toggling the **Trusted app** switch in the developer dashboard.
+
+## Automatic & silent sign-in [#automatic--silent-sign-in]
+
+Campus One is a single sign-on platform: a student authenticates **once** and then moves between connected apps without logging in again. Your app should lean into this — **don't build your own login, signup, or password-reset pages**. Redirect unauthenticated visitors straight to the authorize endpoint above and let Campus One do the rest.
+
+**How automatic login works.** Campus One maintains the student's session. When your app sends them to `/api/auth/oauth2/authorize` and a valid Campus One session already exists, Campus One **does not prompt for credentials** — it immediately issues an authorization code and redirects back to your `redirect_uri`. The student experiences an instant, transparent sign-in.
+
+* **Shared session on subdomains.** In production the Campus One session cookie is scoped to `.campusone.com.ng`, so apps hosted on a `*.campusone.com.ng` subdomain share it directly.
+* **Apps on other domains** still get automatic login: the redirect to `auth.campusone.com.ng` carries the Campus One session cookie, so the authorize step resolves without a login screen.
+* **Consent is shown at most once.** First authorisation shows the scope-consent dialog; afterwards it's remembered until your requested scopes change. **Trusted apps** skip it entirely.
+
+**Pattern: auto-redirect on protected routes.** Rather than a "Sign in" page, have your route guard / middleware kick off the OIDC redirect whenever there's no local session. The user never sees a form.
+
+**Fully silent attempts with `prompt=none`.** To check for an existing session *without any visible redirect to a login screen*, add `prompt=none` to the authorization request:
+
+```
+https://auth.campusone.com.ng/api/auth/oauth2/authorize
+  ?response_type=code
+  &client_id=YOUR_CLIENT_ID
+  &redirect_uri=...
+  &scope=openid%20profile%20email
+  &state=...
+  &code_challenge=...
+  &code_challenge_method=S256
+  &prompt=none
+```
+
+* If the student has an active Campus One session, you get an authorization code back with no UI shown.
+* If they don't, Campus One redirects back with `error=login_required` (per the OIDC spec). Catch that error and retry **without** `prompt=none` to start a normal interactive sign-in.
+
+This is ideal for "silently restore the session on page load" flows in SPAs (often run inside a hidden iframe) without ever flashing a login screen.
+
+## 5. Token exchange [#5-token-exchange]
+
+After consent, Campus One redirects to your `redirect_uri` with `?code=…&state=…`. Exchange the code for tokens:
+
+```http
+POST https://auth.campusone.com.ng/api/auth/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=AUTHORIZATION_CODE
+&redirect_uri=https://ct.campusone.com.ng/api/auth/callback/campus-one
+&client_id=YOUR_CLIENT_ID
+&client_secret=YOUR_CLIENT_SECRET
+&code_verifier=ORIGINAL_VERIFIER
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJ...",
+  "id_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "openid profile email academic roles offline_access"
+}
+```
+
+`refresh_token` is only returned if `offline_access` was in the granted scopes.
+
+## 6. Validating the ID token [#6-validating-the-id-token]
+
+Decode and verify the JWT using the public keys from the JWKS endpoint:
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+const JWKS = createRemoteJWKSet(
+  new URL("https://auth.campusone.com.ng/api/auth/jwks")
+);
+
+const { payload } = await jwtVerify(idToken, JWKS, {
+  issuer: "https://auth.campusone.com.ng",
+  audience: process.env.CAMPUS_ONE_CLIENT_ID,
+});
+
+console.log(payload.sub);        // unique user ID
+console.log(payload.email);
+console.log(payload.role);       // "student" | "staff" | ...
+console.log(payload.student_id); // e.g. "256240001"
+```
+
+Always verify `iss`, `aud`, and `exp`.
+
+## 7. Refreshing tokens [#7-refreshing-tokens]
+
+```http
+POST https://auth.campusone.com.ng/api/auth/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&refresh_token=REFRESH_TOKEN
+&client_id=YOUR_CLIENT_ID
+&client_secret=YOUR_CLIENT_SECRET
+```
+
+Refresh tokens expire after 7 days of inactivity or when the user revokes access.
+
+## Quick-start with a library [#quick-start-with-a-library]
+
+Most OIDC libraries work by pointing them at the discovery URL:
+
+```ts
+// next-auth (Auth.js)
+import NextAuth from "next-auth";
+
+export default NextAuth({
+  providers: [
+    {
+      id: "campus-one",
+      name: "Campus One",
+      type: "oidc",
+      issuer: "https://auth.campusone.com.ng",
+      wellKnown:
+        "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration",
+      clientId: process.env.CAMPUS_ONE_CLIENT_ID,
+      clientSecret: process.env.CAMPUS_ONE_CLIENT_SECRET,
+      authorization: {
+        params: { scope: "openid profile email academic roles offline_access" },
+      },
+    },
+  ],
+  callbacks: {
+    async session({ session, token }) {
+      // Surface the role claim on the session so route guards can read it.
+      session.user.role = token.role as string | undefined;
+      return session;
+    },
+  },
+});
+```
+
+```ts
+// better-auth (consumer side)
+import { betterAuth } from "better-auth";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
+
+export const auth = betterAuth({
+  plugins: [
+    genericOAuth({
+      config: [
+        {
+          providerId: "campus-one",
+          discoveryUrl:
+            "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration",
+          clientId: process.env.CAMPUS_ONE_CLIENT_ID!,
+          clientSecret: process.env.CAMPUS_ONE_CLIENT_SECRET!,
+          scopes: ["openid", "profile", "email", "academic", "roles", "offline_access"],
+          pkce: true,
+        },
+      ],
+    }),
+  ],
+});
+```
+
+***
+
+## 8. App Health Monitoring [#8-app-health-monitoring]
+
+To display your application's live status badge (**Online** vs **Offline**) to Campus One administrators and inside the student directories, you should ensure your application is reachable from the Campus One server.
+
+Campus One dynamically checks your app's reachability by pinging your app's `acsUrl` or primary redirect URL using lightweight HTTP `HEAD` (or `GET`) requests. For the best experience, configure your server to respond swiftly with a `200 OK` or any successful HTTP code.
+
+### Exposing a Custom Health Route [#exposing-a-custom-health-route]
+
+If you want to handle these checks specifically, we recommend configuring a lightweight endpoint on your server:
+
+```typescript
+// Example using Node.js / Express
+app.head("/api/health", (req, res) => {
+  res.status(200).end();
+});
+
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "healthy", timestamp: new Date() });
+});
+```
+
+***
+
+## 9. Handling User Disconnection [#9-handling-user-disconnection]
+
+When a user clicks "Disconnect" inside their Profile Settings page on Campus One, Campus One instantly revokes all active OIDC consent records and deletes their OIDC access and refresh tokens.
+
+To keep your application's local user records synchronized and log the user out gracefully when their access is revoked, we recommend two strategies:
+
+### A. Session Verification on Request (Token Validation) [#a-session-verification-on-request-token-validation]
+
+Whenever your application performs server-side data fetching or routes a user to an authenticated page, verify the validity of their stored `access_token` by calling the userinfo endpoint `/api/auth/oauth2/userinfo`.
+
+If Campus One returns a `401 Unauthorized` (indicating the user has disconnected the app or their token has expired), you should immediately invalidate the user's local session and direct them to re-authenticate:
+
+```typescript
+const res = await fetch("https://auth.campusone.com.ng/api/auth/oauth2/userinfo", {
+  headers: {
+    Authorization: `Bearer ${storedAccessToken}`,
+  },
+});
+
+if (res.status === 401) {
+  // Clear local session cookies / database session
+  destroyLocalSession();
+  
+  // Redirect back to Campus One authorize endpoint
+  redirectToSSO();
+}
+```
+
+### B. Listening to Revocation Webhooks (Coming Soon) [#b-listening-to-revocation-webhooks-coming-soon]
+
+You can register a secure callback under the **Webhooks** tab of the developer drawer. Campus One will emit a `user.disconnected` event to your webhook endpoint when consent is revoked, letting you clean up user records asynchronously:
+
+```http
+POST https://your-app.com/api/webhooks/campus-one
+Content-Type: application/json
+X-Campus-One-Signature: <hmac-signature>
+
+{
+  "event": "user.disconnected",
+  "timestamp": "2026-05-21T18:41:23Z",
+  "data": {
+    "userId": "user_abc123",
+    "clientId": "your-client-id"
+  }
+}
+```
+
+***
+
+## 10. App-Specific Custom Roles [#10-app-specific-custom-roles]
+
+To support application-specific permissions alongside Nile's default global academic roles (`"student"`, `"staff"`, `"admin"`), Campus One lets developers declare and assign **Custom Roles** (e.g. `"editor"`, `"tutor"`, `"moderator"`) for their registered integration.
+
+### Mapped Token Claims [#mapped-token-claims]
+
+When a student or staff member authorizes your app, their assigned custom roles are dynamically injected into their OIDC tokens whenever the client requests the `roles` scope:
+
+* **`custom_roles` (Array of Strings)**: Contains *only* your app-specific roles assigned to this user.
+* **`roles` (Array of Strings)**: Merges the user's primary academic role (e.g. `"student"`) with their app-specific custom roles.
+
+### Example Token Payload [#example-token-payload]
+
+```json
+{
+  "iss": "https://auth.campusone.com.ng",
+  "sub": "user_abc123",
+  "email": "student@nileuniversity.edu.ng",
+  "role": "student",
+  "roles": ["student", "editor", "moderator"],
+  "custom_roles": ["editor", "moderator"]
+}
+```
+
+### Authorization Check Example [#authorization-check-example]
+
+You can leverage these roles inside your route guards or API endpoints to restrict access based on the dynamic permissions parsed from the OIDC token:
+
+```typescript
+// Route guard checking custom roles
+function requireAppRole(requiredRole: string) {
+  return (req, res, next) => {
+    const claims = req.user; // decoded OIDC ID token claims
+    
+    const customRoles = claims.custom_roles || [];
+    if (!customRoles.includes(requiredRole)) {
+      return res.status(403).json({ 
+        error: "Forbidden", 
+        message: `This action requires the custom app role: ${requiredRole}` 
+      });
+    }
+    
+    next();
+  };
+}
+
+// Usage in an Express route
+app.post("/api/articles", requireAppRole("editor"), (req, res) => {
+  res.json({ message: "Article created successfully!" });
+});
+```
+
+***
+
+## 11. OIDC Client Last Sync Feature [#11-oidc-client-last-sync-feature]
+
+Campus One tracks the exact timestamp when OIDC client details and user consent records are successfully synchronized with relying party credentials. This is vital for auditable compliance, security auditing, and verification of key rotations.
+
+### Feature Mechanics [#feature-mechanics]
+
+* **Automatic Sync Hook**: Whenever an application client requests an authorization token or requests userinfo with active credentials, the `lastSyncAt` field is automatically bumped on the database `SsoConfig` record.
+* **Auditing Visibility**: The last sync timestamp is reactively displayed on the developer portal app cards and drawer dashboards under the **Last Sync** status indicator.
+* **Consent Revocation Verification**: This timestamp helps developers verify if a user's session has successfully established a fresh OIDC handshake after credential rotation or scope updates.
+
+
+# SAML 2.0 (/docs/sso/saml)
+
+
+
+> \[!WARNING]
+> &#x2A;*Planned — not yet available.** SAML 2.0 is not implemented yet. Campus One currently issues identity exclusively over [OpenID Connect](/docs/sso/oidc); the SAML endpoints, metadata URL, and certificate described below do not exist today. This page documents the intended SAML integration so you can plan ahead — &#x2A;*use OIDC for any integration you need to ship now.**
+
+SAML 2.0 is planned for enterprise and legacy systems that cannot use OIDC. Campus One will act as the &#x2A;*Identity Provider (IdP)**; your app is the &#x2A;*Service Provider (SP)**.
+
+## Credentials [#credentials]
+
+After connecting your app in the developer dashboard, find these values in the **Sign-in** tab:
+
+| Field                | Value                                         |
+| -------------------- | --------------------------------------------- |
+| **Entity ID (IdP)**  | `https://auth.campusone.com.ng/saml`          |
+| **SSO URL**          | `https://auth.campusone.com.ng/saml/sso`      |
+| **SLO URL**          | `https://auth.campusone.com.ng/saml/slo`      |
+| **IdP Metadata URL** | `https://auth.campusone.com.ng/saml/metadata` |
+| **Certificate**      | Download from the Sign-in tab                 |
+
+Configure your SP using the **IdP Metadata URL** — most SAML libraries can auto-import from it.
+
+## SP configuration you must provide [#sp-configuration-you-must-provide]
+
+In the app drawer → Sign-in tab, enter:
+
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| **Entity ID (SP)** | A unique URN for your app, e.g. `urn:nile:campusone:hostel`                       |
+| **ACS URL**        | Where Campus One posts the SAML response, e.g. `https://hostel.nile.edu/saml/acs` |
+
+## Sign-in flow [#sign-in-flow]
+
+```
+Student clicks "Sign in with Campus One"
+  → Your SP generates a SAML AuthnRequest
+  → Student's browser is redirected (POST or Redirect binding) to Campus One SSO URL
+  → Campus One authenticates the student
+  → Campus One POST-binds a signed SAMLResponse to your ACS URL
+  → Your SP validates the signature and extracts the assertion
+  → Student is signed in
+```
+
+## SAMLResponse attributes [#samlresponse-attributes]
+
+Campus One includes user attributes in the assertion. Attribute names follow the URN convention:
+
+| Attribute     | URN                                 |
+| ------------- | ----------------------------------- |
+| Email         | `urn:oid:1.2.840.113549.1.9.1`      |
+| Display name  | `urn:oid:2.16.840.1.113730.3.1.241` |
+| First name    | `urn:oid:2.5.4.42`                  |
+| Last name     | `urn:oid:2.5.4.4`                   |
+| Student ID    | `urn:campusone:student_id`          |
+| Programme     | `urn:campusone:programme`           |
+| Cohort year   | `urn:campusone:cohort`              |
+| Year of study | `urn:campusone:year_of_study`       |
+
+Which attributes are present depends on the [permissions](/docs/permissions) granted for your app.
+
+## Signature verification [#signature-verification]
+
+All assertions are signed with Campus One's X.509 certificate. Always verify:
+
+1. The `Issuer` matches `https://auth.campusone.com.ng/saml`
+2. The signature is valid against the downloaded certificate
+3. `NotBefore` and `NotOnOrAfter` conditions are respected
+4. The `Audience` restriction matches your SP Entity ID
+
+Never process an unsigned or unverified assertion.
+
+## Example: Node.js with samlify [#example-nodejs-with-samlify]
+
+```ts
+import * as samlify from "samlify";
+import * as validator from "@authenio/samlify-node-xmllint";
+
+samlify.setSchemaValidator(validator);
+
+const idp = samlify.IdentityProvider({
+  metadata: "https://auth.campusone.com.ng/saml/metadata",
+});
+
+const sp = samlify.ServiceProvider({
+  entityID: "urn:nile:campusone:yourapp",
+  assertionConsumerService: [
+    {
+      Binding: samlify.Constants.namespace.post,
+      Location: "https://yourapp.nile.edu/saml/acs",
+    },
+  ],
+});
+
+// Generate login URL
+const { context } = sp.createLoginRequest(idp, "redirect");
+res.redirect(context);
+
+// Handle ACS POST
+app.post("/saml/acs", async (req, res) => {
+  const { extract } = await sp.parseLoginResponse(idp, "post", req);
+  const email = extract.attributes["urn:oid:1.2.840.113549.1.9.1"];
+  // sign in the user...
+});
+```
+
+## Key rotation [#key-rotation]
+
+Campus One rotates its signing certificate annually. Watch for the `CampusOne-Certificate-Expiry` header in SAML responses — it contains the days until the next rotation. Download the new certificate from the IdP metadata URL before the old one expires.
+
+
+# Integration examples (/docs/sso/examples)
+
+
+
+Each guide assumes you have already:
+
+1. Registered your app in the [developer dashboard](https://app.campusone.com.ng/developer/apps) with protocol **OIDC** and added your redirect URL.
+2. Copied your `CAMPUS_ONE_CLIENT_ID`, `CAMPUS_ONE_CLIENT_SECRET`, and `CAMPUS_ONE_WEBHOOK_SECRET` from the **Sign-in** and **Webhooks** tabs of the app drawer.
+
+Pick the stack closest to yours:
+
+| Stack                                                             | When to pick this                                                                |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Next.js + Supabase](/docs/sso/examples/nextjs-supabase)          | You're using Supabase Auth and want Campus One as a federated identity provider. |
+| [Next.js + Express backend](/docs/sso/examples/nextjs-express)    | Next.js frontend, Node.js + Express API holding sessions.                        |
+| [Next.js + Python/Flask backend](/docs/sso/examples/nextjs-flask) | Next.js frontend, Flask API (with `Flask-Session`).                              |
+| [Next.js + Go backend](/docs/sso/examples/nextjs-go)              | Next.js frontend, Go API using `coreos/go-oidc`.                                 |
+| [React Router + Express](/docs/sso/examples/react-router-express) | SPA with `react-router-dom`, Express backend holding the session.                |
+
+All examples use the **authorization code flow with PKCE** (required by Campus One per OAuth 2.1) and verify the `id_token` against the JWKS endpoint.
+
+## Shared concepts [#shared-concepts]
+
+The examples reference the same three values throughout:
+
+```sh
+# .env (server-side only — never expose CLIENT_SECRET to the browser)
+CAMPUS_ONE_CLIENT_ID=cmpfh63i30002...
+CAMPUS_ONE_CLIENT_SECRET=9800abcd1f11d44e844450b...
+CAMPUS_ONE_ISSUER=https://auth.campusone.com.ng
+CAMPUS_ONE_DISCOVERY_URL=https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration
+```
+
+The &#x2A;*`role`** claim is included on every id\_token whenever the `openid` scope is granted. Use it for authorization on the relying-party side — you do not need to call `/userinfo` for basic role checks. Request the `roles` scope to receive the full array of every role assigned to the user.
+
+## Common pitfalls [#common-pitfalls]
+
+* **Never expose `CAMPUS_ONE_CLIENT_SECRET` to the browser.** All token-exchange requests happen on your server. For pure SPAs that have no backend, use [PKCE without a client secret](https://datatracker.ietf.org/doc/html/rfc8252#section-8.1) — see the React Router example for one approach (proxy via a tiny Express backend).
+* **`redirect_uri` must match exactly.** Including the trailing slash. Mismatches return `invalid_redirect_uri` from Campus One.
+* **PKCE is required.** Disabling it returns `invalid_request`.
+* **Always verify `iss`, `aud`, and `exp`** on the id\_token. The examples use `jose` (Node/Browser), `authlib` (Python), and `coreos/go-oidc` (Go) which do this for you when configured correctly.
+
+
+# Next.js + Express (/docs/sso/examples/nextjs-express)
+
+
+
+Use this pattern when your Next.js app talks to an Express API on the same domain (or a known subdomain) and Express manages the session cookie.
+
+The Express backend handles the entire OIDC flow; Next.js just calls `/auth/login` and reads the session.
+
+## Server (Express) [#server-express]
+
+```ts
+// server/index.ts
+import express from "express";
+import session from "express-session";
+import cookieParser from "cookie-parser";
+import { Issuer, generators } from "openid-client";
+
+const app = express();
+app.use(cookieParser());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" },
+  })
+);
+
+// Discover Campus One's endpoints once at boot. `openid-client` caches JWKS
+// internally and refreshes them automatically.
+const issuer = await Issuer.discover("https://auth.campusone.com.ng");
+const client = new issuer.Client({
+  client_id: process.env.CAMPUS_ONE_CLIENT_ID!,
+  client_secret: process.env.CAMPUS_ONE_CLIENT_SECRET!,
+  redirect_uris: [`${process.env.APP_URL}/auth/callback`],
+  response_types: ["code"],
+});
+
+declare module "express-session" {
+  interface SessionData {
+    user?: {
+      sub: string;
+      email: string;
+      name: string;
+      role: string;
+      roles?: string[];
+      studentId?: string;
+    };
+    pkceVerifier?: string;
+    oauthState?: string;
+  }
+}
+
+app.get("/auth/login", (req, res) => {
+  const verifier = generators.codeVerifier();
+  const state = generators.state();
+  req.session.pkceVerifier = verifier;
+  req.session.oauthState = state;
+
+  res.redirect(
+    client.authorizationUrl({
+      scope: "openid profile email academic roles offline_access",
+      state,
+      code_challenge: generators.codeChallenge(verifier),
+      code_challenge_method: "S256",
+    })
+  );
+});
+
+app.get("/auth/callback", async (req, res) => {
+  const params = client.callbackParams(req);
+  try {
+    const tokenSet = await client.callback(
+      `${process.env.APP_URL}/auth/callback`,
+      params,
+      {
+        code_verifier: req.session.pkceVerifier,
+        state: req.session.oauthState,
+      }
+    );
+
+    // `tokenSet.claims()` verifies iss/aud/exp/signature against the issuer's
+    // JWKS for you. Throws if anything is off.
+    const claims = tokenSet.claims();
+    req.session.user = {
+      sub: claims.sub,
+      email: claims.email as string,
+      name: claims.name as string,
+      role: claims.role as string,
+      roles: claims.roles as string[] | undefined,
+      studentId: claims.student_id as string | undefined,
+    };
+    req.session.pkceVerifier = undefined;
+    req.session.oauthState = undefined;
+
+    res.redirect(`${process.env.APP_URL}/dashboard`);
+  } catch (err) {
+    console.error("Sign-in failed:", err);
+    res.status(401).send("Sign-in failed");
+  }
+});
+
+app.get("/auth/me", (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: "Not signed in" });
+  }
+  res.json(req.session.user);
+});
+
+app.post("/auth/logout", (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.listen(4000);
+```
+
+## Frontend (Next.js) [#frontend-nextjs]
+
+A Next.js client component that calls the Express endpoints. CORS / cookies must be configured on the Express side to allow your Next.js origin.
+
+```tsx
+// app/login/page.tsx
+"use client";
+
+export default function LoginPage() {
+  return (
+    <a href={`${process.env.NEXT_PUBLIC_API_URL}/auth/login`}>
+      <button>Sign in with Campus One</button>
+    </a>
+  );
+}
+```
+
+```tsx
+// app/dashboard/page.tsx (server component)
+import { cookies } from "next/headers";
+
+async function getUser() {
+  const res = await fetch(`${process.env.API_URL}/auth/me`, {
+    headers: { cookie: cookies().toString() },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<{
+    name: string;
+    role: string;
+    studentId?: string;
+  }>;
+}
+
+export default async function Dashboard() {
+  const user = await getUser();
+  if (!user) {
+    return <a href={`${process.env.NEXT_PUBLIC_API_URL}/auth/login`}>Sign in</a>;
+  }
+  return (
+    <div>
+      <h1>Hello {user.name}</h1>
+      <p>Role: {user.role}</p>
+      {user.role === "admin" && <a href="/admin">Admin panel</a>}
+    </div>
+  );
+}
+```
+
+## Role-based middleware [#role-based-middleware]
+
+```ts
+// server/middleware/requireRole.ts
+import type { RequestHandler } from "express";
+
+export const requireRole =
+  (...allowed: string[]): RequestHandler =>
+  (req, res, next) => {
+    const role = req.session.user?.role;
+    if (!role || !allowed.includes(role)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  };
+
+// Usage
+app.get("/admin/reports", requireRole("admin", "staff"), (req, res) => {
+  // ...
+});
+```
+
+## Webhook receiver [#webhook-receiver]
+
+```ts
+// server/webhooks.ts
+import { createHmac, timingSafeEqual } from "crypto";
+
+// IMPORTANT: mount the raw body parser BEFORE express.json() on this route,
+// otherwise the signature will not match what Campus One signed.
+app.post(
+  "/webhooks/campus-one",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const sig = (req.headers["x-campus-one-signature"] as string) ?? "";
+    const expected = `sha256=${createHmac("sha256", process.env.CAMPUS_ONE_WEBHOOK_SECRET!)
+      .update(req.body)
+      .digest("hex")}`;
+
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(401).send("Invalid signature");
+    }
+
+    const event = JSON.parse(req.body.toString()) as {
+      event: string;
+      data: Record<string, unknown>;
+    };
+
+    if (event.event === "user.role_changed") {
+      // Invalidate this user's session so they re-authenticate and pick up
+      // the new role on next request.
+      console.log("Role changed:", event.data);
+    }
+
+    res.send("ok");
+  }
+);
+```
+
+
+# Next.js + Flask (/docs/sso/examples/nextjs-flask)
+
+
+
+Use this when your API is Flask and your frontend is Next.js. Flask owns the session cookie; Next.js just calls Flask endpoints.
+
+We use `authlib` because it handles OIDC discovery, PKCE, and id\_token verification (including JWKS rotation) without extra plumbing.
+
+## Install [#install]
+
+```sh
+pip install Flask authlib Flask-Session "requests<3"
+```
+
+## Server (Flask) [#server-flask]
+
+```python
+# app.py
+import os
+import secrets
+from flask import Flask, redirect, request, session, jsonify
+from flask_session import Session
+from authlib.integrations.flask_client import OAuth
+from authlib.jose import jwt
+import hmac, hashlib
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ["SESSION_SECRET"]
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+Session(app)
+
+oauth = OAuth(app)
+oauth.register(
+    name="campus_one",
+    client_id=os.environ["CAMPUS_ONE_CLIENT_ID"],
+    client_secret=os.environ["CAMPUS_ONE_CLIENT_SECRET"],
+    server_metadata_url="https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration",
+    client_kwargs={
+        "scope": "openid profile email academic roles offline_access",
+        "code_challenge_method": "S256",  # PKCE required by Campus One
+    },
+)
+
+@app.route("/auth/login")
+def login():
+    redirect_uri = f"{os.environ['APP_URL']}/auth/callback"
+    # authlib generates the PKCE verifier + nonce and stores them in the session.
+    return oauth.campus_one.authorize_redirect(redirect_uri)
+
+@app.route("/auth/callback")
+def callback():
+    token = oauth.campus_one.authorize_access_token()
+    # `authorize_access_token` already verified iss/aud/exp/signature.
+    user_info = token.get("userinfo") or oauth.campus_one.userinfo(token=token)
+
+    session["user"] = {
+        "sub": user_info["sub"],
+        "email": user_info["email"],
+        "name": user_info.get("name"),
+        "role": user_info.get("role"),
+        "roles": user_info.get("roles"),
+        "student_id": user_info.get("student_id"),
+    }
+    return redirect(f"{os.environ['APP_URL']}/dashboard")
+
+@app.route("/auth/me")
+def me():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "Not signed in"}), 401
+    return jsonify(user)
+
+@app.route("/auth/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+# --- Role gate ---------------------------------------------------------------
+
+def require_role(*allowed):
+    def wrap(fn):
+        from functools import wraps
+        @wraps(fn)
+        def inner(*a, **kw):
+            user = session.get("user")
+            if not user or user.get("role") not in allowed:
+                return jsonify({"error": "Forbidden"}), 403
+            return fn(*a, **kw)
+        return inner
+    return wrap
+
+@app.route("/admin/reports")
+@require_role("admin", "staff")
+def reports():
+    return jsonify({"message": "secret stuff"})
+
+# --- Webhooks ----------------------------------------------------------------
+
+@app.route("/webhooks/campus-one", methods=["POST"])
+def campus_one_webhook():
+    secret = os.environ["CAMPUS_ONE_WEBHOOK_SECRET"]
+    raw = request.get_data()  # raw bytes — DO NOT use request.json here
+
+    received = request.headers.get("X-Campus-One-Signature", "")
+    expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(received, expected):
+        return "Invalid signature", 401
+
+    event = request.get_json()
+    if event["event"] == "user.role_changed":
+        # Mark sessions stale, or update your local user table here.
+        app.logger.info("Role changed: %s", event["data"])
+    return "ok"
+
+if __name__ == "__main__":
+    app.run(port=4000)
+```
+
+## Frontend (Next.js) [#frontend-nextjs]
+
+Same pattern as the [Express example](/docs/sso/examples/nextjs-express) — the Next.js side is decoupled from the backend implementation:
+
+```tsx
+// app/login/page.tsx
+export default function LoginPage() {
+  return (
+    <a href={`${process.env.NEXT_PUBLIC_API_URL}/auth/login`}>
+      <button>Sign in with Campus One</button>
+    </a>
+  );
+}
+```
+
+```tsx
+// app/dashboard/page.tsx
+import { cookies } from "next/headers";
+
+export default async function Dashboard() {
+  const res = await fetch(`${process.env.API_URL}/auth/me`, {
+    headers: { cookie: cookies().toString() },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    return <a href={`${process.env.NEXT_PUBLIC_API_URL}/auth/login`}>Sign in</a>;
+  }
+  const user = await res.json();
+  return <h1>Hello {user.name} ({user.role})</h1>;
+}
+```
+
+## Gotchas specific to Flask [#gotchas-specific-to-flask]
+
+* **CSRF**: `authorize_redirect` writes the PKCE verifier + nonce to the session. If your Next.js app is on a different origin, make sure cookies are still sent on the `/auth/callback` redirect (same-site, top-level navigation is fine; an iframe is not).
+* **Workers**: if you run Flask behind Gunicorn with multiple workers and a default filesystem session store, sticky sessions or a shared store (Redis, database) are required so the worker that handles `/auth/callback` can find the verifier written by `/auth/login`.
+* **Raw body for webhooks**: `request.get_data()`, not `request.get_json()`, so the signature matches Campus One's HMAC.
+
+
+# Next.js + Go (/docs/sso/examples/nextjs-go)
+
+
+
+Use this when your API is Go. We use `coreos/go-oidc` for the OIDC client and `golang.org/x/oauth2` for the token exchange — both handle PKCE and signature verification correctly.
+
+## Install [#install]
+
+```sh
+go get github.com/coreos/go-oidc/v3/oidc
+go get golang.org/x/oauth2
+go get github.com/gorilla/sessions
+```
+
+## Server (Go) [#server-go]
+
+```go
+// main.go
+package main
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gorilla/sessions"
+	"golang.org/x/oauth2"
+)
+
+var (
+	provider     *oidc.Provider
+	oauthConfig  oauth2.Config
+	verifier     *oidc.IDTokenVerifier
+	store        = sessions.NewCookieStore([]byte(os.Getenv("SESSION_SECRET")))
+)
+
+func main() {
+	ctx := context.Background()
+	var err error
+	provider, err = oidc.NewProvider(ctx, "https://auth.campusone.com.ng")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	oauthConfig = oauth2.Config{
+		ClientID:     os.Getenv("CAMPUS_ONE_CLIENT_ID"),
+		ClientSecret: os.Getenv("CAMPUS_ONE_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("APP_URL") + "/auth/callback",
+		Endpoint:     provider.Endpoint(),
+		Scopes: []string{
+			oidc.ScopeOpenID, "profile", "email",
+			"academic", "roles", "offline_access",
+		},
+	}
+	verifier = provider.Verifier(&oidc.Config{ClientID: oauthConfig.ClientID})
+
+	http.HandleFunc("/auth/login", login)
+	http.HandleFunc("/auth/callback", callback)
+	http.HandleFunc("/auth/me", me)
+	http.HandleFunc("/webhooks/campus-one", webhook)
+	log.Fatal(http.ListenAndServe(":4000", nil))
+}
+
+// --- helpers -----------------------------------------------------------------
+
+func randURL(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func pkce() (verifier, challenge string) {
+	verifier = randURL(32)
+	sum := sha256.Sum256([]byte(verifier))
+	challenge = base64.RawURLEncoding.EncodeToString(sum[:])
+	return
+}
+
+// --- routes ------------------------------------------------------------------
+
+func login(w http.ResponseWriter, r *http.Request) {
+	state := randURL(16)
+	v, c := pkce()
+
+	sess, _ := store.Get(r, "c1")
+	sess.Values["state"] = state
+	sess.Values["verifier"] = v
+	sess.Save(r, w)
+
+	url := oauthConfig.AuthCodeURL(
+		state,
+		oauth2.SetAuthURLParam("code_challenge", c),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
+	http.Redirect(w, r, url, http.StatusFound)
+}
+
+type claims struct {
+	Sub       string   `json:"sub"`
+	Email     string   `json:"email"`
+	Name      string   `json:"name"`
+	Role      string   `json:"role"`
+	Roles     []string `json:"roles,omitempty"`
+	StudentID string   `json:"student_id,omitempty"`
+}
+
+func callback(w http.ResponseWriter, r *http.Request) {
+	sess, _ := store.Get(r, "c1")
+	expectedState, _ := sess.Values["state"].(string)
+	v, _ := sess.Values["verifier"].(string)
+
+	if r.URL.Query().Get("state") != expectedState {
+		http.Error(w, "Invalid state", http.StatusBadRequest)
+		return
+	}
+
+	tok, err := oauthConfig.Exchange(r.Context(), r.URL.Query().Get("code"),
+		oauth2.SetAuthURLParam("code_verifier", v),
+	)
+	if err != nil {
+		http.Error(w, "Token exchange failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	rawID, ok := tok.Extra("id_token").(string)
+	if !ok {
+		http.Error(w, "No id_token", http.StatusInternalServerError)
+		return
+	}
+
+	// Verifies iss, aud, exp, and signature against the JWKS.
+	idTok, err := verifier.Verify(r.Context(), rawID)
+	if err != nil {
+		http.Error(w, "Invalid id_token: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	var c claims
+	if err := idTok.Claims(&c); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sess.Values["user"], _ = json.Marshal(c)
+	delete(sess.Values, "state")
+	delete(sess.Values, "verifier")
+	sess.Save(r, w)
+
+	http.Redirect(w, r, os.Getenv("APP_URL")+"/dashboard", http.StatusFound)
+}
+
+func me(w http.ResponseWriter, r *http.Request) {
+	sess, _ := store.Get(r, "c1")
+	raw, ok := sess.Values["user"].([]byte)
+	if !ok {
+		http.Error(w, "Not signed in", http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(raw)
+}
+
+// --- webhooks ----------------------------------------------------------------
+
+func webhook(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	mac := hmac.New(sha256.New, []byte(os.Getenv("CAMPUS_ONE_WEBHOOK_SECRET")))
+	mac.Write(body)
+	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(expected), []byte(r.Header.Get("X-Campus-One-Signature"))) {
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	var event struct {
+		Event string                 `json:"event"`
+		Data  map[string]interface{} `json:"data"`
+	}
+	json.Unmarshal(body, &event)
+
+	if event.Event == "user.role_changed" {
+		log.Printf("Role changed: %v", event.Data)
+	}
+	w.Write([]byte("ok"))
+}
+```
+
+## Frontend (Next.js) [#frontend-nextjs]
+
+Same pattern as the other backend examples. Next.js never touches the OIDC flow directly:
+
+```tsx
+// app/login/page.tsx
+export default function LoginPage() {
+  return (
+    <a href={`${process.env.NEXT_PUBLIC_API_URL}/auth/login`}>
+      <button>Sign in with Campus One</button>
+    </a>
+  );
+}
+```
+
+## Role middleware in Go [#role-middleware-in-go]
+
+```go
+func requireRole(allowed ...string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			sess, _ := store.Get(r, "c1")
+			raw, ok := sess.Values["user"].([]byte)
+			if !ok {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+			var c claims
+			json.Unmarshal(raw, &c)
+			for _, a := range allowed {
+				if a == c.Role {
+					next(w, r)
+					return
+				}
+			}
+			http.Error(w, "Forbidden", http.StatusForbidden)
+		}
+	}
+}
+
+// Usage
+http.HandleFunc("/admin/reports", requireRole("admin", "staff")(reports))
+```
+
+## Gotchas [#gotchas]
+
+* `idTok.Claims(&c)` deserialises into your struct. If you also need claims that aren't in your struct, capture them with `map[string]any` instead.
+* `gorilla/sessions` cookie store has a \~4kb limit. For larger sessions use the filesystem/redis store.
+* `io.ReadAll(r.Body)` must run **before** anything else touches the body, or the HMAC won't match.
+
+
+# Next.js + Supabase (/docs/sso/examples/nextjs-supabase)
+
+
+
+Use this pattern when Supabase Auth already owns your user table and you want students to sign in with Campus One while Supabase issues your app's session.
+
+There are two ways to integrate. Pick the one that matches your Supabase plan:
+
+1. **Supabase as a relying party (recommended).** Configure Campus One as a [custom OIDC provider](https://supabase.com/docs/guides/auth/social-login) in your Supabase project. Supabase handles the OIDC dance and creates a Supabase user record on first sign-in.
+2. **Custom callback bridge.** If your Supabase tier doesn't allow arbitrary OIDC providers, sign in with Campus One on a Next.js route, then call `supabase.auth.signInWithIdToken` to upgrade the Campus One id\_token into a Supabase session.
+
+## Option 1: Supabase as a relying party [#option-1-supabase-as-a-relying-party]
+
+### 1. Register the provider in Supabase [#1-register-the-provider-in-supabase]
+
+In the Supabase Dashboard → **Authentication → Providers → Add provider → OIDC**:
+
+| Field         | Value                                                                         |
+| ------------- | ----------------------------------------------------------------------------- |
+| Issuer URL    | `https://auth.campusone.com.ng`                                               |
+| Client ID     | `CAMPUS_ONE_CLIENT_ID`                                                        |
+| Client Secret | `CAMPUS_ONE_CLIENT_SECRET`                                                    |
+| Redirect URL  | Copy from Supabase — usually `https://<project>.supabase.co/auth/v1/callback` |
+| Scopes        | `openid profile email academic roles offline_access`                          |
+
+Then add Supabase's redirect URL to your Campus One app's **Redirect URLs** in the developer dashboard.
+
+### 2. Trigger sign-in from Next.js [#2-trigger-sign-in-from-nextjs]
+
+```ts
+// app/login/page.tsx
+"use client";
+import { createBrowserClient } from "@supabase/ssr";
+
+export default function LoginPage() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const signIn = () =>
+    supabase.auth.signInWithOAuth({
+      provider: "campus-one",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: "openid profile email academic roles",
+      },
+    });
+
+  return <button onClick={signIn}>Sign in with Campus One</button>;
+}
+```
+
+### 3. Read Campus One claims from the Supabase session [#3-read-campus-one-claims-from-the-supabase-session]
+
+Supabase forwards custom claims into `user.user_metadata.custom_claims` (the exact path depends on your Supabase version — check `user_metadata` first):
+
+```ts
+// app/dashboard/page.tsx
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export default async function Dashboard() {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { get: (name) => cookies().get(name)?.value } }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const role = user?.user_metadata?.role ?? "student";
+  const studentId = user?.user_metadata?.student_id;
+
+  return (
+    <div>
+      <h1>Hello {user?.user_metadata?.name}</h1>
+      <p>Role: {role}</p>
+      <p>Student ID: {studentId}</p>
+    </div>
+  );
+}
+```
+
+## Option 2: Custom bridge route [#option-2-custom-bridge-route]
+
+For tiers that don't expose arbitrary OIDC providers, run the OIDC flow yourself and then hand the id\_token to Supabase.
+
+### 1. Start the flow [#1-start-the-flow]
+
+```ts
+// app/api/auth/login/route.ts
+import { randomBytes, createHash } from "crypto";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+
+const b64url = (b: Buffer) =>
+  b.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+export async function GET() {
+  const state = b64url(randomBytes(16));
+  const verifier = b64url(randomBytes(32));
+  const challenge = b64url(createHash("sha256").update(verifier).digest());
+
+  cookies().set("c1_state", state, { httpOnly: true, sameSite: "lax", secure: true });
+  cookies().set("c1_verifier", verifier, { httpOnly: true, sameSite: "lax", secure: true });
+
+  const url = new URL("https://auth.campusone.com.ng/api/auth/oauth2/authorize");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", process.env.CAMPUS_ONE_CLIENT_ID!);
+  url.searchParams.set("redirect_uri", `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`);
+  url.searchParams.set("scope", "openid profile email academic roles");
+  url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge", challenge);
+  url.searchParams.set("code_challenge_method", "S256");
+
+  return NextResponse.redirect(url);
+}
+```
+
+### 2. Exchange + hand off to Supabase [#2-exchange--hand-off-to-supabase]
+
+```ts
+// app/api/auth/callback/route.ts
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const code = searchParams.get("code");
+  const state = searchParams.get("state");
+
+  const expectedState = cookies().get("c1_state")?.value;
+  const verifier = cookies().get("c1_verifier")?.value;
+  if (!code || !state || state !== expectedState || !verifier) {
+    return new NextResponse("Invalid state", { status: 400 });
+  }
+
+  const tokenRes = await fetch("https://auth.campusone.com.ng/api/auth/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
+      client_id: process.env.CAMPUS_ONE_CLIENT_ID!,
+      client_secret: process.env.CAMPUS_ONE_CLIENT_SECRET!,
+      code_verifier: verifier,
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    return new NextResponse(`Token exchange failed: ${await tokenRes.text()}`, { status: 401 });
+  }
+
+  const { id_token } = (await tokenRes.json()) as { id_token: string };
+
+  // Bridge to Supabase. Supabase verifies the id_token against your configured
+  // OIDC provider — make sure Campus One is registered in Supabase even if you
+  // never trigger its built-in flow.
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { get: (n) => cookies().get(n)?.value, set: () => {}, remove: () => {} } }
+  );
+  await supabase.auth.signInWithIdToken({ provider: "campus-one", token: id_token });
+
+  cookies().delete("c1_state");
+  cookies().delete("c1_verifier");
+  return NextResponse.redirect(new URL("/dashboard", req.url));
+}
+```
+
+## Receiving webhooks [#receiving-webhooks]
+
+Use a Supabase Edge Function or a Next.js route handler to receive Campus One webhooks. The handler must run on the **server side** to access `CAMPUS_ONE_WEBHOOK_SECRET`.
+
+```ts
+// app/api/webhooks/campus-one/route.ts
+import { createHmac, timingSafeEqual } from "crypto";
+import { createClient } from "@supabase/supabase-js";
+
+export async function POST(req: Request) {
+  const raw = await req.text();
+  const sig = req.headers.get("x-campus-one-signature") ?? "";
+  const expected = `sha256=${createHmac("sha256", process.env.CAMPUS_ONE_WEBHOOK_SECRET!)
+    .update(raw)
+    .digest("hex")}`;
+
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return new Response("Invalid signature", { status: 401 });
+  }
+
+  const event = JSON.parse(raw) as { event: string; data: Record<string, unknown> };
+
+  // Mirror role changes into Supabase so RLS policies stay in sync.
+  if (event.event === "user.role_changed") {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    await supabase
+      .from("profiles")
+      .update({ role: event.data.new_role })
+      .eq("campus_one_id", event.data.user_id);
+  }
+
+  return new Response("ok");
+}
+```
+
+
+# React Router + Express (/docs/sso/examples/react-router-express)
+
+
+
+This pattern trips up the most teams, so the example is more detailed.
+
+**The rule that solves 90% of the confusion**: &#x2A;*the browser never sees the `client_secret` and never calls Campus One's `/token` endpoint directly.** Your SPA opens `https://yourapp/api/auth/login` (a route on *your* server), and the server does the OIDC dance. The session lives in an HTTP-only cookie on your origin.
+
+## Architecture [#architecture]
+
+<Mermaid
+  chart="sequenceDiagram
+    autonumber
+    actor Browser as Browser (React Router SPA)
+    participant Express as Express Backend
+    participant IdP as Campus One IdP
+    
+    Browser->>Express: 1. Click Link (full-page navigation to /api/auth/login)
+    Express-->>Browser: 2. Redirect (302) to Campus One OAuth Authorize
+    Browser->>IdP: User authenticates & consents
+    IdP-->>Browser: 3. Redirect (302) with auth code to /api/auth/callback
+    Browser->>Express: Follow redirect to callback
+    Express->>IdP: 4. Exchange auth code for tokens (POST /oauth2/token)
+    IdP-->>Express: Return tokens (id_token, access_token)
+    Express->>Express: 5. Verify id_token against JWKS
+    Express-->>Browser: 6. Set HTTP-only session cookie & redirect (302) to /
+    Browser->>Express: 7. Renders /dashboard, calls fetch(&#x22;/api/me&#x22;, { credentials: &#x22;include&#x22; })"
+/>
+
+The SPA only ever calls **your** server. Campus One only ever talks to your server's `/api/auth/callback`.
+
+## Server (Express) [#server-express]
+
+Reuse the [Next.js + Express example](/docs/sso/examples/nextjs-express) wholesale — the Express side is identical. Key bits:
+
+```ts
+// server/index.ts
+import express from "express";
+import session from "express-session";
+import cors from "cors";
+import { Issuer, generators } from "openid-client";
+
+const app = express();
+
+// CORS so the SPA can read cookies on /api/me. `credentials: true` is required
+// for the browser to send the session cookie cross-origin.
+app.use(cors({ origin: process.env.WEB_URL, credentials: true }));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      // Allow the cookie across subdomains if your SPA and API are on
+      // different subdomains of the same root domain.
+      domain: process.env.NODE_ENV === "production" ? ".campusone.com.ng" : undefined,
+    },
+  })
+);
+
+const issuer = await Issuer.discover("https://auth.campusone.com.ng");
+const client = new issuer.Client({
+  client_id: process.env.CAMPUS_ONE_CLIENT_ID!,
+  client_secret: process.env.CAMPUS_ONE_CLIENT_SECRET!,
+  redirect_uris: [`${process.env.API_URL}/api/auth/callback`],
+  response_types: ["code"],
+});
+
+app.get("/api/auth/login", (req, res) => {
+  const verifier = generators.codeVerifier();
+  const state = generators.state();
+  // Capture where the user was so we can send them back after sign-in.
+  const next = (req.query.next as string) ?? "/";
+
+  req.session.pkceVerifier = verifier;
+  req.session.oauthState = state;
+  req.session.next = next;
+
+  res.redirect(
+    client.authorizationUrl({
+      scope: "openid profile email academic roles offline_access",
+      state,
+      code_challenge: generators.codeChallenge(verifier),
+      code_challenge_method: "S256",
+    })
+  );
+});
+
+app.get("/api/auth/callback", async (req, res) => {
+  const params = client.callbackParams(req);
+  try {
+    const tokenSet = await client.callback(
+      `${process.env.API_URL}/api/auth/callback`,
+      params,
+      { code_verifier: req.session.pkceVerifier, state: req.session.oauthState }
+    );
+    const claims = tokenSet.claims();
+    req.session.user = {
+      sub: claims.sub,
+      email: claims.email as string,
+      name: claims.name as string,
+      role: claims.role as string,
+      roles: claims.roles as string[] | undefined,
+      studentId: claims.student_id as string | undefined,
+    };
+    const next = req.session.next ?? "/";
+    req.session.pkceVerifier = undefined;
+    req.session.oauthState = undefined;
+    req.session.next = undefined;
+    res.redirect(`${process.env.WEB_URL}${next}`);
+  } catch (err) {
+    res.status(401).send(`Sign-in failed: ${(err as Error).message}`);
+  }
+});
+
+app.get("/api/me", (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: "Not signed in" });
+  res.json(req.session.user);
+});
+
+app.post("/api/auth/logout", (req, res) =>
+  req.session.destroy(() => res.json({ ok: true }))
+);
+```
+
+## Frontend (React Router) [#frontend-react-router]
+
+### Auth context [#auth-context]
+
+```tsx
+// src/auth/AuthContext.tsx
+import { createContext, useContext, useEffect, useState } from "react";
+
+interface User {
+  sub: string;
+  email: string;
+  name: string;
+  role: string;
+  roles?: string[];
+  studentId?: string;
+}
+
+const Ctx = createContext<{
+  user: User | null;
+  loading: boolean;
+  signIn: (next?: string) => void;
+  signOut: () => Promise<void>;
+}>({ user: null, loading: true, signIn: () => {}, signOut: async () => {} });
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/api/me`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setUser)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const signIn = (next = window.location.pathname) => {
+    // Full-page navigation, NOT fetch. The browser must follow the 302 to
+    // Campus One — fetch() would silently fail the redirect to a different
+    // origin.
+    const url = new URL(`${import.meta.env.VITE_API_URL}/api/auth/login`);
+    url.searchParams.set("next", next);
+    window.location.assign(url);
+  };
+
+  const signOut = async () => {
+    await fetch(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setUser(null);
+  };
+
+  return <Ctx.Provider value={{ user, loading, signIn, signOut }}>{children}</Ctx.Provider>;
+}
+
+export const useAuth = () => useContext(Ctx);
+```
+
+### Routes [#routes]
+
+```tsx
+// src/App.tsx
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+
+function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div>Loading…</div>;
+  if (!user) return <Navigate to="/login" state={{ next: location.pathname }} replace />;
+  if (roles && !roles.includes(user.role)) return <Navigate to="/forbidden" replace />;
+  return <>{children}</>;
+}
+
+function Login() {
+  const { signIn } = useAuth();
+  const location = useLocation();
+  const next = (location.state as { next?: string } | null)?.next ?? "/dashboard";
+  return <button onClick={() => signIn(next)}>Sign in with Campus One</button>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth roles={["admin", "staff"]}><Admin /></RequireAuth>} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+```
+
+## Things developers get wrong [#things-developers-get-wrong]
+
+1. **Using `fetch()` for `/api/auth/login`.** This is a full-page navigation. The browser must follow a 302 to Campus One. `fetch` will either silently swallow the redirect (mode `manual`) or fail it (mode `cors`). Always use `window.location.assign()` or a real `<a href>`.
+2. **`credentials: "include"` missing on `fetch`.** Without it, cookies are not sent and `/api/me` always returns 401 even though you're signed in. Set it on every authenticated request.
+3. **CORS without `credentials: true`.** Same root cause. Set `credentials: true` on both the Express `cors()` middleware and every browser-side `fetch`.
+4. **Different cookie domain.** If your SPA is at `app.example.com` and API at `api.example.com`, set `cookie.domain = ".example.com"`. If they share an exact origin, leave `domain` unset.
+5. **Returning to the wrong page after sign-in.** The Express server doesn't know which React Router route you were on. Pass it as `?next=…` on `/api/auth/login` and have the server redirect back to `WEB_URL + next` after the callback (see the snippets above).
+6. **Reading the user's role from `localStorage`.** Don't — anyone can edit localStorage. Read it from the id\_token claims on the server side, surface it via `/api/me`, and trust only that.
+7. **`X-CSRF-Token` confusion.** The OIDC sign-in flow is protected against CSRF by the `state` parameter (which is what the session stores). You don't need additional CSRF tokens on `/api/auth/login`, but you do need them on state-changing endpoints (`/api/auth/logout`, etc.) if your session cookie is `SameSite=None`. For `SameSite=Lax` (default in the example), the browser will not send the cookie on cross-site `POST`s anyway.
+
+## Webhook receiver [#webhook-receiver]
+
+Same as the [Express example](/docs/sso/examples/nextjs-express#webhook-receiver). The receiver must use the raw body, not parsed JSON, when computing the HMAC.
