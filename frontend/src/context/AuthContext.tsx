@@ -7,6 +7,7 @@ export interface AuthContextState {
   accessToken: string | null;
   isLoading: boolean;
   login: (role: string, identifier: string, password: string) => Promise<void>;
+  loginFromCallback: (accessToken: string) => Promise<JWTPayload>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -161,25 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, []);
 
-  // Listen for Campus One callback event
-  useEffect(() => {
-    const handleCampusOneCallback = (event: Event) => {
-      const customEvent = event as CustomEvent<{ token: string; user: JWTPayload }>;
-      const { token, user: userData } = customEvent.detail;
-
-      if (token && userData) {
-        // Immediately update both token and user
-        setAccessToken(token);
-        setUser(userData);
-        // Ensure loading is false so routes can render
-        setIsLoading(false);
-      }
-    };
-
-    window.addEventListener("auth:campus-one-callback", handleCampusOneCallback);
-    return () => window.removeEventListener("auth:campus-one-callback", handleCampusOneCallback);
-  }, []);
-
   const login = async (role: string, identifier: string, password: string): Promise<void> => {
     let response;
     if (role === "student") {
@@ -205,6 +187,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("last_pulse");
     localStorage.removeItem("last_phq9");
     localStorage.removeItem("last_gad7");
+  };
+
+  const loginFromCallback = async (accessToken: string): Promise<JWTPayload> => {
+    const decoded = decodeJWT(accessToken);
+    if (!decoded) {
+      throw new Error("Failed to decode token from OIDC callback");
+    }
+    setAccessToken(accessToken);
+    setUser(decoded);
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(decoded));
+    localStorage.removeItem("last_pulse");
+    localStorage.removeItem("last_phq9");
+    localStorage.removeItem("last_gad7");
+    return decoded;
   };
 
   const logout = async (): Promise<void> => {
@@ -233,7 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, isLoading, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, accessToken, isLoading, login, loginFromCallback, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Activity, AlertCircle } from "lucide-react";
 import { NeonSpinner } from "@/components/NeonSpinner";
@@ -39,6 +39,10 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const studentIdRegex = /^\d{9}$/;
 
 export default function Login() {
+  // OIDC state
+  const [showFallback, setShowFallback] = useState(false);
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
   // Sign In state
   const [signInRole, setSignInRole] = useState<Role>("student");
   const [identifier, setIdentifier] = useState("");
@@ -70,8 +74,25 @@ export default function Login() {
   const [psychoPassword, setPsychoPassword] = useState("");
   const [psychoConfirmPassword, setPsychoConfirmPassword] = useState("");
   
-  const { login } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect already-authenticated users to their dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const role = user.role ?? user.user_type;
+      if (role === "student") navigate("/student");
+      else if (role === "psychologist") navigate("/counselor");
+      else navigate("/admin");
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Auto-initiate OIDC when not authenticated and fallback not requested
+  useEffect(() => {
+    if (!isAuthenticated && !showFallback) {
+      window.location.href = `${API_URL}/auth/campus-one/authorize`;
+    }
+  }, [isAuthenticated, showFallback, API_URL]);
 
   // ── SIGN IN LOGIC ──
 
@@ -254,6 +275,24 @@ export default function Login() {
     }
   };
 
+  // Show OIDC redirect spinner if not showing fallback
+  if (!showFallback) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+        <Logo />
+        <div className="h-10 w-10 rounded-full border-2 border-muted border-t-primary animate-spin" />
+        <p className="text-sm text-muted-foreground">Redirecting to Campus One…</p>
+        <button
+          className="text-xs text-muted-foreground underline mt-4 hover:text-foreground transition-colors"
+          onClick={() => setShowFallback(true)}
+        >
+          Sign in with email & password instead
+        </button>
+      </div>
+    );
+  }
+
+  // Fallback: password login form
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-background">
       {/* Left — branded */}
@@ -308,23 +347,20 @@ export default function Login() {
 
             {/* ── SIGN IN TAB ── */}
             <TabsContent value="signin" className="mt-6 space-y-4">
-              <Button
+              <button
                 type="button"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-11"
-                onClick={() => {
-                  const apiUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-                  window.location.href = `${apiUrl}/auth/campus-one/authorize`;
-                }}
+                onClick={() => setShowFallback(false)}
+                className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
               >
-                Sign in with Campus One
-              </Button>
+                ← Back to Campus One sign-in
+              </button>
 
-              <div className="relative">
+              <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border"></div>
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="px-2 bg-background text-muted-foreground">Or continue with email</span>
+                  <span className="px-2 bg-background text-muted-foreground">Email & password</span>
                 </div>
               </div>
 
