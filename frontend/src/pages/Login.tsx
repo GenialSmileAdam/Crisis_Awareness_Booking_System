@@ -87,12 +87,7 @@ export default function Login() {
     }
   }, [isAuthenticated, user, navigate]);
 
-  // Auto-initiate OIDC when not authenticated and fallback not requested
-  useEffect(() => {
-    if (!isAuthenticated && !showFallback) {
-      window.location.href = `${API_URL}/auth/campus-one/authorize`;
-    }
-  }, [isAuthenticated, showFallback, API_URL]);
+  // Removed auto-redirect to prevent infinite loops. Users must click "Sign in with Campus One" button.
 
   // ── SIGN IN LOGIC ──
 
@@ -275,18 +270,28 @@ export default function Login() {
     }
   };
 
-  // Show OIDC redirect spinner if not showing fallback
+  // Show Campus One login option
   if (!showFallback) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background p-4">
         <Logo />
-        <div className="h-10 w-10 rounded-full border-2 border-muted border-t-primary animate-spin" />
-        <p className="text-sm text-muted-foreground">Redirecting to Campus One…</p>
+        <div className="text-center max-w-sm">
+          <h2 className="font-display text-2xl font-bold mb-2">Welcome to SafeSpace</h2>
+          <p className="text-sm text-muted-foreground mb-8">Sign in with your Campus One account</p>
+        </div>
+        <button
+          onClick={() => {
+            window.location.href = `${API_URL}/auth/campus-one/authorize`;
+          }}
+          className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+        >
+          Sign in with Campus One
+        </button>
         <button
           className="text-xs text-muted-foreground underline mt-4 hover:text-foreground transition-colors"
           onClick={() => setShowFallback(true)}
         >
-          Sign in with email & password instead
+          Or sign in with email & password
         </button>
       </div>
     );

@@ -14,22 +14,39 @@ export default function AuthCallback() {
         const accessToken = params.get("access_token");
         const errorParam = params.get("error");
 
+        console.log("AuthCallback: Processing OIDC callback");
+        console.log("AuthCallback: access_token present:", !!accessToken);
+        console.log("AuthCallback: error present:", !!errorParam);
+
         // Handle error from backend
         if (errorParam) {
+          console.error("AuthCallback: Backend returned error:", errorParam);
           toast.error(`Authentication failed: ${errorParam}`);
           navigate("/login");
           return;
         }
 
         // Validate token exists and has 3 JWT parts
-        if (!accessToken || accessToken.split(".").length !== 3) {
-          toast.error("Invalid or missing authentication token");
+        if (!accessToken) {
+          console.error("AuthCallback: No access token in URL");
+          toast.error("No authentication token received from server");
           navigate("/login");
           return;
         }
 
+        const parts = accessToken.split(".");
+        if (parts.length !== 3) {
+          console.error(`AuthCallback: Invalid token format. Parts: ${parts.length}`);
+          toast.error("Invalid authentication token format");
+          navigate("/login");
+          return;
+        }
+
+        console.log("AuthCallback: Token is valid format");
+
         // Process the callback and store token
         const user = await loginFromCallback(accessToken);
+        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type });
 
         // Determine redirect based on user role
         const role = user.role ?? user.user_type;
@@ -41,13 +58,17 @@ export default function AuthCallback() {
           redirectUrl = "/counselor";
         } else if (user.is_admin) {
           redirectUrl = "/admin";
+        } else {
+          console.warn("AuthCallback: Unknown role, redirecting to home:", role);
         }
 
+        console.log("AuthCallback: Redirecting to:", redirectUrl);
         toast.success("Welcome! Signed in with Campus One.");
         navigate(redirectUrl);
       } catch (err) {
         console.error("Auth callback error:", err);
-        toast.error("Failed to complete authentication");
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        toast.error(`Failed to complete authentication: ${errorMessage}`);
         navigate("/login");
       }
     };
