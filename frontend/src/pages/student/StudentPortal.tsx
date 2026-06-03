@@ -178,9 +178,9 @@ export default function StudentPortal() {
     return studentSidebarItems.map(item => ({
       ...item,
       disabled: false,
-      ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
+      ...(item.label === "Check-in" && pendingSurveys.length > 0 && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
-  }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
+  }, [hasCompletedRecently, pendingSurveys.length]);
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
