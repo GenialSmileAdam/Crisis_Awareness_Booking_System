@@ -221,6 +221,11 @@ async def auth_callback(
             db, claims
         )
 
+        # Save Campus One tokens for later use (e.g. notifications)
+        user.campus_one_access_token = token_response.get("access_token")
+        if token_response.get("refresh_token"):
+            user.campus_one_refresh_token = token_response.get("refresh_token")
+
         # Get identity claims (student_id, staff_id, etc.)
         from app.services.auth_service import AuthService
         identity = await AuthService._get_identity_claims(db, user)

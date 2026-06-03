@@ -34,7 +34,7 @@ async def get_department_analytics(
     db: AsyncSession = Depends(get_db),
     current_user: dict = require_roles("admin", "psychologist"),
 ):
-    charts = await get_real_chart_data(db)
+    charts = await get_real_chart_data(db, dept_id=dept_id)
     return {"success": True, "data": {"charts": charts, "insights": {}}}
 
 

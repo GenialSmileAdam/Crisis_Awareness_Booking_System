@@ -171,6 +171,24 @@ class OIDCProvider:
             response.raise_for_status()
             return response.json()
 
+    async def refresh_access_token(
+        self, refresh_token: str
+    ) -> Dict[str, Any]:
+        """Refresh access token using refresh token."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.issuer}/api/auth/oauth2/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                },
+                timeout=10,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def get_userinfo(self, access_token: str) -> Dict[str, Any]:
         """Get user info from Campus One userinfo endpoint."""
         async with httpx.AsyncClient() as client:
