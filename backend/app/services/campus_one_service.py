@@ -58,8 +58,27 @@ class CampusOneService:
         db.add(new_user)
         await db.flush()
 
-        # If student, create corresponding student record
-        if role == UserRole.student:
+        # Create Staff record for staff users
+        if role == UserRole.staff:
+            from app.models.staff import Staff, StaffType
+
+            staff_type_str = claims.get("staff_type", "support_staff")
+            try:
+                staff_type = StaffType(staff_type_str)
+            except ValueError:
+                staff_type = StaffType.support_staff  # Fallback to safe default
+
+            staff = Staff(
+                user_id=new_user.id,
+                staff_id=claims.get("staff_id", f"st_{campus_one_id[:12]}"),
+                staff_type=staff_type,
+                department=claims.get("department"),
+                specialization=claims.get("specialization"),
+            )
+            db.add(staff)
+
+        # Create Student record for student users
+        elif role == UserRole.student:
             student_id = claims.get("student_id", f"c1_{campus_one_id[:12]}")
             student = Student(
                 student_id=student_id,

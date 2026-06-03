@@ -2,11 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models import WellnessCheckin, RiskScore
 from app.models.wellness_checkins import WellnessCheckinType
 from app.models.risk_scores import RiskTier
-from app.models.users import User
-from app.routers.auth import get_current_user
 from app.schemas.wellness_checkins import TestSubmission, TestResultResponse
 from app.services.risk_simple import calculate_wrs_and_tier
 
@@ -16,15 +15,28 @@ router = APIRouter()
 async def submit_test(
     data: TestSubmission,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Submit a wellness test (PHQ-9, GAD-7, or pulse).
     Saves the check-in and updates the student's risk score.
     """
+    # Verify current user is a student
+    if current_user.get("user_type") != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit check-ins")
+
+    # Get student_id from JWT (not from request)
+    student_id = current_user.get("student_id")
+    if not student_id:
+        raise HTTPException(status_code=400, detail="Student ID not found in authentication token")
+
+    # Optionally verify that the submitted student_id matches (security check)
+    if data.student_id and data.student_id != student_id:
+        raise HTTPException(status_code=403, detail="Cannot submit check-in for another student")
+
     # 1. Save the check-in
     checkin = WellnessCheckin(
-        student_id=data.student_id,
+        student_id=student_id,
         type=data.test_type,
         responses=data.responses,
         score=data.score,
@@ -37,22 +49,26 @@ async def submit_test(
     if data.score is not None and data.test_type in ("phq9", "gad7"):
         wrs_score, tier_str = calculate_wrs_and_tier(data.test_type, data.score)
         risk_tier = RiskTier(tier_str)  # Convert string to enum
-        
+
         # Save risk score to history
         risk = RiskScore(
-            student_id=data.student_id,
+            student_id=student_id,
             wrs_score=wrs_score,
             tier=risk_tier
         )
         db.add(risk)
-    
+
     await db.commit()
-    
+
+    # Check if crisis escalation is needed (red or critical)
+    crisis_escalation_required = risk_tier in (RiskTier.red, RiskTier.critical)
+
     return TestResultResponse(
-        student_id=data.student_id,
+        student_id=student_id,
         test_type=data.test_type.value,  # Convert enum to string
         wrs_score=wrs_score,
-        risk_tier=risk_tier.value  # Convert enum to string
+        risk_tier=risk_tier.value,  # Convert enum to string
+        crisis_escalation_required=crisis_escalation_required
     )
 
 @router.get("/student/{student_id}")
@@ -61,11 +77,20 @@ async def list_student_checkins(
     limit: int = 10,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get check-in history for a student."""
-    # Check permissions
-    if current_user["role"] not in ("admin", "psychologist") and current_user.get("student_id") != student_id:
+    # Check permissions: admin, psychologist, or the student themselves
+    is_authorized = (
+        current_user.get("is_admin") or
+        current_user.get("staff_type") == "psychologist"
+    )
+    is_self = (
+        current_user.get("user_type") == "student" and
+        current_user.get("student_id") == student_id
+    )
+
+    if not (is_authorized or is_self):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
          
     query = (
