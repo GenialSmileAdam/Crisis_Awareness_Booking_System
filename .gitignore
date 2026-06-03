@@ -31,4 +31,4 @@ backend/.env.*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.sw?.claude/worktrees/
