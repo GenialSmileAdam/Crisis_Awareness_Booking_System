@@ -1,6 +1,4 @@
-import { createAISession, uploadSessionAudio, transcribeSession, summariseSession } from "@/api/ai";
-import { getAppointment } from "@/api/appointments";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2, LogOut, FileAudio, FileText, BrainCircuit } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
@@ -12,6 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { useAppointment } from "@/hooks/queries";
+import {
+  useCreateAISession,
+  useUploadSessionAudio,
+  useTranscribeSession,
+  useSummariseSession,
+} from "@/hooks/mutations";
 
 const TIER_LEVELS = ["Green", "Amber", "Red", "Critical"] as const;
 
@@ -19,47 +24,46 @@ export default function SessionReviewer() {
   const { logout } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  const [appointment, setAppointment] = useState<any>(null);
+
+  // UI state only
   const [aiSessionId, setAiSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [filename, setFilename] = useState("");
-  
   const [audioUploaded, setAudioUploaded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(80);
   const [tier, setTier] = useState<typeof TIER_LEVELS[number]>("Green");
   const [saved, setSaved] = useState(false);
-  
+
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const fetchAppointment = async () => {
-      try {
-        if (!id) return;
-        const data = await getAppointment(id);
-        setAppointment(data);
-        
-        // Auto-create AI session
-        const session = await createAISession({
-          appointment_id: id,
-          client_name: data.student_full_name,
-          notes: ""
-        });
-        setAiSessionId(session.id);
-        toast.success("AI Session created successfully");
-      } catch (err) {
-        toast.error("Failed to initialize session");
-        console.error("Initialization error:", err);
-      }
-    };
-    fetchAppointment();
-  }, [id]);
+  // React Query hooks
+  const { data: appointment } = useAppointment(id || "");
+
+  // AI mutations (button-triggered, no auto-execute)
+  const { mutateAsync: createAISessionMutate } = useCreateAISession();
+  const { mutateAsync: uploadAudioMutate, isPending: uploadLoading } = useUploadSessionAudio();
+  const { mutateAsync: transcribeMutate, isPending: transcribeLoading } = useTranscribeSession();
+  const { mutateAsync: summariseMutate, isPending: summariseLoading } = useSummariseSession();
+
+  // Initialize AI session on appointment load (no auto-create in useEffect)
+  if (appointment && !aiSessionId && step === 1) {
+    createAISessionMutate({
+      appointment_id: id!,
+      client_name: appointment.student_full_name,
+      notes: ""
+    }).then(session => {
+      setAiSessionId(session.id);
+      toast.success("AI Session created successfully");
+    }).catch(err => {
+      toast.error("Failed to initialize session");
+      console.error("Initialization error:", err);
+    });
+  }
 
   useEffect(() => {
     if (!playing) return;
@@ -83,44 +87,35 @@ export default function SessionReviewer() {
 
   const executeUpload = async () => {
     if (!aiSessionId || !audioFile) return;
-    setLoading(true);
     try {
-      await uploadSessionAudio(aiSessionId, audioFile);
+      await uploadAudioMutate({ session_id: aiSessionId, audio: audioFile });
       setAudioUploaded(true);
       toast.success("Audio uploaded successfully");
       setStep(3); // auto-advance after confirmed upload
     } catch (err) {
       toast.error("Upload failed. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
   const executeTranscription = async () => {
     if (!aiSessionId) return;
-    setLoading(true);
     try {
-      const data = await transcribeSession(aiSessionId);
+      const data = await transcribeMutate(aiSessionId);
       setTranscript(data.transcript);
       toast.success("Transcription complete");
     } catch (err) {
       toast.error("Transcription failed. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
   const executeSummarisation = async () => {
     if (!aiSessionId) return;
-    setLoading(true);
     try {
-      const data = await summariseSession(aiSessionId);
+      const data = await summariseMutate(aiSessionId);
       setSummary(data.summary);
       toast.success("Summary generated");
     } catch (err) {
       toast.error("Summary failed. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 

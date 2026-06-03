@@ -82,3 +82,48 @@ export function useCrisisStudents(
     retry: 1,
   });
 }
+
+/**
+ * Fetch a single student by ID
+ */
+export function useStudent(studentId: string): UseQueryResult<Student> {
+  return useQuery({
+    queryKey: ["students", studentId],
+    queryFn: async () => {
+      return apiRequest<Student>("GET", `/students/${studentId}`);
+    },
+    staleTime: 1000 * 60 * 10, // 10 minutes
+    gcTime: 1000 * 60 * 60, // 60 minutes
+    retry: 1,
+    enabled: !!studentId,
+  });
+}
+
+export interface CrisisLog {
+  id: string;
+  student_id: string;
+  event_type: string;
+  description: string;
+  created_at: string;
+}
+
+/**
+ * Fetch crisis logs for a student
+ */
+export function useStudentCrisisLogs(
+  studentId: string
+): UseQueryResult<CrisisLog[]> {
+  return useQuery({
+    queryKey: ["students", studentId, "crisisLogs"],
+    queryFn: async () => {
+      return apiRequest<CrisisLog[]>(
+        "GET",
+        `/students/${studentId}/crisis-logs`
+      );
+    },
+    staleTime: 1000 * 60 * 10, // 10 minutes
+    gcTime: 1000 * 60 * 60, // 60 minutes
+    retry: 1,
+    enabled: !!studentId,
+  });
+}

@@ -10,6 +10,8 @@ export {
   useAppointments,
   useStudentAppointments,
   useNextAvailableSlot,
+  useAppointment,
+  useAppointmentAvailability,
   type Appointment,
   type AvailableSlot,
   type AppointmentsResponse,
@@ -18,8 +20,11 @@ export {
 export {
   useStudents,
   useCrisisStudents,
+  useStudent,
+  useStudentCrisisLogs,
   type Student,
   type StudentsResponse,
+  type CrisisLog,
 } from "./useStudents";
 
 export {
@@ -55,3 +60,10 @@ export {
   type CohortData,
   type StudentRiskDetail,
 } from "./useRiskScores";
+
+export {
+  useMySchedule,
+  useBusyBlocks,
+  type DaySchedule,
+  type BusyBlock,
+} from "./useAvailability";

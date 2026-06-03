@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, LogOut, AlertTriangle, Phone, Mail, User,
@@ -19,11 +19,17 @@ import { CrisisBanner } from "@/components/CrisisBanner";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { counselorSidebarItems, adminSidebarItems } from "@/data/sidebar";
-import { getStudent, getStudentCrisisLogs, Student } from "@/api/students";
-import { getStudentCheckins, CheckinRecord } from "@/api/checkins";
-import { getRiskScore, getStudentWrsHistory, overrideRiskTier, RiskScoreDetail, RiskScoreEntry } from "@/api/riskScores";
-import { listAppointments, Appointment } from "@/api/appointments";
 import { colorFromWrs } from "@/data/mock";
+import {
+  useStudent,
+  useStudentRiskScore,
+  useStudentWrsHistory,
+  useStudentCheckins,
+  useStudentAppointments,
+  useStudentCrisisLogs,
+} from "@/hooks/queries";
+import { useRiskOverride } from "@/hooks/mutations";
+import type { Student, CheckinRecord, Appointment } from "@/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,69 +103,36 @@ export default function CounselorStudent() {
   const { student_id } = useParams<{ student_id: string }>();
   const sidebarItems = user?.role === "admin" ? adminSidebarItems : counselorSidebarItems;
 
-  const [student, setStudent] = useState<Student | null>(null);
-  const [riskScore, setRiskScore] = useState<RiskScoreDetail | null>(null);
-  const [wrsHistory, setWrsHistory] = useState<RiskScoreEntry[]>([]);
-  const [checkins, setCheckins] = useState<CheckinRecord[]>([]);
-  const [checkinTotal, setCheckinTotal] = useState(0);
+  // UI state only
   const [checkinOffset, setCheckinOffset] = useState(0);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [crisisLogs, setCrisisLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Override modal state
   const [showOverride, setShowOverride] = useState(false);
   const [overrideTier, setOverrideTier] = useState<string>("");
   const [overrideJustification, setOverrideJustification] = useState("");
-  const [overriding, setOverriding] = useState(false);
 
-  const fetchCheckins = async (offset: number) => {
-    if (!student_id) return;
-    const res = await getStudentCheckins(student_id, 10, offset);
-    setCheckins(res.data || []);
-    setCheckinTotal(res.pagination?.total || 0);
-    setCheckinOffset(offset);
-  };
+  // React Query hooks
+  const { data: student, isLoading: studentLoading } = useStudent(student_id || "");
+  const { data: riskScore } = useStudentRiskScore(student_id || "");
+  const { data: wrsHistory } = useStudentWrsHistory(student_id || "");
+  const { data: checkinsData, isLoading: checkinsLoading } = useStudentCheckins(student_id || "", 10, checkinOffset);
+  const { data: appointmentsData } = useStudentAppointments(student_id || "", 50);
+  const { data: crisisLogs } = useStudentCrisisLogs(student_id || "");
 
-  useEffect(() => {
-    if (!student_id) return;
-    const init = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const [studentData, riskData, historyData, checkinsData, appointmentsData, crisisData] =
-          await Promise.all([
-            getStudent(student_id),
-            getRiskScore(student_id).catch(() => null),
-            getStudentWrsHistory(student_id).catch(() => []),
-            getStudentCheckins(student_id, 10, 0),
-            listAppointments(50, 0, student_id),
-            getStudentCrisisLogs(student_id).catch(() => []),
-          ]);
-        setStudent(studentData);
-        setRiskScore(riskData);
-        setWrsHistory(historyData);
-        setCheckins(checkinsData.data || []);
-        setCheckinTotal(checkinsData.pagination?.total || 0);
-        setAppointments(appointmentsData.data || []);
-        setCrisisLogs(Array.isArray(crisisData) ? crisisData : []);
-      } catch {
-        setError("Failed to load student data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-  }, [student_id]);
+  const { mutateAsync: riskOverrideMutate } = useRiskOverride();
+
+  const checkins = checkinsData?.data || [];
+  const checkinTotal = checkinsData?.pagination?.total || 0;
+  const appointments = appointmentsData?.data || [];
+  const loading = studentLoading;
+  const error = null;
 
   const currentTier = riskScore?.override?.override_tier || riskScore?.current?.tier || "green";
   const wrsScore = riskScore?.current?.wrs_score ?? 0;
   const tierColor = TIER_COLOR[currentTier] || "#6B7280";
+  const historyData = wrsHistory || [];
 
   // Build chart data — downsample if > 60 points for readability
   const chartData = useMemo(() => {
-    const pts = wrsHistory.map((s) => ({
+    const pts = historyData.map((s) => ({
       date: new Date(s.computed_at).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
       wrs: parseFloat(s.wrs_score.toFixed(1)),
       tier: s.tier,
@@ -167,35 +140,31 @@ export default function CounselorStudent() {
     if (pts.length <= 60) return pts;
     const step = Math.ceil(pts.length / 60);
     return pts.filter((_, i) => i % step === 0);
-  }, [wrsHistory]);
+  }, [historyData]);
 
   const wrsImprovedPct = useMemo(() => {
-    if (wrsHistory.length < 2) return null;
-    const first = wrsHistory[0].wrs_score;
-    const last = wrsHistory[wrsHistory.length - 1].wrs_score;
+    if (historyData.length < 2) return null;
+    const first = historyData[0].wrs_score;
+    const last = historyData[historyData.length - 1].wrs_score;
     return ((first - last) / first) * 100; // positive = improvement
-  }, [wrsHistory]);
+  }, [historyData]);
 
   const handleOverride = async () => {
     if (!student_id || !overrideTier || !overrideJustification.trim()) {
       toast.error("Select a tier and provide justification");
       return;
     }
-    setOverriding(true);
     try {
-      await overrideRiskTier(student_id, {
+      await riskOverrideMutate({
+        student_id,
         override_tier: overrideTier as any,
         justification: overrideJustification.trim(),
       });
       toast.success("Risk tier overridden");
-      const updated = await getRiskScore(student_id);
-      setRiskScore(updated);
       setShowOverride(false);
       setOverrideJustification("");
     } catch {
       toast.error("Failed to override tier");
-    } finally {
-      setOverriding(false);
     }
   };
 

@@ -1,8 +1,6 @@
-import { listAppointments, updateAppointment, type Appointment, getAppointmentAvailability, bookStudentAppointment } from "@/api/appointments";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
-// ... existing imports ...
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -13,16 +11,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { FACULTY_WRS, tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
-import { getRiskAlerts, getRiskCohort, overrideRiskTier, type RiskTier as RiskTierType } from "@/api/riskScores";
-import { listStudents } from "@/api/students";
-import { getRealAnalytics } from "@/api/analytics";
+import { tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
 import { cn, formatWRS } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
 import type { PaginationInfo } from "@/api/types";
 import { PsychologistOnboardingSlides } from "@/components/PsychologistOnboardingSlides";
 import { NeonSpinner } from "@/components/NeonSpinner";
+import {
+  useStudents,
+  useRiskAlerts,
+  useAppointments,
+  useRiskScoreCohort,
+  useRealAnalytics,
+} from "@/hooks/queries";
+import {
+  useUpdateAppointment,
+  useRiskOverride,
+} from "@/hooks/mutations";
+import type { Appointment } from "@/api/appointments";
+import type { RiskTier as RiskTierType } from "@/api/riskScores";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
 const SESSION_FILTERS = ["All", "Upcoming", "Completed", "Cancelled"] as const;
@@ -36,44 +44,48 @@ export default function CounselorDashboard() {
   const [sortDesc, setSortDesc] = useState(true);
   const location = useLocation();
   const currentView = location.pathname === "/counselor/sessions" ? "schedule" : "dashboard";
-  
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+
   const [offset, setOffset] = useState(0);
-  
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
   const [refreshingAppointments, setRefreshingAppointments] = useState(false);
   const [calendarView, setCalendarView] = useState(false);
   const [calWeekOffset, setCalWeekOffset] = useState(0);
-  const navigate = useNavigate();
-  
-  const [students, setStudents] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [cohort, setCohort] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalStudents, setTotalStudents] = useState(0);
-  const [alertsOffset, setAlertsOffset] = useState(0);
-  const [alertsPagination, setAlertsPagination] = useState<any>(null);
-
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [analyticsError, setAnalyticsError] = useState(false);
-  const [insights, setInsights] = useState<any>({});
   const [tierModal, setTierModal] = useState<{ tier: string; students: any[]; loading?: boolean } | null>(null);
   const tierModalRequestRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+
+  // React Query hooks
+  const { data: studentsData, isLoading: studentsLoading } = useStudents(10, 0);
+  const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(200, 0, null);
+  const { data: appointmentsData, isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments({}, 10, offset);
+  const { data: cohortData } = useRiskScoreCohort();
+  const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useRealAnalytics(7);
+
+  const { mutateAsync: updateAppointmentMutate } = useUpdateAppointment();
+  const { mutateAsync: riskOverrideMutate } = useRiskOverride();
+
+  // Auto-refresh appointments every 30 seconds on Sessions page
+  useEffect(() => {
+    if (currentView === "schedule") {
+      const interval = setInterval(() => {
+        refetchAppointments();
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [currentView, refetchAppointments]);
 
   const openTierModal = async (tierName: string) => {
     const tierLower = tierName.toLowerCase() as RiskTierType;
     tierModalRequestRef.current = tierName;
-    const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
+    const cached = (alertsData?.data || []).filter(a => (a.tier || "").toLowerCase() === tierLower);
     setTierModal({ tier: tierName, students: cached, loading: true });
     try {
-      const result = await getRiskAlerts(200, 0, tierLower);
+      // Note: using current alertsData filtered by tier since we already fetched 200
+      const result = (alertsData?.data || []).filter(a => (a.tier || "").toLowerCase() === tierLower);
       if (tierModalRequestRef.current === tierName) {
-        setTierModal({ tier: tierName, students: result.data || [], loading: false });
+        setTierModal({ tier: tierName, students: result, loading: false });
       }
     } catch {
       toast.error(`Failed to load ${tierName} tier students`);
@@ -83,70 +95,16 @@ export default function CounselorDashboard() {
     }
   };
 
-  const fetchAppointments = async (newOffset: number) => {
-    try {
-      setLoading(true);
-      const data = await listAppointments(10, newOffset);
-      setAppointments(data.data || []);
-      setPagination(data.pagination);
-      setOffset(newOffset);
-    } catch (err) {
-      setError("Failed to load sessions");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const [studentsData, alertsData, appointmentsData, cohortData] = await Promise.all([
-          listStudents(10, 0),
-          getRiskAlerts(200, 0),
-          listAppointments(10, 0),
-          getRiskCohort()
-        ]);
-        setStudents(studentsData.data || []);
-        setTotalStudents(studentsData.pagination?.total || 0);
-        setAlerts(alertsData.data || []);
-        setAlertsPagination(alertsData.pagination || {});
-        setAppointments(appointmentsData.data || []);
-        setPagination(appointmentsData.pagination);
-        setCohort(cohortData || []);
-      } catch (err) {
-        setError("Failed to load dashboard data");
-        toast.error("Failed to load dashboard data. Please refresh.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAll();
-
-    const fetchAnalytics = async () => {
-      try {
-        setAnalyticsLoading(true);
-        const data = await getRealAnalytics();
-        setAnalytics(data.charts);
-        setInsights(data.insights || {});
-      } catch (err) {
-        setAnalyticsError(true);
-        toast.error("Analytics failed to load.");
-      } finally {
-        setAnalyticsLoading(false);
-      }
-    };
-    fetchAnalytics();
-
-    // Auto-refresh appointments every 30 seconds on Sessions page
-    if (currentView === "schedule") {
-      const interval = setInterval(() => {
-        fetchAppointments(offset);
-      }, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [currentView, offset]);
+  const students = studentsData?.data || [];
+  const alerts = alertsData?.data || [];
+  const cohort = cohortData || [];
+  const appointments = appointmentsData?.data || [];
+  const pagination = appointmentsData?.pagination;
+  const totalStudents = studentsData?.pagination?.total || 0;
+  const loading = studentsLoading || alertsLoading || appointmentsLoading;
+  const error = null;
+  const analytics = analyticsData?.charts;
+  const insights = analyticsData?.insights || {};
 
   const colorFromTier = (t: string) => t === "Green" ? "#A8FF3E" : t === "Amber" ? "#FF8C42" : t === "Red" ? "#FF4560" : "#B00020";
 
@@ -293,16 +251,14 @@ export default function CounselorDashboard() {
 
   const handleAction = async (id: string, actionName: string) => {
     if (actionName === "join") return toast.success("Opening secure video meeting...");
-    
+
     try {
       if (actionName === "complete") {
-        await updateAppointment(id, { status: "completed" });
-        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "completed" } : a));
+        await updateAppointmentMutate({ id, data: { status: "completed" } });
         toast.success("Session marked as complete");
       }
       if (actionName === "cancel") {
-        await updateAppointment(id, { status: "cancelled" });
-        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: "cancelled" } : a));
+        await updateAppointmentMutate({ id, data: { status: "cancelled" } });
         toast.success("Session cancelled");
       }
     } catch (err) {
@@ -316,9 +272,10 @@ export default function CounselorDashboard() {
       toast.error("Please provide a detailed justification");
       return;
     }
-    
+
     try {
-      await overrideRiskTier(overrideModal.id, {
+      await riskOverrideMutate({
+        student_id: overrideModal.id,
         override_tier: overrideModal.newTier.toLowerCase() as any,
         justification: overrideModal.justification
       });
@@ -336,11 +293,6 @@ export default function CounselorDashboard() {
     <PsychologistOnboardingSlides />
     <AppShell items={counselorSidebarItems}>
       {/* Error Banner */}
-      {error && (
-        <div className="bg-destructive/15 text-destructive px-4 md:px-8 py-2 text-sm border-b border-destructive/30 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" /> {error}
-        </div>
-      )}
       {analyticsError && (
         <div className="bg-warning/15 text-warning px-4 md:px-8 py-2 text-sm border-b border-warning/30 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4" /> Analytics data unavailable. Showing cached data.
@@ -450,9 +402,8 @@ export default function CounselorDashboard() {
                           variant="outline"
                           onClick={async () => {
                             try {
-                              await updateAppointment(a.id, { pending_approval: false } as any);
+                              await updateAppointmentMutate({ id: a.id, data: { pending_approval: false } as any });
                               toast.success(`Session with ${a.student_full_name} confirmed`);
-                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, pending_approval: false } : x));
                             } catch { toast.error("Failed to confirm"); }
                           }}
                         >
@@ -464,9 +415,8 @@ export default function CounselorDashboard() {
                           className="h-7 text-xs text-destructive hover:bg-destructive/10"
                           onClick={async () => {
                             try {
-                              await updateAppointment(a.id, { status: "cancelled" });
+                              await updateAppointmentMutate({ id: a.id, data: { status: "cancelled" } });
                               toast.success("Session request declined");
-                              setAppointments(prev => prev.map(x => x.id === a.id ? { ...x, status: "cancelled" as const } : x));
                             } catch { toast.error("Failed to decline"); }
                           }}
                         >
@@ -499,7 +449,7 @@ export default function CounselorDashboard() {
                   onClick={async () => {
                     setRefreshingAppointments(true);
                     try {
-                      await fetchAppointments(offset);
+                      await refetchAppointments();
                       toast.success("Sessions refreshed");
                     } catch (err) {
                       toast.error("Failed to refresh sessions");

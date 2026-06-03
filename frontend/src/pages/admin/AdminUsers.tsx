@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Search, AlertCircle, LogOut, ChevronLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
@@ -8,60 +8,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { listStudents, type Student } from "@/api/students";
-import { listStaff, createStaff, type Staff } from "@/api/staff";
+import type { Student, Staff } from "@/api/students";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { PaginationInfo } from "@/api/types";
+import { useStudents, useStaff } from "@/hooks/queries";
+import { useCreateStaff } from "@/hooks/mutations";
 
 const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
 export default function AdminUsers() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  
-  const [students, setStudents] = useState<Student[]>([]);
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [studentsLoading, setStudentsLoading] = useState(true);
-  const [staffLoading, setStaffLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [studentsPagination, setStudentsPagination] = useState<PaginationInfo | null>(null);
+
   const [studentsOffset, setStudentsOffset] = useState(0);
-  
   const [search, setSearch] = useState("");
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const fetchStudents = async (offset: number) => {
-    setStudentsLoading(true);
-    try {
-      const data = await listStudents(10, offset);
-      setStudents(data.data || []);
-      setStudentsPagination(data.pagination);
-    } catch (err) {
-      setError("Failed to load students");
-    } finally {
-      setStudentsLoading(false);
-    }
-  };
+  // React Query hooks
+  const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useStudents(10, studentsOffset);
+  const { data: staffData, isLoading: staffLoading, refetch: refetchStaff } = useStaff(10, 0);
 
-  const fetchStaff = async () => {
-    setStaffLoading(true);
-    try {
-      const data = await listStaff(10, 0);
-      setStaff(data.data || []);
-    } catch (err) {
-      setError("Failed to load staff");
-    } finally {
-      setStaffLoading(false);
-    }
-  };
+  const { mutateAsync: createStaffMutate } = useCreateStaff();
 
-  useEffect(() => {
-    fetchStudents(0);
-    fetchStaff();
-  }, []);
+  const students = studentsData?.data || [];
+  const studentsPagination = studentsData?.pagination;
+  const staff = staffData?.data || [];
+  const error = null;
 
   const filteredStudents = students.filter(s => 
     s.full_name.toLowerCase().includes(search.toLowerCase()) || 
@@ -223,26 +198,24 @@ export default function AdminUsers() {
               Showing {studentsOffset + 1} to {Math.min(studentsOffset + 10, studentsPagination?.total || 0)} of {studentsPagination?.total || 0} students
             </div>
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                disabled={studentsOffset === 0} 
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={studentsOffset === 0}
                 onClick={() => {
                   const newOffset = studentsOffset - 10;
                   setStudentsOffset(newOffset);
-                  fetchStudents(newOffset);
                 }}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Prev
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                disabled={!studentsPagination?.has_next} 
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!studentsPagination?.has_next}
                 onClick={() => {
                   const newOffset = studentsOffset + 10;
                   setStudentsOffset(newOffset);
-                  fetchStudents(newOffset);
                 }}
               >
                 Next <ChevronRight className="h-4 w-4 ml-1" />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Plus, Trash2, CalendarOff, CheckCircle, LogOut } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
@@ -11,9 +11,16 @@ import { toast } from "sonner";
 import { NeonSpinner } from "@/components/NeonSpinner";
 import { cn } from "@/lib/utils";
 import {
-  getMySchedule, setMySchedule, getBusyBlocks, addBusyBlock, deleteBusyBlock,
-  type DaySchedule, type BusyBlock,
-} from "@/api/availability";
+  useMySchedule,
+  useBusyBlocks,
+  type DaySchedule,
+  type BusyBlock,
+} from "@/hooks/queries";
+import {
+  useSaveSchedule,
+  useAddBusyBlock,
+  useDeleteBusyBlock,
+} from "@/hooks/mutations";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -35,61 +42,35 @@ export default function CounselorAvailability() {
   const navigate = useNavigate();
 
   const [schedule, setSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE);
-  const [scheduleLoading, setScheduleLoading] = useState(true);
-  const [scheduleSaving, setScheduleSaving] = useState(false);
-
-  const [busyBlocks, setBusyBlocks] = useState<BusyBlock[]>([]);
-  const [blocksLoading, setBlocksLoading] = useState(true);
-  const [addingBlock, setAddingBlock] = useState(false);
-
   const [newBlock, setNewBlock] = useState({ start: "", end: "", reason: "" });
   const [showAddBlock, setShowAddBlock] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setScheduleLoading(true);
-        const data = await getMySchedule();
-        if (data.length > 0) {
-          // Merge fetched data into the 7-day template
-          const merged = DEFAULT_SCHEDULE.map(def => {
-            const found = data.find(d => d.day_of_week === def.day_of_week);
-            return found ? { ...def, ...found } : def;
-          });
-          setSchedule(merged);
-        }
-      } catch {
-        toast.error("Failed to load your schedule");
-      } finally {
-        setScheduleLoading(false);
-      }
-    };
+  // React Query hooks
+  const { data: scheduleData, isLoading: scheduleLoading } = useMySchedule();
+  const { data: busyBlocksData, isLoading: blocksLoading } = useBusyBlocks();
 
-    const loadBlocks = async () => {
-      try {
-        setBlocksLoading(true);
-        const data = await getBusyBlocks();
-        setBusyBlocks(data);
-      } catch {
-        toast.error("Failed to load busy blocks");
-      } finally {
-        setBlocksLoading(false);
-      }
-    };
+  const { mutateAsync: saveScheduleMutate, isPending: scheduleSaving } = useSaveSchedule();
+  const { mutateAsync: addBlockMutate, isPending: addingBlock } = useAddBusyBlock();
+  const { mutateAsync: deleteBlockMutate } = useDeleteBusyBlock();
 
-    load();
-    loadBlocks();
-  }, []);
+  // Merge fetched schedule with default template
+  const scheduleList = scheduleData || [];
+  if (scheduleList.length > 0 && schedule === DEFAULT_SCHEDULE) {
+    const merged = DEFAULT_SCHEDULE.map(def => {
+      const found = scheduleList.find(d => d.day_of_week === def.day_of_week);
+      return found ? { ...def, ...found } : def;
+    });
+    setSchedule(merged);
+  }
+
+  const busyBlocks = busyBlocksData || [];
 
   const handleSaveSchedule = async () => {
     try {
-      setScheduleSaving(true);
-      await setMySchedule(schedule);
+      await saveScheduleMutate(schedule);
       toast.success("Schedule saved successfully");
     } catch {
       toast.error("Failed to save schedule");
-    } finally {
-      setScheduleSaving(false);
     }
   };
 
@@ -103,29 +84,22 @@ export default function CounselorAvailability() {
       return;
     }
     try {
-      setAddingBlock(true);
-      const block = await addBusyBlock({
+      await addBlockMutate({
         block_start: new Date(newBlock.start).toISOString(),
         block_end: new Date(newBlock.end).toISOString(),
         reason: newBlock.reason || undefined,
       });
-      setBusyBlocks(prev => [...prev, block].sort((a, b) =>
-        new Date(a.block_start).getTime() - new Date(b.block_start).getTime()
-      ));
       setNewBlock({ start: "", end: "", reason: "" });
       setShowAddBlock(false);
       toast.success("Busy block added");
     } catch {
       toast.error("Failed to add busy block");
-    } finally {
-      setAddingBlock(false);
     }
   };
 
   const handleDeleteBlock = async (id: string) => {
     try {
-      await deleteBusyBlock(id);
-      setBusyBlocks(prev => prev.filter(b => b.id !== id));
+      await deleteBlockMutate(id);
       toast.success("Busy block removed");
     } catch {
       toast.error("Failed to remove busy block");

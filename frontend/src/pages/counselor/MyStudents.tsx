@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Search, ArrowUpDown, AlertTriangle, MoreHorizontal, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
@@ -10,55 +10,41 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { FACULTY_WRS, colorFromWrs, RiskTier } from "@/data/mock";
-import { getRiskAlerts, getRiskCohort, overrideRiskTier, type RiskTier as ApiRiskTier } from "@/api/riskScores";
-import { listStudents } from "@/api/students";
+import { colorFromWrs, RiskTier } from "@/data/mock";
 import { cn, formatWRS } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
+import {
+  useStudents,
+  useRiskAlerts,
+  useRiskScoreCohort,
+} from "@/hooks/queries";
+import { useRiskOverride } from "@/hooks/mutations";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical", "No Data"] as const;
 
 export default function MyStudents() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  
+
   const [filter, setFilter] = useState<typeof TIERS[number]>("All");
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortDesc, setSortDesc] = useState(true);
-  
-  const [students, setStudents] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [cohort, setCohort] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   const [rosterPagination, setRosterPagination] = useState({ limit: 10, offset: 0 });
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const [studentsData, alertsData, cohortData] = await Promise.all([
-          listStudents(100, 0),
-          getRiskAlerts(100, 0),
-          getRiskCohort()
-        ]);
-        setStudents(studentsData.data || []);
-        setAlerts(alertsData.data || []);
-        setCohort(cohortData || []);
-      } catch (err) {
-        setError("Failed to load students data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAll();
-  }, []);
+  // React Query hooks
+  const { data: studentsData, isLoading: loading } = useStudents(100, 0);
+  const { data: alertsData } = useRiskAlerts(100, 0, null);
+  const { data: cohortData } = useRiskScoreCohort();
+
+  const { mutateAsync: riskOverrideMutate } = useRiskOverride();
+
+  const students = studentsData?.data || [];
+  const alerts = alertsData?.data || [];
+  const cohort = cohortData || [];
 
   const colorFromTier = (t: string) => {
     switch (t.toLowerCase()) {
@@ -143,10 +129,11 @@ export default function MyStudents() {
       toast.error("Please provide a detailed justification");
       return;
     }
-    
+
     try {
-      await overrideRiskTier(overrideModal.id, {
-        override_tier: overrideModal.newTier.toLowerCase() as ApiRiskTier,
+      await riskOverrideMutate({
+        student_id: overrideModal.id,
+        override_tier: overrideModal.newTier.toLowerCase() as any,
         justification: overrideModal.justification
       });
       setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier.toLowerCase() as RiskTier }));

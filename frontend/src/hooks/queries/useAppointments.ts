@@ -110,3 +110,43 @@ export function useNextAvailableSlot(): UseQueryResult<AvailableSlot | null> {
     retry: 1,
   });
 }
+
+/**
+ * Fetch a single appointment by ID
+ */
+export function useAppointment(
+  appointmentId: string
+): UseQueryResult<Appointment> {
+  return useQuery({
+    queryKey: ["appointments", appointmentId],
+    queryFn: async () => {
+      return apiRequest<Appointment>("GET", `/appointments/${appointmentId}`);
+    },
+    staleTime: 1000 * 60 * 10, // 10 minutes
+    gcTime: 1000 * 60 * 60, // 60 minutes
+    retry: 1,
+    enabled: !!appointmentId,
+  });
+}
+
+/**
+ * Fetch available time slots for a psychologist on a specific date
+ */
+export function useAppointmentAvailability(
+  psychologistId: string,
+  date: string
+): UseQueryResult<string[]> {
+  return useQuery({
+    queryKey: ["appointments", "availability", psychologistId, date],
+    queryFn: async () => {
+      return apiRequest<string[]>(
+        "GET",
+        `/appointments/availability/${psychologistId}?date=${date}`
+      );
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 30, // 30 minutes
+    retry: 1,
+    enabled: !!psychologistId && !!date,
+  });
+}
