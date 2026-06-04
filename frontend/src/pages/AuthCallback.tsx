@@ -48,18 +48,22 @@ export default function AuthCallback() {
         const user = await loginFromCallback(accessToken);
         console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type });
 
-        // Determine redirect based on user role
-        const role = user.role ?? user.user_type;
+        // Determine redirect based on user role/type
+        // Backend returns: user_type can be "student" or "staff", staff_type distinguishes staff roles
+        const userType = user.user_type;
+        const staffType = user.staff_type;
+        const isAdmin = user.is_admin;
         let redirectUrl = "/";
 
-        if (role === "student") {
+        if (userType === "student") {
           redirectUrl = "/student";
-        } else if (role === "psychologist") {
+        } else if (userType === "staff") {
+          // Staff members (psychologists, counselors, admin) go to counselor dashboard
           redirectUrl = "/counselor";
-        } else if (user.is_admin) {
+        } else if (isAdmin) {
           redirectUrl = "/admin";
         } else {
-          console.warn("AuthCallback: Unknown role, redirecting to home:", role);
+          console.warn("AuthCallback: Unknown user type, redirecting to home:", { userType, staffType, isAdmin });
         }
 
         console.log("AuthCallback: Redirecting to:", redirectUrl);

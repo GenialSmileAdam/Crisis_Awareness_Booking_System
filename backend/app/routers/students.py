@@ -40,11 +40,16 @@ async def list_students(
     faculty: str | None = None,
     crisis_flag: bool | None = None,
     assigned_psychologist_id: UUID | None = None,
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=0, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: dict = require_roles("admin", "psychologist"),
 ):
+    # Apply sensible defaults if invalid values provided
+    if limit <= 0:
+        limit = 20
+    if offset < 0:
+        offset = 0
     result = await StudentService.get_all(
         db,
         {
