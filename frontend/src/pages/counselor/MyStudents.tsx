@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { colorFromWrs, RiskTier } from "@/data/mock";
+import { colorFromWrs, RiskTier, FACULTY_WRS } from "@/data/mock";
 import { cn, formatWRS } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
