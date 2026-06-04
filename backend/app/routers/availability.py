@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +11,11 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 from app.models.staff import Staff
+from app.services.scheduling_service import (
+    check_availability_conflicts_busy_block,
+    check_availability_overlap,
+    check_busy_block_conflict,
+)
 from app.utils.response import success
 
 router = APIRouter(prefix="/availability", tags=["Availability"])
@@ -21,7 +27,6 @@ def _require_psychologist(current_user: dict) -> None:
 
 
 async def _get_staff_user_id(db: AsyncSession, current_user: dict) -> UUID:
-    """Resolve current user's UUID → staff.user_id (they are the same for staff)."""
     user_id = current_user["id"]
     staff = (await db.execute(
         select(Staff.user_id).where(Staff.user_id == user_id)
@@ -31,100 +36,225 @@ async def _get_staff_user_id(db: AsyncSession, current_user: dict) -> UUID:
     return user_id
 
 
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
-
-class DaySchedule(BaseModel):
-    day_of_week: int   # 0=Mon … 6=Sun
-    start_time: str    # "HH:MM"
-    end_time: str      # "HH:MM"
-    is_available: bool = True
-
-    @field_validator("day_of_week")
-    @classmethod
-    def valid_day(cls, v: int) -> int:
-        if v < 0 or v > 6:
-            raise ValueError("day_of_week must be 0–6")
-        return v
+def _parse_time(value: str) -> time:
+    try:
+        hours, minutes = map(int, value.split(":"))
+        return time(hour=hours, minute=minutes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Time must be formatted as HH:MM") from exc
 
 
-class WeeklySchedulePayload(BaseModel):
-    schedule: list[DaySchedule]
+def _validate_availability_range(start_time: time, end_time: time) -> None:
+    if end_time <= start_time:
+        raise HTTPException(status_code=422, detail="end_time must be after start_time")
+    for moment in (start_time, end_time):
+        if moment.second != 0 or moment.microsecond != 0 or moment.minute % 15 != 0:
+            raise HTTPException(status_code=422, detail="Times must use 15-minute increments")
+
+
+class AvailabilityBlockPayload(BaseModel):
+    date: date
+    start_time: str
+    end_time: str
+
+
+class AvailabilityBlockUpdate(BaseModel):
+    date: Optional[date] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
 
 
 class BusyBlockPayload(BaseModel):
     block_start: datetime
     block_end: datetime
-    reason: str | None = None
+    reason: Optional[str] = None
 
     @field_validator("block_end")
-    @classmethod
-    def end_after_start(cls, v: datetime, info: any) -> datetime:
-        start = info.data.get("block_start")
-        if start and v <= start:
+    def validate_block_times(cls, block_end, info):
+        block_start = info.data.get("block_start")
+        if block_start is not None and block_end <= block_start:
             raise ValueError("block_end must be after block_start")
-        return v
+        return block_end
 
 
-# ── Weekly schedule endpoints ─────────────────────────────────────────────────
-
-@router.get("/me")
-async def get_my_schedule(
+@router.post("")
+async def create_availability(
+    payload: AvailabilityBlockPayload,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Return current psychologist's weekly availability schedule."""
     _require_psychologist(current_user)
-    psych_id = await _get_staff_user_id(db, current_user)
+    target_id = await _get_staff_user_id(db, current_user)
 
-    rows = (await db.execute(
-        select(PsychologistAvailability)
-        .where(PsychologistAvailability.psychologist_id == psych_id)
-        .order_by(PsychologistAvailability.day_of_week)
-    )).scalars().all()
+    start_time = _parse_time(payload.start_time)
+    end_time = _parse_time(payload.end_time)
+    _validate_availability_range(start_time, end_time)
 
-    return success("Schedule retrieved", [
+    overlap = await check_availability_overlap(
+        db,
+        target_id,
+        payload.date,
+        start_time,
+        end_time,
+    )
+
+    if overlap:
+        raise HTTPException(status_code=409, detail="Availability overlaps an existing block")
+
+    busy_conflict = await check_busy_block_conflict(
+        db,
+        target_id,
+        datetime.combine(payload.date, start_time, timezone.utc),
+        datetime.combine(payload.date, end_time, timezone.utc),
+    )
+    if busy_conflict:
+        raise HTTPException(status_code=409, detail="Availability overlaps an existing busy block")
+
+    block = PsychologistAvailability(
+        psychologist_id=target_id,
+        date=payload.date,
+        start_time=start_time,
+        end_time=end_time,
+    )
+    db.add(block)
+    await db.commit()
+    await db.refresh(block)
+
+    return success("Availability block created", {
+        "id": str(block.id),
+        "psychologist_id": str(block.psychologist_id),
+        "date": block.date.isoformat(),
+        "start_time": block.start_time.strftime("%H:%M"),
+        "end_time": block.end_time.strftime("%H:%M"),
+        "status": "available",
+    })
+
+
+@router.get("")
+async def list_availability(
+    psychologist_id: UUID | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    query = select(PsychologistAvailability)
+    if psychologist_id:
+        query = query.where(PsychologistAvailability.psychologist_id == psychologist_id)
+    if start_date:
+        query = query.where(PsychologistAvailability.date >= start_date)
+    if end_date:
+        query = query.where(PsychologistAvailability.date <= end_date)
+
+    rows = (
+        await db.execute(
+            query.order_by(
+                PsychologistAvailability.date.asc(),
+                PsychologistAvailability.start_time.asc(),
+            )
+        )
+    ).scalars().all()
+
+    return success("Availability retrieved", [
         {
-            "id": str(r.id),
-            "day_of_week": r.day_of_week,
-            "start_time": r.start_time.strftime("%H:%M"),
-            "end_time": r.end_time.strftime("%H:%M"),
-            "is_available": r.is_available,
+            "id": str(row.id),
+            "psychologist_id": str(row.psychologist_id),
+            "date": row.date.isoformat(),
+            "start_time": row.start_time.strftime("%H:%M"),
+            "end_time": row.end_time.strftime("%H:%M"),
+            "status": "available",
         }
-        for r in rows
+        for row in rows
     ])
 
 
-@router.put("/me")
-async def set_my_schedule(
-    payload: WeeklySchedulePayload,
+@router.put("/{availability_id}")
+async def update_availability(
+    availability_id: UUID,
+    payload: AvailabilityBlockUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Replace entire weekly availability schedule (full upsert)."""
     _require_psychologist(current_user)
     psych_id = await _get_staff_user_id(db, current_user)
 
-    # Delete all existing rows for this psychologist, then re-insert
-    await db.execute(
-        delete(PsychologistAvailability).where(
-            PsychologistAvailability.psychologist_id == psych_id
+    block = (
+        await db.execute(
+            select(PsychologistAvailability).where(PsychologistAvailability.id == availability_id)
         )
+    ).scalar_one_or_none()
+    if block is None:
+        raise HTTPException(status_code=404, detail="Availability block not found")
+
+    if block.psychologist_id != psych_id:
+        raise HTTPException(status_code=403, detail="Not allowed to update this availability")
+
+    new_date = payload.date or block.date
+    new_start = _parse_time(payload.start_time) if payload.start_time else block.start_time
+    new_end = _parse_time(payload.end_time) if payload.end_time else block.end_time
+    _validate_availability_range(new_start, new_end)
+
+    overlap = await check_availability_overlap(
+        db,
+        block.psychologist_id,
+        new_date,
+        new_start,
+        new_end,
+        exclude_id=availability_id,
     )
+    if overlap:
+        raise HTTPException(status_code=409, detail="Updated availability overlaps another block")
 
-    for day in payload.schedule:
-        from datetime import time as dtime
-        h_start, m_start = map(int, day.start_time.split(":"))
-        h_end, m_end = map(int, day.end_time.split(":"))
-        db.add(PsychologistAvailability(
-            psychologist_id=psych_id,
-            day_of_week=day.day_of_week,
-            start_time=dtime(h_start, m_start),
-            end_time=dtime(h_end, m_end),
-            is_available=day.is_available,
-        ))
+    busy_conflict = await check_busy_block_conflict(
+        db,
+        block.psychologist_id,
+        datetime.combine(new_date, new_start, timezone.utc),
+        datetime.combine(new_date, new_end, timezone.utc),
+    )
+    if busy_conflict:
+        raise HTTPException(status_code=409, detail="Updated availability overlaps an existing busy block")
 
+    block.date = new_date
+    block.start_time = new_start
+    block.end_time = new_end
     await db.commit()
-    return success("Schedule updated", {"days": len(payload.schedule)})
+    await db.refresh(block)
+
+    updated_block = block
+
+    return success("Availability block updated", {
+        "id": str(updated_block.id),
+        "psychologist_id": str(updated_block.psychologist_id),
+        "date": updated_block.date.isoformat(),
+        "start_time": updated_block.start_time.strftime("%H:%M"),
+        "end_time": updated_block.end_time.strftime("%H:%M"),
+        "status": "available",
+    })
+
+
+@router.delete("/{availability_id}")
+async def delete_availability(
+    availability_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    _require_psychologist(current_user)
+    psych_id = await _get_staff_user_id(db, current_user)
+
+    block = (
+        await db.execute(
+            select(PsychologistAvailability).where(PsychologistAvailability.id == availability_id)
+        )
+    ).scalar_one_or_none()
+    if block is None:
+        raise HTTPException(status_code=404, detail="Availability block not found")
+
+    if block.psychologist_id != psych_id:
+        raise HTTPException(status_code=403, detail="Not allowed to delete this availability")
+
+    await db.delete(block)
+    await db.commit()
+    return success("Availability block deleted", {"id": str(availability_id)})
 
 
 # ── Busy blocks endpoints ─────────────────────────────────────────────────────
@@ -135,7 +265,6 @@ async def get_busy_blocks(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Return upcoming (or all) one-off busy blocks for this psychologist."""
     _require_psychologist(current_user)
     psych_id = await _get_staff_user_id(db, current_user)
 
@@ -165,9 +294,26 @@ async def add_busy_block(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Add a one-off busy period."""
     _require_psychologist(current_user)
     psych_id = await _get_staff_user_id(db, current_user)
+
+    conflict = await check_busy_block_conflict(
+        db,
+        psych_id,
+        payload.block_start,
+        payload.block_end,
+    )
+    if conflict:
+        raise HTTPException(status_code=409, detail="Busy block overlaps an existing busy block")
+
+    availability_conflict = await check_availability_conflicts_busy_block(
+        db,
+        psych_id,
+        payload.block_start,
+        payload.block_end,
+    )
+    if availability_conflict:
+        raise HTTPException(status_code=409, detail="Busy block overlaps existing availability")
 
     block = PsychologistBusyBlock(
         psychologist_id=psych_id,
@@ -193,7 +339,6 @@ async def delete_busy_block(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Remove a busy block (must belong to the requesting psychologist)."""
     _require_psychologist(current_user)
     psych_id = await _get_staff_user_id(db, current_user)
 

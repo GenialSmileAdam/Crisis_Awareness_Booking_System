@@ -23,7 +23,7 @@ class AppointmentCreate(BaseModel):
         return self
 
 
-class StudentAppointmentCreate(BaseModel):
+class AppointmentRequestCreate(BaseModel):
     psychologist_id: UUID
     start_time: datetime
     end_time: datetime
@@ -31,10 +31,13 @@ class StudentAppointmentCreate(BaseModel):
     crisis_note: Optional[str] = None
 
     @model_validator(mode="after")
-    def validate_times(self) -> "StudentAppointmentCreate":
+    def validate_times(self) -> "AppointmentRequestCreate":
         if self.end_time <= self.start_time:
             raise ValueError("end_time must be after start_time")
         return self
+
+
+StudentAppointmentCreate = AppointmentRequestCreate
 
 
 class AppointmentUpdate(BaseModel):
@@ -42,7 +45,6 @@ class AppointmentUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     crisis_note: Optional[str] = None
-    pending_approval: Optional[bool] = None
 
     @model_validator(mode="after")
     def validate_times(self) -> "AppointmentUpdate":

@@ -83,6 +83,7 @@ class StaffService:
                 "hire_date": row.Staff.hire_date,
                 "specialization": row.Staff.specialization,
                 "max_appointments_per_day": row.Staff.max_appointments_per_day,
+                "session_duration_minutes": row.Staff.session_duration_minutes,
                 "is_admin": row.is_admin,
                 "created_at": row.Staff.created_at,
                 "updated_at": row.Staff.updated_at,
@@ -124,12 +125,13 @@ class StaffService:
                 await db.execute(
                     select(PsychologistAvailability).where(
                         PsychologistAvailability.psychologist_id.in_(psych_ids),
-                        PsychologistAvailability.day_of_week == today_dow,
-                        PsychologistAvailability.is_available.is_(True),
+                        PsychologistAvailability.date == now.date(),
                     )
                 )
             ).scalars().all()
-            avail_by_id = {a.psychologist_id: a for a in avail_rows}
+            avail_by_id = {}
+            for a in avail_rows:
+                avail_by_id.setdefault(a.psychologist_id, []).append(a)
 
             busy_rows = (
                 await db.execute(
@@ -145,10 +147,9 @@ class StaffService:
         data = []
         for row in rows:
             psych_id = row.Staff.user_id
-            avail = avail_by_id.get(psych_id)
+            avail_blocks = avail_by_id.get(psych_id, [])
             is_available_now = (
-                avail is not None
-                and avail.start_time <= now_time <= avail.end_time
+                any(block.start_time <= now_time < block.end_time for block in avail_blocks)
                 and psych_id not in busy_ids
             )
             data.append({
@@ -192,6 +193,7 @@ class StaffService:
             "hire_date": row.Staff.hire_date,
             "specialization": row.Staff.specialization,
             "max_appointments_per_day": row.Staff.max_appointments_per_day,
+            "session_duration_minutes": row.Staff.session_duration_minutes,
             "is_admin": row.is_admin,
             "created_at": row.Staff.created_at,
             "updated_at": row.Staff.updated_at,

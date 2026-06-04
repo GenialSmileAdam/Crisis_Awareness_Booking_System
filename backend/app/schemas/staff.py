@@ -17,6 +17,7 @@ class StaffCreate(BaseModel):
     hire_date: Optional[date] = None
     specialization: Optional[str] = None
     max_appointments_per_day: int = 8
+    session_duration_minutes: int = 45
     is_admin: bool = False
 
 
@@ -24,6 +25,7 @@ class StaffUpdate(BaseModel):
     department: Optional[str] = None
     specialization: Optional[str] = None
     max_appointments_per_day: Optional[int] = None
+    session_duration_minutes: Optional[int] = None
     is_admin: Optional[bool] = None
 
 
@@ -37,6 +39,7 @@ class StaffResponse(BaseModel):
     hire_date: Optional[date] = None
     specialization: Optional[str] = None
     max_appointments_per_day: int
+    session_duration_minutes: int
     is_admin: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
