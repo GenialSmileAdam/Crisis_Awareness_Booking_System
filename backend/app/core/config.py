@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     CAMPUS_ONE_ISSUER: str = "https://auth.campusone.com.ng"
     CAMPUS_ONE_DISCOVERY_URL: str = "https://auth.campusone.com.ng/api/auth/.well-known/openid-configuration"
     CAMPUS_ONE_JWKS_URL: str = "https://auth.campusone.com.ng/api/auth/jwks"
-    CAMPUS_ONE_SCOPES: str = "openid email profile academic notifications offline_access"
+    CAMPUS_ONE_SCOPES: str = "openid email profile academic roles notifications events offline_access"
     CAMPUS_ONE_REDIRECT_URI: str = ""
 
     # Deployment URLs

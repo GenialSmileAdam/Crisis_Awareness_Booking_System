@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 import secrets
 import base64
@@ -168,29 +169,25 @@ async def auth_callback(
     error: str = None,
     error_description: str = None,
     request: Request = None,
-    response: Response = None,
     db = Depends(get_db),
 ):
     """Campus One OIDC callback handler."""
     from app.core.config import settings
 
     frontend_url = settings.FRONTEND_URL
+    is_dev = request.url.hostname in ("localhost", "127.0.0.1")
 
     # Handle Campus One errors
     if error:
         error_msg = error_description or error
         logging.warning(f"Campus One OAuth error: {error_msg}")
-        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
-        response.status_code = 302
-        response.headers["location"] = redirect_url
-        return response
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'error': error_msg})}"
+        return RedirectResponse(url=redirect_url, status_code=302)
 
     if not code or not state:
         error_msg = "Missing authorization code or state"
-        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
-        response.status_code = 302
-        response.headers["location"] = redirect_url
-        return response
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'error': error_msg})}"
+        return RedirectResponse(url=redirect_url, status_code=302)
 
     try:
         # Verify state for CSRF protection
@@ -225,6 +222,8 @@ async def auth_callback(
         user.campus_one_access_token = token_response.get("access_token")
         if token_response.get("refresh_token"):
             user.campus_one_refresh_token = token_response.get("refresh_token")
+        db.add(user)
+        await db.commit()
 
         # Get identity claims (student_id, staff_id, etc.)
         from app.services.auth_service import AuthService
@@ -261,35 +260,45 @@ async def auth_callback(
         )
         await db.commit()
 
-        # Clear OIDC cookies
-        response.delete_cookie("oidc_state", httponly=True, secure=True)
-        response.delete_cookie("oidc_code_verifier", httponly=True, secure=True)
-
-        # Set refresh token cookie for automatic token refresh
-        response.set_cookie(
-            key="refresh_token",
-            value=our_refresh_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            max_age=60 * 60 * 24 * 7,
-        )
-
         # Redirect to frontend with access token
         redirect_params = urlencode({
             "access_token": our_access_token,
             "user_type": identity["user_type"],
         })
         redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{redirect_params}"
-        response.status_code = 302
-        response.headers["location"] = redirect_url
+        response = RedirectResponse(url=redirect_url, status_code=302)
+
+        # Delete OIDC cookies with matching security level
+        response.delete_cookie(
+            "oidc_state",
+            httponly=True,
+            secure=not is_dev,
+            samesite="lax",
+            path="/",
+        )
+        response.delete_cookie(
+            "oidc_code_verifier",
+            httponly=True,
+            secure=not is_dev,
+            samesite="lax",
+            path="/",
+        )
+
+        # Set refresh token cookie for automatic token refresh
+        response.set_cookie(
+            key="refresh_token",
+            value=our_refresh_token,
+            httponly=True,
+            secure=not is_dev,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 7,
+            path="/",
+        )
+
         return response
 
     except Exception as e:
-        import logging
         logging.error(f"Campus One callback error: {type(e).__name__}: {str(e)}")
         error_msg = "Authentication failed. Please try again."
-        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?error={urlencode({'error': error_msg})}"
-        response.status_code = 302
-        response.headers["location"] = redirect_url
-        return response
+        redirect_url = f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'error': error_msg})}"
+        return RedirectResponse(url=redirect_url, status_code=302)

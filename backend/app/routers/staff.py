@@ -18,7 +18,7 @@ async def create_staff(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin"),
+    _: dict = require_roles("admin", "staff"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
@@ -40,7 +40,7 @@ async def list_staff(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin"),
+    _: dict = require_roles("admin", "staff"),
 ):
     result = await StaffService.get_all(db, {"staff_type": staff_type, "department": department}, limit, offset)
     return success("Staff retrieved successfully", result)
@@ -100,7 +100,7 @@ async def delete_staff(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin"),
+    _: dict = require_roles("admin", "staff"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:

@@ -20,6 +20,16 @@ export function ProtectedRoute({ role, children }: { role: Role | Role[]; childr
   }, [navigate]);
 
   const allowed = Array.isArray(role) ? role : [role];
-  if (!user || !allowed.includes(user.role as Role)) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+
+let hasAccess = allowed.includes(user.role as Role);
+if (!hasAccess && user.user_type === "staff") {
+  if (user.is_admin && (allowed.includes("admin") || allowed.includes("psychologist"))) {
+    hasAccess = true;
+  } else if ((user as any).staff_type === "psychologist" && allowed.includes("psychologist")) {
+    hasAccess = true;
+  }
+}
+if (!hasAccess) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

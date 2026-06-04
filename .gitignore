@@ -32,3 +32,6 @@ backend/.env.*
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code worktrees and temporary files
+.claude/worktrees/

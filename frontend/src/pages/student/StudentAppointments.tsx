@@ -1,5 +1,5 @@
-import { getAppointmentAvailability, bookStudentAppointment, listAppointments, Appointment } from "@/api/appointments";
-import { listPsychologists } from "@/api/staff";
+import { useStudentAppointments, usePsychologists, useAppointmentAvailability } from "@/hooks/queries";
+import { useBookAppointment } from "@/hooks/mutations";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Pencil } from "lucide-react";
@@ -27,69 +27,50 @@ function buildMonth(year: number, month: number) {
 }
 
 export default function StudentAppointments() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const studentId = user?.student_id;
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
 
-  const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
-  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const appointmentsQuery = useStudentAppointments(studentId, 50, 0);
+  const psychologistsQuery = usePsychologists();
+  const availabilityQuery = useAppointmentAvailability(
+    selectedPsychologist?.user_id,
+    selectedDate
+  );
+  const bookMutation = useBookAppointment();
 
-  const [psychologists, setPsychologists] = useState<any[]>([]);
   const [selectedPsychologist, setSelectedPsychologist] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [psychologistsLoading, setPsychologistsLoading] = useState(false);
-  const [psychologistLoadError, setPsychologistLoadError] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
 
   const [mode, setMode] = useState<"In-Person" | "Virtual">("Virtual");
   const [notes, setNotes] = useState("");
   const [pastOpen, setPastOpen] = useState(false);
-  const [viewing, setViewing] = useState<Appointment | null>(null);
+  const [viewing, setViewing] = useState<any>(null);
 
-  // Refs for auto-scrolling between steps
   const step2Ref = useRef<HTMLDivElement>(null);
   const step3Ref = useRef<HTMLDivElement>(null);
   const bookingRef = useRef<HTMLElement>(null);
 
+  // Handle psychologist errors
   useEffect(() => {
-    const fetchMyAppointments = async () => {
-      try {
-        setAppointmentsLoading(true);
-        const data = await listAppointments(50, 0);
-        setMyAppointments(data.data || []);
-      } catch {
-        setMyAppointments([]);
-      } finally {
-        setAppointmentsLoading(false);
-      }
-    };
-    fetchMyAppointments();
-  }, []);
+    if (psychologistsQuery.error) {
+      toast.error("Failed to load counselors. Please retry.");
+    }
+  }, [psychologistsQuery.error]);
 
-  useEffect(() => {
-    const loadPsychologists = async () => {
-      setPsychologistsLoading(true);
-      setPsychologistLoadError(false);
-      try {
-        const list = await listPsychologists();
-        setPsychologists(list);
-      } catch {
-        setPsychologists([]);
-        setPsychologistLoadError(true);
-        toast.error("Failed to load counselors. Please retry.");
-      } finally {
-        setPsychologistsLoading(false);
-      }
-    };
-    loadPsychologists();
-  }, []);
+  const myAppointments = appointmentsQuery.data?.data || [];
+  const psychologists = psychologistsQuery.data || [];
+  const availableSlots = availabilityQuery.data || [];
+  const appointmentsLoading = appointmentsQuery.isPending;
+  const psychologistsLoading = psychologistsQuery.isPending;
+  const slotsLoading = availabilityQuery.isPending;
+  const loading = bookMutation.isPending;
 
   // Auto-scroll to the active step when it advances
   useEffect(() => {
@@ -129,62 +110,42 @@ export default function StudentAppointments() {
     setStep(2);
   };
 
-  const handleDayClick = async (dateStr: string) => {
+  const handleDayClick = (dateStr: string) => {
     setSelectedDate(dateStr);
     setSelectedSlot(null);
-    setSlotsLoading(true);
-    try {
-      const slots = await getAppointmentAvailability(selectedPsychologist.user_id, dateStr);
-      setAvailableSlots(slots || []);
-    } catch {
-      toast.error("Failed to load availability for this date");
-      setAvailableSlots([]);
-    } finally {
-      setSlotsLoading(false);
-    }
   };
+
+  useEffect(() => {
+    if (availabilityQuery.error) {
+      toast.error("Failed to load availability for this date");
+    }
+  }, [availabilityQuery.error]);
 
   const selectSlot = (slot: string) => {
     setSelectedSlot(slot);
     setStep(3);
   };
 
-  const confirmBooking = async () => {
+  const confirmBooking = () => {
     if (!selectedSlot || !selectedPsychologist) return;
-    setLoading(true);
-    try {
-      const [start, end] = selectedSlot.split(" / ");
-      const response = await bookStudentAppointment({
+    const [start, end] = selectedSlot.split(" / ");
+    bookMutation.mutate(
+      {
         psychologist_id: selectedPsychologist.user_id,
         start_time: start,
         end_time: end,
         notes: notes || undefined,
-      });
-
-      const newAppt: Appointment = {
-        id: response.id,
-        start_time: start,
-        end_time: end,
-        status: "booked",
-        is_crisis: false,
-        crisis_note: null,
-        student_id: "",
-        psychologist_id: selectedPsychologist.user_id,
-        student_full_name: "",
-        psychologist_full_name: selectedPsychologist.full_name,
-        booking_source: "student_portal",
-        pending_approval: true,
-        created_at: new Date().toISOString(),
-      };
-
-      setMyAppointments(prev => [newAppt, ...prev]);
-      setBookingSuccess(true);
-      toast.success("Appointment requested! Awaiting counselor confirmation.");
-    } catch {
-      toast.error("Failed to book appointment. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      },
+      {
+        onSuccess: (response) => {
+          setBookingSuccess(true);
+          toast.success("Appointment requested! Awaiting counselor confirmation.");
+        },
+        onError: () => {
+          toast.error("Failed to book appointment. Please try again.");
+        },
+      }
+    );
   };
 
   const fmtDate = (d: string) =>

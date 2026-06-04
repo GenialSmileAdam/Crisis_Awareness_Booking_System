@@ -16,8 +16,8 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { CrisisBanner, BookingModal, HotlineModal } from "@/components/CrisisBanner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 type SurveyTab = "pulse" | "phq9" | "gad7";
-import { PendingCheckin, getPendingCheckins, submitCheckin, getStudentCheckins, CheckinRecord } from "@/api/checkins";
-import { listAppointments, getNextAvailableSlot, NextAvailableSlot, Appointment } from "@/api/appointments";
+import { usePendingCheckins, useStudentAppointments, useStudentCheckins, useNextAvailableSlot } from "@/hooks/queries";
+import { useSubmitCheckin } from "@/hooks/mutations";
 import { studentSidebarItems } from "@/data/sidebar";
 import { OnboardingSlides } from "@/components/OnboardingSlides";
 
@@ -107,109 +107,80 @@ export default function StudentPortal() {
   const studentName = user?.name || "Student";
   const firstName = user?.name?.split(" ")[0] || "";
   const studentId = user?.student_id;
-  
+
   const isCheckinView = location.pathname === "/student/checkin";
 
-  // API State
-  const [pendingSurveys, setPendingSurveys] = useState<PendingCheckin[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const pendingCheckinsQuery = usePendingCheckins();
+  const appointmentsQuery = useStudentAppointments(studentId, 10, 0);
+  const checkinsQuery = useStudentCheckins(studentId, 5, 0);
+  const nextSlotQuery = useNextAvailableSlot();
+  const submitMutation = useSubmitCheckin();
+
   const [tab, setTab] = useState<SurveyTab>("pulse");
-  const [hasCompletedRecently, setHasCompletedRecently] = useState(false);
-  const [isTriggered, setIsTriggered] = useState(false);
-  const [pendingLoadError, setPendingLoadError] = useState(false);
-
-  useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const pending = await getPendingCheckins();
-        setPendingSurveys(pending);
-        if (pending.length > 0) setTab(pending[0].type as SurveyTab);
-        else setHasCompletedRecently(true);
-      } catch {
-        setPendingLoadError(true);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkStatus();
-  }, [studentId, navigate]);
-
   const [bookingOpen, setBookingOpen] = useState(false);
   const [hotlineOpen, setHotlineOpen] = useState(false);
-  const tier = tierFromWrs(wrs);
-
-  // Real data for home cards
-  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
-  const [recentCheckins, setRecentCheckins] = useState<CheckinRecord[]>([]);
-  const [nextSlot, setNextSlot] = useState<NextAvailableSlot | null>(null);
-  const [homeLoading, setHomeLoading] = useState(true);
 
   useEffect(() => {
-    const fetchHomeData = async () => {
-      if (!studentId) return;
-      try {
-        const [apptData, checkinData, slotData] = await Promise.allSettled([
-          listAppointments(10, 0),
-          getStudentCheckins(studentId, 5, 0),
-          getNextAvailableSlot(),
-        ]);
-        if (apptData.status === "fulfilled") {
-          const upcoming = (apptData.value.data || []).filter(
-            (a) => a.status === "booked" && new Date(a.start_time) > new Date()
-          );
-          setUpcomingAppointments(upcoming);
-        }
-        if (checkinData.status === "fulfilled") setRecentCheckins(checkinData.value.data || []);
-        if (slotData.status === "fulfilled") setNextSlot(slotData.value);
-      } catch {
-        // non-fatal
-      } finally {
-        setHomeLoading(false);
-      }
-    };
-    fetchHomeData();
-  }, [studentId]);
+    const pending = pendingCheckinsQuery.data || [];
+    if (pending.length > 0 && tab !== (pending[0].type as SurveyTab)) {
+      setTab(pending[0].type as SurveyTab);
+    }
+  }, [pendingCheckinsQuery.data?.length, tab]);
+
+  const pendingSurveys = pendingCheckinsQuery.data || [];
+  const isLoading = pendingCheckinsQuery.isPending;
+  const pendingLoadError = !!pendingCheckinsQuery.error;
+  const hasCompletedRecently = pendingSurveys.length === 0 && !isLoading;
+
+  const upcomingAppointments = (appointmentsQuery.data?.data || []).filter(
+    (a) => a.status === "booked" && new Date(a.start_time) > new Date()
+  );
+  const recentCheckins = checkinsQuery.data?.data || [];
+  const nextSlot = nextSlotQuery.data;
+  const homeLoading = appointmentsQuery.isPending || checkinsQuery.isPending || nextSlotQuery.isPending;
+
+  const tier = tierFromWrs(wrs);
 
   const handleSubmit = async (responses: Record<string, number>) => {
     if (!studentId) return;
     const score = tab === "phq9" || tab === "gad7"
       ? Object.values(responses).reduce((a, b) => a + b, 0)
       : null;
-    try {
-      const result = await submitCheckin({ student_id: studentId, type: tab, responses, score });
-      if (result.crisis_escalation_required) {
-        toast.error("A counselor has been alerted. Please reach out if you need immediate support.", { duration: 8000 });
-      } else {
-        toast.success("Check-in recorded. Thank you.");
+
+    submitMutation.mutate(
+      { student_id: studentId, type: tab, responses, score },
+      {
+        onSuccess: (result) => {
+          if (result.crisis_escalation_required) {
+            toast.error("A counselor has been alerted. Please reach out if you need immediate support.", { duration: 8000 });
+          } else {
+            toast.success("Check-in recorded. Thank you.");
+          }
+          if (score !== null) {
+            const newWrs = Math.round((score / 27) * 100);
+            setWrs(newWrs);
+          }
+          const pending = pendingSurveys.filter(p => p.type !== tab);
+          if (pending.length > 0) {
+            setTab(pending[0].type as SurveyTab);
+          } else if (location.pathname === "/student/checkin") {
+            navigate("/student");
+          }
+        },
+        onError: () => {
+          toast.error("Failed to submit check-in. Please try again.");
+        },
       }
-      if (score !== null) {
-        const newWrs = Math.round((score / 27) * 100);
-        setWrs(newWrs);
-      }
-    } catch {
-      toast.error("Failed to submit check-in. Please try again.");
-      return;
-    }
-    const pending = pendingSurveys.filter(p => p.type !== tab);
-    setPendingSurveys(pending);
-    if (pending.length > 0) {
-      setTab(pending[0].type as SurveyTab);
-    } else {
-      setHasCompletedRecently(true);
-      if (location.pathname === "/student/checkin") {
-        navigate("/student");
-      }
-    }
+    );
   };
 
   const portalItems = useMemo(() => {
     return studentSidebarItems.map(item => ({
       ...item,
       disabled: false,
-      ...(item.label === "Check-in" && (pendingSurveys.length > 0 || isTriggered) && !hasCompletedRecently ? { badge: "!" } : {}),
+      ...(item.label === "Check-in" && pendingSurveys.length > 0 && !hasCompletedRecently ? { badge: "!" } : {}),
     }));
-  }, [hasCompletedRecently, pendingSurveys.length, isTriggered]);
+  }, [hasCompletedRecently, pendingSurveys.length]);
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();

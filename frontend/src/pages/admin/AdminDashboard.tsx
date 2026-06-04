@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { LayoutDashboard, BarChart3, Users, FileText, Settings, Search, AlertTriangle, ClipboardCheck, Activity, MessageSquare, Library, LogOut } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
@@ -6,19 +6,23 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ALERTS, FACULTY_WRS, STUDENTS, colorFromWrs, tierFromWrs, downloadCSV, trendData } from "@/data/mock";
+import { colorFromWrs, downloadCSV, trendData } from "@/data/mock";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { getRiskAlerts, getRiskCohort, type RiskTier } from "@/api/riskScores";
-import { listStudents } from "@/api/students";
-import { getRealAnalytics } from "@/api/analytics";
+import type { RiskTier } from "@/api/riskScores";
 import { adminSidebarItems } from "@/data/sidebar";
 import { AdminOnboardingSlides } from "@/components/AdminOnboardingSlides";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NeonSpinner } from "@/components/NeonSpinner";
+import {
+  useStudents,
+  useRiskAlerts,
+  useRiskScoreCohort,
+  useRealAnalytics,
+} from "@/hooks/queries";
 
 const RANGE_LABELS = { week: "This Week", month: "This Month", semester: "This Semester" } as const;
 type Range = keyof typeof RANGE_LABELS;
@@ -30,79 +34,26 @@ export default function AdminDashboard() {
   const [tierFilter, setTierFilter] = useState<string | null>(null);
   const [facultyFilter, setFacultyFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  
-  // Real API data
-  const [students, setStudents] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [cohort, setCohort] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState({ total: 0, limit: 10, offset: 0, has_next: false });
-  const [alertsPaginationMeta, setAlertsPaginationMeta] = useState({ limit: 10, offset: 0, has_next: false });
-
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [analyticsError, setAnalyticsError] = useState(false);
-  const [insights, setInsights] = useState<any>({});
   const [tierModal, setTierModal] = useState<{ tier: string; students: any[]; loading?: boolean } | null>(null);
   const tierModalRequestRef = useRef<string | null>(null);
 
-  // Derived from range — must be declared before the useEffect that depends on it
+  // Derived from range
   const days = range === "week" ? 7 : range === "month" ? 30 : 90;
   const trend = useMemo(() => trendData(days), [days]);
 
-  // Fetch all data on component mount
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const [studentsData, alertsData, cohortData] = await Promise.all([
-          listStudents(100, 0),
-          getRiskAlerts(100, 0),
-          getRiskCohort()
-        ]);
-        setStudents(studentsData.data || []);
-        setAlerts(alertsData.data || []);
-        setCohort(cohortData || []);
-        setAlertsPaginationMeta({
-          limit: alertsData.pagination?.limit || 10,
-          offset: alertsData.pagination?.offset || 0,
-          has_next: alertsData.pagination?.has_next || false
-        });
-        setPagination({
-          total: studentsData.pagination?.total || 0,
-          limit: 10,
-          offset: 0,
-          has_next: false
-        });
-      } catch (err) {
-        setError("Failed to load dashboard data");
-        toast.error("Failed to load dashboard data. Please refresh.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAll();
-  }, []);
+  // React Query hooks
+  const { data: studentsData, isLoading: studentsLoading } = useStudents(100, 0);
+  const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(100, 0, null);
+  const { data: cohortData } = useRiskScoreCohort();
+  const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useRealAnalytics(days);
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        setAnalyticsLoading(true);
-        setAnalyticsError(false);
-        const data = await getRealAnalytics(days);
-        setAnalytics(data.charts);
-        setInsights(data.insights || {});
-      } catch (err) {
-        setAnalyticsError(true);
-        toast.error("Analytics failed to load — showing cached data if available.");
-      } finally {
-        setAnalyticsLoading(false);
-      }
-    };
-    fetchAnalytics();
-  }, [days]);
+  const students = studentsData?.data || [];
+  const alerts = alertsData?.data || [];
+  const cohort = cohortData || [];
+  const loading = studentsLoading || alertsLoading;
+  const error = null;
+  const analytics = analyticsData?.charts;
+  const insights = analyticsData?.insights || {};
 
   const openTierModal = async (tierName: string) => {
     const tierLower = tierName.toLowerCase() as RiskTier;
@@ -110,10 +61,10 @@ export default function AdminDashboard() {
     const cached = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
     setTierModal({ tier: tierName, students: cached, loading: true });
     try {
-      const result = await getRiskAlerts(200, 0, tierLower);
-      // Guard: ignore if user switched to a different tier while this was loading
+      // Use already-fetched 100 alerts instead of refetching
+      const result = alerts.filter(a => (a.tier || "").toLowerCase() === tierLower);
       if (tierModalRequestRef.current === tierName) {
-        setTierModal({ tier: tierName, students: result.data || [], loading: false });
+        setTierModal({ tier: tierName, students: result, loading: false });
       }
     } catch {
       toast.error(`Failed to load ${tierName} tier students`);

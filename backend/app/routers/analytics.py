@@ -12,7 +12,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def get_real_analytics(
     days: int = Query(default=30, ge=7, le=365),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "psychologist"),
+    current_user: dict = require_roles("admin", "psychologist", "staff"),
 ):
     charts = await get_real_chart_data(db, days=days)
     insights = generate_ai_insights(charts)
@@ -22,7 +22,7 @@ async def get_real_analytics(
 @router.get("/university")
 async def get_university_analytics(
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin"),
+    current_user: dict = require_roles("admin", "staff"),
 ):
     charts = await get_real_chart_data(db)
     return {"success": True, "data": {"charts": charts, "insights": {}}}
@@ -32,7 +32,7 @@ async def get_university_analytics(
 async def get_department_analytics(
     dept_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin", "psychologist"),
+    current_user: dict = require_roles("admin", "psychologist", "staff"),
 ):
     charts = await get_real_chart_data(db, dept_id=dept_id)
     return {"success": True, "data": {"charts": charts, "insights": {}}}
@@ -41,7 +41,7 @@ async def get_department_analytics(
 @router.get("/summary-report")
 async def get_summary_report(
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("admin"),
+    current_user: dict = require_roles("admin", "staff"),
 ):
     charts = await get_real_chart_data(db)
     return {"success": True, "data": {"charts": charts, "insights": {}}}

@@ -52,14 +52,14 @@ const App = () => (
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
                 <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
-                <Route path="/counselor" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/students" element={<ProtectedRoute role="psychologist"><MyStudents /></ProtectedRoute>} />
-                <Route path="/counselor/sessions" element={<ProtectedRoute role="psychologist"><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/availability" element={<ProtectedRoute role="psychologist"><CounselorAvailability /></ProtectedRoute>} />
-                <Route path="/counselor/forum" element={<ProtectedRoute role="psychologist"><CounselorForum /></ProtectedRoute>} />
-                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "admin"]}><CounselorStudent /></ProtectedRoute>} />
-                <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["admin", "psychologist"]}><CounselorStudent /></ProtectedRoute>} />
-                <Route path="/counselor/session/:id" element={<ProtectedRoute role="psychologist"><SessionReviewer /></ProtectedRoute>} />
+                <Route path="/counselor" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/students" element={<ProtectedRoute role={["psychologist", "staff"]}><MyStudents /></ProtectedRoute>} />
+                <Route path="/counselor/sessions" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/availability" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorAvailability /></ProtectedRoute>} />
+                <Route path="/counselor/forum" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorForum /></ProtectedRoute>} />
+                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "admin", "staff"]}><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["admin", "psychologist", "staff"]}><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/counselor/session/:id" element={<ProtectedRoute role={["psychologist", "staff"]}><SessionReviewer /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/forum" element={<ProtectedRoute role="admin"><AdminForum /></ProtectedRoute>} />

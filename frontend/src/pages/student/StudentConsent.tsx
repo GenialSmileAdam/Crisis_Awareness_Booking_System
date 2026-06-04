@@ -3,26 +3,25 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Logo } from "@/components/Logo";
-import { submitConsent } from "@/api/consent";
+import { useSubmitConsent } from "@/hooks/mutations";
 import { toast } from "sonner";
 
 export default function StudentConsent() {
   const [agreed, setAgreed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const submitConsentMutation = useSubmitConsent();
 
-  const handleConsent = async (monitoringEnabled: boolean) => {
+  const handleConsent = (monitoringEnabled: boolean) => {
     if (monitoringEnabled && !agreed) return;
-    
-    setIsLoading(true);
-    try {
-      await submitConsent(monitoringEnabled);
-      navigate("/student");
-    } catch (err) {
-      toast.error("Failed to save consent. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+
+    submitConsentMutation.mutate(monitoringEnabled, {
+      onSuccess: () => {
+        navigate("/student");
+      },
+      onError: () => {
+        toast.error("Failed to save consent. Please try again.");
+      },
+    });
   };
 
   return (
@@ -79,18 +78,18 @@ export default function StudentConsent() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <Button 
-            onClick={() => handleConsent(true)} 
-            disabled={!agreed || isLoading} 
+          <Button
+            onClick={() => handleConsent(true)}
+            disabled={!agreed || submitConsentMutation.isPending}
             className="w-full h-12 text-base font-semibold transition-all"
           >
-            {isLoading ? "Saving..." : "Continue to SafeSpace"}
+            {submitConsentMutation.isPending ? "Saving..." : "Continue to SafeSpace"}
           </Button>
-          
-          <Button 
+
+          <Button
             variant="ghost"
-            onClick={() => handleConsent(false)} 
-            disabled={isLoading}
+            onClick={() => handleConsent(false)}
+            disabled={submitConsentMutation.isPending}
             className="w-full h-12 text-sm font-medium text-muted-foreground hover:text-foreground transition-all"
           >
             Continue without monitoring

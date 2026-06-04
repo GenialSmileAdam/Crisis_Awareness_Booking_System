@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronLeft, LogOut, ClipboardList } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppSidebar";
@@ -6,13 +6,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
-import { getStudentCheckins, CheckinRecord } from "@/api/checkins";
+import { useStudentCheckins } from "@/hooks/queries";
 import { colorFromWrs, tierFromWrs } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { studentSidebarItems } from "@/data/sidebar";
 
-function checkinWrs(c: CheckinRecord): number | null {
-  if ((c.type === "phq9" || c.type === "gad7") && c.score !== null) {
+function checkinWrs(c: { type: string; score?: number | null }): number | null {
+  if ((c.type === "phq9" || c.type === "gad7") && c.score !== null && c.score !== undefined) {
     return Math.round((c.score / 27) * 100);
   }
   return null;
@@ -34,24 +34,14 @@ export default function StudentHistory() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [checkins, setCheckins] = useState<CheckinRecord[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-
   const studentId = user?.student_id;
+  const [offset, setOffset] = useState(0);
 
-  useEffect(() => {
-    if (!studentId) return;
-    setLoading(true);
-    getStudentCheckins(studentId, PAGE_SIZE, offset)
-      .then((res) => {
-        setCheckins(res.data || []);
-        setTotal(res.pagination?.total || 0);
-      })
-      .catch(() => setCheckins([]))
-      .finally(() => setLoading(false));
-  }, [studentId, offset]);
+  const checkinsQuery = useStudentCheckins(studentId, PAGE_SIZE, offset);
+
+  const checkins = checkinsQuery.data?.data || [];
+  const total = checkinsQuery.data?.pagination?.total || 0;
+  const loading = checkinsQuery.isPending;
 
   return (
     <AppShell items={studentSidebarItems}>

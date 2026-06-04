@@ -43,7 +43,7 @@ async def create_appointment(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("psychologist", "admin"),
+    current_user: dict = require_roles("psychologist", "admin", "staff"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
@@ -212,7 +212,7 @@ async def get_appointment_availability(
 async def get_appointment(
     id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("psychologist", "admin"),
+    current_user: dict = require_roles("psychologist", "admin", "staff"),
 ):
     try:
         result = await AppointmentService.get_by_id(db, id, current_user=current_user)
@@ -270,7 +270,7 @@ async def update_appointment(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = require_roles("psychologist", "admin"),
+    current_user: dict = require_roles("psychologist", "admin", "staff"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:
@@ -291,7 +291,7 @@ async def delete_appointment(
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
-    _: dict = require_roles("admin"),
+    _: dict = require_roles("admin", "staff"),
 ):
     cache_key, cached = await handle_idempotency(request, idempotency_key)
     if cached:

@@ -53,3 +53,4 @@ class TestResultResponse(BaseModel):
     test_type: str
     wrs_score: float          # 0-100
     risk_tier: str            # green, amber, red, critical
+    crisis_escalation_required: bool = False  # True if red or critical risk
