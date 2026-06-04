@@ -90,6 +90,9 @@ export default function Login() {
   // Auto-initiate OIDC when not authenticated and fallback not requested
   useEffect(() => {
     if (!isAuthenticated && !showFallback) {
+      // Clear any stale auth data before redirecting to Campus One
+      localStorage.removeItem("safespace_access_token");
+      localStorage.removeItem("ss_user");
       window.location.href = `${API_URL}/auth/campus-one/authorize`;
     }
   }, [isAuthenticated, showFallback, API_URL]);
