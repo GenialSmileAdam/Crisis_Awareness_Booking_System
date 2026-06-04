@@ -19,7 +19,7 @@ class CampusOneService:
         Determine user role, admin status, and staff type from Campus One claims.
 
         Campus One roles: student, staff, admin, therapist, mentor, developer, employer,
-                         consultant, founder, alumni, auditor
+                         consultant, founder, alumni, auditor, external
 
         Returns: (UserRole, is_admin, staff_type_or_none)
         """
@@ -28,6 +28,11 @@ class CampusOneService:
         custom_roles = claims.get("custom_roles", [])
 
         logger.info(f"Campus One claims - role: {primary_role}, roles: {roles}, custom_roles: {custom_roles}")
+
+        # Handle external users (non-university affiliates)
+        if primary_role == "external":
+            logger.warning(f"External user detected - may have restricted access")
+            return UserRole.student, False, None  # Treat as student with no special privileges
 
         # Determine if admin
         is_admin = primary_role == "admin" or "admin" in roles
@@ -48,14 +53,15 @@ class CampusOneService:
         # Check for administrator
         elif primary_role == "administrator" or "administrator" in roles or is_admin:
             staff_type = StaffType.administrator
-        # Default other staff roles (mentor, developer, employer, consultant, founder, alumni, auditor)
+        # Default other staff roles (staff, mentor, developer, employer, consultant, founder, alumni, auditor)
         elif primary_role in ("staff", "mentor", "developer", "employer", "consultant", "founder", "alumni", "auditor"):
             # Map specific roles to staff types if available
             if "mentor" in roles or primary_role == "mentor":
-                staff_type = StaffType.support_staff  # Could be counselor depending on your needs
+                staff_type = StaffType.support_staff
             else:
                 staff_type = StaffType.support_staff
         else:
+            logger.warning(f"Unknown Campus One role: {primary_role}, defaulting to support_staff")
             staff_type = StaffType.support_staff  # Safe fallback
 
         return UserRole.staff, is_admin, staff_type
