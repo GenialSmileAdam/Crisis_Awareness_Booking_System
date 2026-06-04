@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -6,8 +6,13 @@ import { toast } from "sonner";
 export default function AuthCallback() {
   const navigate = useNavigate();
   const { loginFromCallback } = useAuth();
+  const processedRef = useRef(false);
 
   useEffect(() => {
+    // Prevent double processing of callback
+    if (processedRef.current) return;
+    processedRef.current = true;
+
     const processCallback = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
@@ -22,15 +27,14 @@ export default function AuthCallback() {
         if (errorParam) {
           console.error("AuthCallback: Backend returned error:", errorParam);
           toast.error(`Authentication failed: ${errorParam}`);
-          navigate("/login");
+          navigate("/login", { replace: true });
           return;
         }
 
         // Validate token exists and has 3 JWT parts
         if (!accessToken) {
-          console.error("AuthCallback: No access token in URL");
-          toast.error("No authentication token received from server");
-          navigate("/login");
+          console.error("AuthCallback: No access token in URL - silently redirecting");
+          navigate("/login", { replace: true });
           return;
         }
 
@@ -38,7 +42,7 @@ export default function AuthCallback() {
         if (parts.length !== 3) {
           console.error(`AuthCallback: Invalid token format. Parts: ${parts.length}`);
           toast.error("Invalid authentication token format");
-          navigate("/login");
+          navigate("/login", { replace: true });
           return;
         }
 
@@ -46,34 +50,36 @@ export default function AuthCallback() {
 
         // Process the callback and store token
         const user = await loginFromCallback(accessToken);
-        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type });
+        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type, staff_type: user.staff_type, is_admin: user.is_admin });
 
         // Determine redirect based on user role/type
-        // Backend returns: user_type can be "student" or "staff", staff_type distinguishes staff roles
         const userType = user.user_type;
-        const staffType = user.staff_type;
         const isAdmin = user.is_admin;
+        const staffType = user.staff_type;
         let redirectUrl = "/";
 
         if (userType === "student") {
           redirectUrl = "/student";
         } else if (userType === "staff") {
-          // Staff members (psychologists, counselors, admin) go to counselor dashboard
-          redirectUrl = "/counselor";
-        } else if (isAdmin) {
-          redirectUrl = "/admin";
+          // For staff users, check staff_type and admin status
+          if (isAdmin || staffType === "administrator") {
+            redirectUrl = "/admin";
+          } else {
+            redirectUrl = "/counselor";
+          }
         } else {
           console.warn("AuthCallback: Unknown user type, redirecting to home:", { userType, staffType, isAdmin });
         }
 
         console.log("AuthCallback: Redirecting to:", redirectUrl);
         toast.success("Welcome! Signed in with Campus One.");
-        navigate(redirectUrl);
+        // Use replace to prevent adding callback to history
+        navigate(redirectUrl, { replace: true });
       } catch (err) {
         console.error("Auth callback error:", err);
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
         toast.error(`Failed to complete authentication: ${errorMessage}`);
-        navigate("/login");
+        navigate("/login", { replace: true });
       }
     };
 
