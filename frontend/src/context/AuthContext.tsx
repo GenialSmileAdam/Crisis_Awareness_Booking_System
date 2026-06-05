@@ -47,6 +47,10 @@ function decodeJWT(token: string): JWTPayload | null {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64 + "==".slice(0, (4 - (base64.length % 4)) % 4);
     const decoded = JSON.parse(atob(padded));
+    // Ensure roles is always an array (for backward compatibility with old tokens)
+    if (!Array.isArray(decoded.roles)) {
+      decoded.roles = [];
+    }
     return decoded as JWTPayload;
   } catch {
     return null;

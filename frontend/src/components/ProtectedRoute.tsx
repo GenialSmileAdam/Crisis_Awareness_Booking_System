@@ -26,7 +26,7 @@ export function ProtectedRoute({ role, children }: { role: Role | Role[]; childr
   let hasAccess = allowedRoles.includes(user.role as Role);
 
   // Check for unit_head role (admin via Campus One roles claim)
-  const isUnitHead = user.roles && Array.isArray(user.roles) && user.roles.includes("unit_head");
+  const isUnitHead = (user?.roles instanceof Array) && user.roles.includes("unit_head");
 
   // For admin routes, check both is_admin flag and unit_head role
   if (!hasAccess && (isUnitHead || user.is_admin) && allowedRoles.includes("admin")) {

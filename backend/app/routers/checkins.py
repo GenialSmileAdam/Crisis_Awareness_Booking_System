@@ -80,9 +80,11 @@ async def list_student_checkins(
     current_user: dict = Depends(get_current_user)
 ):
     """Get check-in history for a student."""
-    # Check permissions: admin, psychologist, or the student themselves
+    # Check permissions: admin, psychologist, staff, or the student themselves
     is_authorized = (
         current_user.get("is_admin") or
+        current_user.get("role") == "staff" or
+        current_user.get("role") == "psychologist" or
         current_user.get("staff_type") == "psychologist"
     )
     is_self = (

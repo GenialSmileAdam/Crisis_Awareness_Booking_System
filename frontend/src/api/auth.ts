@@ -11,7 +11,7 @@ export interface JWTPayload {
   staff_type: string | null;
   staff_id: string | null;
   student_id: string | null;
-  roles: string[];
+  roles?: string[];
 }
 
 export interface AuthResponse {
