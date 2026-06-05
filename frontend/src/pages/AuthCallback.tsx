@@ -56,19 +56,20 @@ export default function AuthCallback() {
         const userType = user.user_type;
         const isAdmin = user.is_admin;
         const staffType = user.staff_type;
+        const isUnitHead = (user?.roles instanceof Array) && user.roles.includes("unit_head");
         let redirectUrl = "/";
 
         if (userType === "student") {
           redirectUrl = "/student";
         } else if (userType === "staff") {
-          // For staff users, check staff_type and admin status
-          if (isAdmin || staffType === "administrator") {
+          // For staff users, check unit_head role, is_admin flag, or administrator staff type
+          if (isUnitHead || isAdmin || staffType === "administrator") {
             redirectUrl = "/admin";
           } else {
             redirectUrl = "/counselor";
           }
         } else {
-          console.warn("AuthCallback: Unknown user type, redirecting to home:", { userType, staffType, isAdmin });
+          console.warn("AuthCallback: Unknown user type, redirecting to home:", { userType, staffType, isAdmin, isUnitHead });
         }
 
         console.log("AuthCallback: Redirecting to:", redirectUrl);

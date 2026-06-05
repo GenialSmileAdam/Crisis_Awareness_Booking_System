@@ -866,14 +866,14 @@ export default function AdminDashboard() {
               <span style={{ color: tierModal ? colorFromWrs(tierModal.tier === "Green" ? 20 : tierModal.tier === "Amber" ? 50 : tierModal.tier === "Red" ? 75 : 90) : undefined }}>
                 {tierModal?.tier}
               </span>{" "}
-              tier students ({tierModal?.students.length ?? 0})
+              tier students ({tierModal?.students?.length ?? 0})
             </DialogTitle>
           </DialogHeader>
           {tierModal?.loading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
               <NeonSpinner size={18} /> Loading students…
             </div>
-          ) : tierModal?.students.length === 0 ? (
+          ) : !tierModal?.students || tierModal.students.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No students in this tier.</p>
           ) : (
             <div className="divide-y divide-border">
