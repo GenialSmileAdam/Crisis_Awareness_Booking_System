@@ -230,6 +230,7 @@ async def auth_callback(
         identity = await AuthService._get_identity_claims(db, user)
 
         # Generate our own access token with user info
+        campus_one_roles = claims.get("roles", [])
         our_access_token = create_access_token(
             user_id=str(user.id),
             user_type=identity["user_type"],
@@ -238,6 +239,7 @@ async def auth_callback(
             staff_type=identity.get("staff_type"),
             staff_id=identity.get("staff_id"),
             student_id=identity.get("student_id"),
+            campus_one_roles=campus_one_roles,
         )
 
         # Create and store refresh token

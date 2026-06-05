@@ -50,7 +50,7 @@ export default function AuthCallback() {
 
         // Process the callback and store token
         const user = await loginFromCallback(accessToken);
-        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type, staff_type: user.staff_type, is_admin: user.is_admin });
+        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type, staff_type: user.staff_type, is_admin: user.is_admin, roles: user.roles });
 
         // Determine redirect based on user role/type
         const userType = user.user_type;

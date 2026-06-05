@@ -52,6 +52,7 @@ def create_access_token(
     staff_type: str | None = None,
     staff_id: str | None = None,
     student_id: str | None = None,
+    campus_one_roles: list[str] | None = None,
 ) -> str:
     """Create short-lived JWT access token (15 min by default)."""
     now = datetime.now(timezone.utc)
@@ -65,6 +66,7 @@ def create_access_token(
         "staff_type": staff_type,
         "staff_id": staff_id,
         "student_id": student_id,
+        "roles": campus_one_roles or [],
         "exp": expire,
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
@@ -124,4 +126,5 @@ async def get_current_user(
         "staff_type": payload.get("staff_type"),
         "staff_id": payload.get("staff_id"),
         "student_id": payload.get("student_id"),
+        "roles": payload.get("roles", []),
     }

@@ -34,8 +34,8 @@ class CampusOneService:
             logger.warning(f"External user detected - may have restricted access")
             return UserRole.student, False, None  # Treat as student with no special privileges
 
-        # Determine if admin
-        is_admin = primary_role == "admin" or "admin" in roles
+        # Determine if admin: check for "unit_head" or "admin" role
+        is_admin = "unit_head" in roles or primary_role == "unit_head" or primary_role == "admin" or "admin" in roles
 
         # Determine user role and staff type
         if primary_role == "student":

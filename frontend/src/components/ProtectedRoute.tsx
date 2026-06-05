@@ -19,17 +19,36 @@ export function ProtectedRoute({ role, children }: { role: Role | Role[]; childr
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, [navigate]);
 
-  const allowed = Array.isArray(role) ? role : [role];
+  const allowedRoles = Array.isArray(role) ? role : [role];
   if (!user) return <Navigate to="/login" replace />;
 
-let hasAccess = allowed.includes(user.role as Role);
-if (!hasAccess && user.user_type === "staff") {
-  if (user.is_admin && (allowed.includes("admin") || allowed.includes("psychologist"))) {
-    hasAccess = true;
-  } else if ((user as any).staff_type === "psychologist" && allowed.includes("psychologist")) {
+  // Check if user has one of the allowed roles
+  let hasAccess = allowedRoles.includes(user.role as Role);
+
+  // Check for unit_head role (admin via Campus One roles claim)
+  const isUnitHead = user.roles && Array.isArray(user.roles) && user.roles.includes("unit_head");
+
+  // For admin routes, check both is_admin flag and unit_head role
+  if (!hasAccess && (isUnitHead || user.is_admin) && allowedRoles.includes("admin")) {
     hasAccess = true;
   }
-}
-if (!hasAccess) return <Navigate to="/login" replace />;
+
+  // For staff users, check staff_type and admin status
+  if (!hasAccess && user.user_type === "staff") {
+    // Admin/unit_head can access admin and psychologist routes
+    if ((isUnitHead || user.is_admin) && (allowedRoles.includes("admin") || allowedRoles.includes("psychologist"))) {
+      hasAccess = true;
+    }
+    // Psychologists (therapists) can access psychologist routes
+    else if ((user as any).staff_type === "psychologist" && allowedRoles.includes("psychologist")) {
+      hasAccess = true;
+    }
+    // Staff users can access "staff" role routes
+    else if (allowedRoles.includes("staff")) {
+      hasAccess = true;
+    }
+  }
+
+  if (!hasAccess) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
