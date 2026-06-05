@@ -276,27 +276,28 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      <AddStaffModal 
-        open={addStaffOpen} 
-        onOpenChange={setAddStaffOpen} 
-        onSuccess={fetchStaff} 
+      <AddStaffModal
+        open={addStaffOpen}
+        onOpenChange={setAddStaffOpen}
+        onSuccess={refetchStaff}
+        createStaffMutate={createStaffMutate}
       />
     </AppShell>
   );
 }
 
-function AddStaffModal({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
+function AddStaffModal({ open, onOpenChange, onSuccess, createStaffMutate }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void; createStaffMutate: any }) {
   const [form, setForm] = useState({ full_name: "", email: "", password: "", staff_id: "", specialty: "General" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
     if (!form.full_name || !form.email || !form.password || !form.staff_id) return toast.error("Fill all required fields");
-    
+
     setLoading(true);
     setError(null);
     try {
-      await createStaff(form);
+      await createStaffMutate(form);
       toast.success("Staff member added successfully");
       onSuccess();
       onOpenChange(false);
