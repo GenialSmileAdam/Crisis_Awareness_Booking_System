@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Activity, AlertCircle } from "lucide-react";
 import { NeonSpinner } from "@/components/NeonSpinner";
@@ -42,6 +42,7 @@ export default function Login() {
   // OIDC state
   const [showFallback, setShowFallback] = useState(false);
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const oidcInitiatedRef = useRef(false);
 
   // Sign In state
   const [signInRole, setSignInRole] = useState<Role>("student");
@@ -49,14 +50,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Sign Up state
   const [signUpRole, setSignUpRole] = useState<SignUpRole>("student");
   const [signUpError, setSignUpError] = useState("");
   const [signUpFieldErrors, setSignUpFieldErrors] = useState<Record<string, string>>({});
   const [isSignUpSubmitting, setIsSignUpSubmitting] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
-  
+
   // Student sign up
   const [studentFullName, setStudentFullName] = useState("");
   const [studentId, setStudentId] = useState("");
@@ -66,14 +67,14 @@ export default function Login() {
   const [studentClassLevel, setStudentClassLevel] = useState("");
   const [studentEmergencyContact, setStudentEmergencyContact] = useState("");
   const [studentEmergencyPhone, setStudentEmergencyPhone] = useState("");
-  
+
   // Psychologist sign up
   const [psychoFullName, setPsychoFullName] = useState("");
   const [psychoStaffId, setPsychoStaffId] = useState("");
   const [psychoEmail, setPsychoEmail] = useState("");
   const [psychoPassword, setPsychoPassword] = useState("");
   const [psychoConfirmPassword, setPsychoConfirmPassword] = useState("");
-  
+
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
@@ -89,13 +90,14 @@ export default function Login() {
 
   // Auto-initiate OIDC when not authenticated and fallback not requested
   useEffect(() => {
-    if (!isAuthenticated && !showFallback) {
+    if (!isAuthenticated && !showFallback && !oidcInitiatedRef.current) {
+      oidcInitiatedRef.current = true;
       // Clear any stale auth data before redirecting to Campus One
       localStorage.removeItem("safespace_access_token");
       localStorage.removeItem("ss_user");
       window.location.href = `${API_URL}/auth/campus-one/authorize`;
     }
-  }, [isAuthenticated, showFallback, API_URL]);
+  }, []);
 
   // ── SIGN IN LOGIC ──
 
