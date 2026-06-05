@@ -3,7 +3,9 @@ import { apiRequest } from "./client";
 // ── Interfaces ──
 
 export interface JWTPayload {
-  sub: string;
+  id?: string;
+  sub?: string;
+  email?: string;
   name: string | null;
   user_type: "student" | "staff";
   role: "student" | "psychologist" | "admin" | "staff";
@@ -11,7 +13,6 @@ export interface JWTPayload {
   staff_type: string | null;
   staff_id: string | null;
   student_id: string | null;
-  roles?: string[];
 }
 
 export interface AuthResponse {

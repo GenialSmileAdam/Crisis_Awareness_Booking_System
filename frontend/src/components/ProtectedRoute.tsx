@@ -22,28 +22,16 @@ export function ProtectedRoute({ role, children }: { role: Role | Role[]; childr
   const allowedRoles = Array.isArray(role) ? role : [role];
   if (!user) return <Navigate to="/login" replace />;
 
-  // Check if user has one of the allowed roles
+  // Simple authorization: check if user's role is in allowed roles
   let hasAccess = allowedRoles.includes(user.role as Role);
 
-  // Check for unit_head role (admin via Campus One roles claim)
-  const isUnitHead = (user?.roles instanceof Array) && user.roles.includes("unit_head");
-
-  // For admin routes, check both is_admin flag and unit_head role
-  if (!hasAccess && (isUnitHead || user.is_admin) && allowedRoles.includes("admin")) {
-    hasAccess = true;
-  }
-
-  // For staff users, check staff_type and admin status
+  // For staff users, also check staff_type for psychologist routes
   if (!hasAccess && user.user_type === "staff") {
-    // Admin/unit_head can access admin and psychologist routes
-    if ((isUnitHead || user.is_admin) && (allowedRoles.includes("admin") || allowedRoles.includes("psychologist"))) {
+    // Psychologists can access psychologist routes
+    if ((user as any).staff_type === "psychologist" && allowedRoles.includes("psychologist")) {
       hasAccess = true;
     }
-    // Psychologists (therapists) can access psychologist routes
-    else if ((user as any).staff_type === "psychologist" && allowedRoles.includes("psychologist")) {
-      hasAccess = true;
-    }
-    // Staff users can access "staff" role routes
+    // Staff can access staff routes
     else if (allowedRoles.includes("staff")) {
       hasAccess = true;
     }

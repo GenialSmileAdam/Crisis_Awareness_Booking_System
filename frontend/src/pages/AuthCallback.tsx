@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { loginFromCallback } = useAuth();
+  const { fetchCurrentUser } = useAuth();
   const processedRef = useRef(false);
 
   useEffect(() => {
@@ -16,82 +16,71 @@ export default function AuthCallback() {
     const processCallback = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
-        const accessToken = params.get("access_token");
-        const errorParam = params.get("error");
+        const errorParam = params.get("message");
 
         console.log("AuthCallback: Processing OIDC callback");
-        console.log("AuthCallback: access_token present:", !!accessToken);
-        console.log("AuthCallback: error present:", !!errorParam);
 
         // Handle error from backend
         if (errorParam) {
-          console.error("AuthCallback: Backend returned error:", errorParam);
+          console.error("AuthCallback: Backend error:", errorParam);
           toast.error(`Authentication failed: ${errorParam}`);
           navigate("/login", { replace: true });
           return;
         }
 
-        // Validate token exists and has 3 JWT parts
-        if (!accessToken) {
-          console.error("AuthCallback: No access token in URL - silently redirecting");
+        // Fetch current user from /auth/me endpoint
+        // Backend uses refresh_token cookie to identify user
+        console.log("AuthCallback: Fetching user from /auth/me...");
+        const user = await fetchCurrentUser();
+
+        if (!user) {
+          console.error("AuthCallback: Failed to fetch user");
+          toast.error("Authentication failed");
           navigate("/login", { replace: true });
           return;
         }
 
-        const parts = accessToken.split(".");
-        if (parts.length !== 3) {
-          console.error(`AuthCallback: Invalid token format. Parts: ${parts.length}`);
-          toast.error("Invalid authentication token format");
-          navigate("/login", { replace: true });
-          return;
-        }
+        console.log("AuthCallback: User authenticated:", {
+          id: user.id,
+          user_type: user.user_type,
+          role: user.role,
+          is_admin: user.is_admin,
+        });
 
-        console.log("AuthCallback: Token is valid format");
-
-        // Process the callback and store token
-        const user = await loginFromCallback(accessToken);
-        console.log("AuthCallback: User decoded from token:", { role: user.role, user_type: user.user_type, staff_type: user.staff_type, is_admin: user.is_admin, roles: user.roles });
-
-        // Determine redirect based on user role/type
-        const userType = user.user_type;
-        const isAdmin = user.is_admin;
-        const staffType = user.staff_type;
-        const isUnitHead = (user?.roles instanceof Array) && user.roles.includes("unit_head");
+        // Route based on user role (from database, not Campus One)
         let redirectUrl = "/";
 
-        if (userType === "student") {
+        if (user.user_type === "student") {
           redirectUrl = "/student";
-        } else if (userType === "staff") {
-          // For staff users, check unit_head role, is_admin flag, or administrator staff type
-          if (isUnitHead || isAdmin || staffType === "administrator") {
+        } else if (user.user_type === "staff") {
+          if (user.is_admin) {
             redirectUrl = "/admin";
           } else {
             redirectUrl = "/counselor";
           }
         } else {
-          console.warn("AuthCallback: Unknown user type, redirecting to home:", { userType, staffType, isAdmin, isUnitHead });
+          console.warn("AuthCallback: Unknown user type:", user.user_type);
         }
 
         console.log("AuthCallback: Redirecting to:", redirectUrl);
         toast.success("Welcome! Signed in with Campus One.");
-        // Use replace to prevent adding callback to history
         navigate(redirectUrl, { replace: true });
       } catch (err) {
         console.error("Auth callback error:", err);
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        toast.error(`Failed to complete authentication: ${errorMessage}`);
+        toast.error(`Authentication failed: ${errorMessage}`);
         navigate("/login", { replace: true });
       }
     };
 
     processCallback();
-  }, [navigate, loginFromCallback]);
+  }, [navigate, fetchCurrentUser]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="flex flex-col items-center gap-4">
         <div className="h-16 w-16 rounded-full border-2 border-muted border-t-primary animate-spin" />
-        <p className="text-sm text-muted-foreground">Signing you in…</p>
+        <p className="text-sm text-muted-foreground">Completing sign in…</p>
       </div>
     </div>
   );

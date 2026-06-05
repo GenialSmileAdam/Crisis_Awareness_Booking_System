@@ -52,21 +52,32 @@ def create_access_token(
     staff_type: str | None = None,
     staff_id: str | None = None,
     student_id: str | None = None,
-    campus_one_roles: list[str] | None = None,
 ) -> str:
-    """Create short-lived JWT access token (15 min by default)."""
+    """Create short-lived JWT access token (15 min by default).
+
+    SIMPLIFIED: Role comes from database, not Campus One.
+    Single source of truth: user_type + is_admin flag.
+    """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    # Determine role from database fields (single source of truth)
+    if is_admin:
+        role = "admin"
+    elif user_type == "staff" and staff_type == "psychologist":
+        role = "psychologist"
+    else:
+        role = user_type
+
     payload = {
         "sub": user_id,
         "user_type": user_type,
         "name": full_name,
-        "role": determine_effective_role(user_type, is_admin, staff_type),
+        "role": role,
         "is_admin": is_admin,
         "staff_type": staff_type,
         "staff_id": staff_id,
         "student_id": student_id,
-        "roles": campus_one_roles or [],
         "exp": expire,
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
@@ -126,5 +137,4 @@ async def get_current_user(
         "staff_type": payload.get("staff_type"),
         "staff_id": payload.get("staff_id"),
         "student_id": payload.get("student_id"),
-        "roles": payload.get("roles", []),
     }
