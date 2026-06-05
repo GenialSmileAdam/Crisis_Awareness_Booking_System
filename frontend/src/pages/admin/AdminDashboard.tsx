@@ -41,6 +41,9 @@ export default function AdminDashboard() {
   const days = range === "week" ? 7 : range === "month" ? 30 : 90;
   const trend = useMemo(() => trendData(days), [days]);
 
+  // Pagination
+  const pagination = { limit: 10, offset: 0 };
+
   // React Query hooks
   const { data: studentsData, isLoading: studentsLoading } = useStudents(100, 0);
   const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(100, 0, null);
@@ -756,57 +759,7 @@ export default function AdminDashboard() {
           {!loading && alerts.length > pagination.limit && (
             <div className="flex justify-between items-center mt-4">
               <div className="text-xs text-muted-foreground">
-                Showing {alertsPaginationMeta.offset + 1}-{Math.min(alertsPaginationMeta.offset + alertsPaginationMeta.limit, alerts.length)} of {alerts.length}
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  disabled={alertsPaginationMeta.offset === 0}
-                  onClick={async () => {
-                    const newOffset = Math.max(0, alertsPaginationMeta.offset - alertsPaginationMeta.limit);
-                    setLoading(true);
-                    try {
-                      const alertsData = await getRiskAlerts(alertsPaginationMeta.limit, newOffset);
-                      setAlerts(alertsData.data || []);
-                      setAlertsPaginationMeta({
-                        limit: alertsData.pagination?.limit || 10,
-                        offset: alertsData.pagination?.offset || 0,
-                        has_next: alertsData.pagination?.has_next || false
-                      });
-                    } catch (err) {
-                      setError("Failed to load alerts");
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  Previous
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  disabled={!alertsPaginationMeta.has_next}
-                  onClick={async () => {
-                    const newOffset = alertsPaginationMeta.offset + alertsPaginationMeta.limit;
-                    setLoading(true);
-                    try {
-                      const alertsData = await getRiskAlerts(alertsPaginationMeta.limit, newOffset);
-                      setAlerts(alertsData.data || []);
-                      setAlertsPaginationMeta({
-                        limit: alertsData.pagination?.limit || 10,
-                        offset: alertsData.pagination?.offset || 0,
-                        has_next: alertsData.pagination?.has_next || false
-                      });
-                    } catch (err) {
-                      setError("Failed to load alerts");
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  Next
-                </Button>
+                Showing {Math.min(pagination.limit, alerts.length)} of {alerts.length} alerts
               </div>
             </div>
           )}

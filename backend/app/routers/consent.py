@@ -18,7 +18,8 @@ async def upsert_consent(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "student":
+    user_roles = current_user.get("roles", [])
+    if "student" not in user_roles:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     if payload.monitoring_enabled is None:
         raise HTTPException(status_code=400, detail="monitoring_enabled is required")
@@ -49,10 +50,13 @@ async def get_consent(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    role = current_user["role"]
-    if role not in {"admin", "psychologist", "student"}:
+    user_roles = current_user.get("roles", [])
+    # Check if user has permission to view this consent
+    has_permission = any(role in user_roles for role in ["student", "psychologist", "unit_head"])
+    if not has_permission:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    if role == "student" and current_user.get("student_id") != student_id:
+    # Students can only view their own consent
+    if "student" in user_roles and current_user.get("student_id") != student_id:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     result = await db.execute(select(Consent).where(Consent.student_id == student_id))

@@ -1,87 +1,112 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { NeonSpinner } from "@/components/NeonSpinner";
 import { toast } from "sonner";
 
+/**
+ * Auth Callback Handler
+ *
+ * Backend redirects here with token in URL fragment (#token=...)
+ * This page extracts the token and completes the login flow.
+ */
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { fetchCurrentUser } = useAuth();
+  const { login } = useAuth();
   const processedRef = useRef(false);
+  const [navigated, setNavigated] = useState(false);
 
   useEffect(() => {
-    // Prevent double processing of callback
+    // Prevent double processing (React strict mode)
     if (processedRef.current) return;
     processedRef.current = true;
 
-    const processCallback = async () => {
+    const handleCallback = async () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const errorParam = params.get("message");
+        // Extract token from URL fragment (#token=...)
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const token = params.get("token");
+        const error = params.get("message");
 
-        console.log("AuthCallback: Processing OIDC callback");
-
-        // Handle error from backend
-        if (errorParam) {
-          console.error("AuthCallback: Backend error:", errorParam);
-          toast.error(`Authentication failed: ${errorParam}`);
+        // Handle error
+        if (error) {
+          console.error("Auth error:", error);
+          toast.error(`Sign in failed: ${decodeURIComponent(error)}`);
           navigate("/login", { replace: true });
           return;
         }
 
-        // Fetch current user from /auth/me endpoint
-        // Backend uses refresh_token cookie to identify user
-        console.log("AuthCallback: Fetching user from /auth/me...");
-        const user = await fetchCurrentUser();
-
-        if (!user) {
-          console.error("AuthCallback: Failed to fetch user");
-          toast.error("Authentication failed");
+        // Handle missing token
+        if (!token) {
+          console.error("No token in callback");
+          toast.error("Authentication failed: No token received");
           navigate("/login", { replace: true });
           return;
         }
 
-        console.log("AuthCallback: User authenticated:", {
-          id: user.id,
-          user_type: user.user_type,
-          role: user.role,
-          is_admin: user.is_admin,
+        console.log("Token received, processing login...");
+
+        // Store token locally and set in context
+        localStorage.setItem("safespace_access_token", token);
+
+        // Decode JWT to get user info (basic decode, not verification)
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+        );
+        const decoded = JSON.parse(jsonPayload);
+
+        console.log("User info:", {
+          user_type: decoded.user_type,
+          role: decoded.role,
+          is_admin: decoded.is_admin,
+          roles: decoded.roles
         });
 
-        // Route based on user role (from database, not Campus One)
-        let redirectUrl = "/";
+        // Update auth context
+        await login(decoded);
 
-        if (user.user_type === "student") {
+        // Route to dashboard based on Campus One roles
+        let redirectUrl = "/";
+        const userRoles = decoded.roles || [];
+
+        if (userRoles.includes("unit_head")) {
+          redirectUrl = "/admin";
+        } else if (userRoles.includes("psychologist")) {
+          redirectUrl = "/counselor";
+        } else if (userRoles.includes("student")) {
           redirectUrl = "/student";
-        } else if (user.user_type === "staff") {
-          if (user.is_admin) {
-            redirectUrl = "/admin";
-          } else {
-            redirectUrl = "/counselor";
-          }
-        } else {
-          console.warn("AuthCallback: Unknown user type:", user.user_type);
         }
 
-        console.log("AuthCallback: Redirecting to:", redirectUrl);
-        toast.success("Welcome! Signed in with Campus One.");
+        console.log("Redirecting to:", redirectUrl);
+        toast.success("Signed in successfully!");
+        setNavigated(true);
         navigate(redirectUrl, { replace: true });
+
       } catch (err) {
-        console.error("Auth callback error:", err);
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        toast.error(`Authentication failed: ${errorMessage}`);
+        console.error("Callback processing error:", err);
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        toast.error(`Failed to complete sign in: ${errorMsg}`);
         navigate("/login", { replace: true });
       }
     };
 
-    processCallback();
-  }, [navigate, fetchCurrentUser]);
+    handleCallback();
+  }, [navigate, login]);
 
+  // Return null after navigation - let the router handle the transition
+  if (navigated) return null;
+
+  // Show loading state
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-16 w-16 rounded-full border-2 border-muted border-t-primary animate-spin" />
-        <p className="text-sm text-muted-foreground">Completing sign in…</p>
-      </div>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <NeonSpinner />
+      <p className="text-white/60">Completing sign in...</p>
     </div>
   );
 }

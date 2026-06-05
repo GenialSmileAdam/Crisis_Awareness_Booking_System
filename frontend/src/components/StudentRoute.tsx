@@ -30,9 +30,10 @@ export function StudentRoute({ children }: StudentRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  // Wrong role
-  if (user.role !== "student") {
-    console.log("StudentRoute: User role is not 'student', got:", user.role, "redirecting to login");
+  // Wrong role: check Campus One roles array from JWT
+  const userRoles = user.roles || [];
+  if (!userRoles.includes("student")) {
+    console.log("StudentRoute: User does not have 'student' role, got:", userRoles, "redirecting to login");
     return <Navigate to="/login" replace />;
   }
 

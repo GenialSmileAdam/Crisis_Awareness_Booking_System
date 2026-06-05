@@ -1,14 +1,12 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { toast } from "sonner";
-import { loginStudent, loginStaff, logout as apiLogout, refreshToken, JWTPayload } from "@/api/auth";
+import { logout as apiLogout, refreshToken, JWTPayload } from "@/api/auth";
 
 export interface AuthContextState {
   user: JWTPayload | null;
   accessToken: string | null;
   isLoading: boolean;
-  login: (role: string, identifier: string, password: string) => Promise<void>;
-  loginFromCallback: (accessToken: string) => Promise<JWTPayload>;
-  fetchCurrentUser: () => Promise<JWTPayload | null>;
+  login: (userInfo: any) => Promise<void>;  // Called from OIDC callback with decoded JWT
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -18,8 +16,6 @@ const AuthContext = createContext<AuthContextState>({
   accessToken: null,
   isLoading: true,
   login: async () => {},
-  loginFromCallback: async () => null,
-  fetchCurrentUser: async () => null,
   logout: async () => {},
   isAuthenticated: false,
 });
@@ -50,7 +46,7 @@ function decodeJWT(token: string): JWTPayload | null {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64 + "==".slice(0, (4 - (base64.length % 4)) % 4);
     const decoded = JSON.parse(atob(padded));
-    // Ensure roles is always an array (for backward compatibility with old tokens)
+    // Ensure roles is always an array
     if (!Array.isArray(decoded.roles)) {
       decoded.roles = [];
     }
@@ -169,77 +165,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, []);
 
-  const login = async (role: string, identifier: string, password: string): Promise<void> => {
-    let response;
-    if (role === "student") {
-      response = await loginStudent(identifier, password);
-    } else if (role === "psychologist" || role === "admin") {
-      response = await loginStaff(identifier, password);
-    } else {
-      throw new Error("Invalid role");
+  const login = async (userInfo: any): Promise<void> => {
+    // Called from OIDC callback with decoded JWT payload
+    const user: JWTPayload = {
+      sub: userInfo.sub,
+      user_type: userInfo.user_type,
+      role: userInfo.role,
+      is_admin: userInfo.is_admin,
+      name: userInfo.name,
+      roles: userInfo.roles || [],  // Store Campus One roles array
+    };
+
+    // Get token from localStorage (set by AuthCallback)
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) {
+      throw new Error("No access token found");
     }
 
-    const decoded = decodeJWT(response.access_token);
-    if (!decoded) {
-      throw new Error("Failed to decode token");
-    }
-
-    // Store both token and user consistently
-    setAccessToken(response.access_token);
-    setUser(decoded);
-    localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
-    localStorage.setItem(USER_KEY, JSON.stringify(decoded));
+    setAccessToken(token);
+    setUser(user);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
 
     // Reset check-in state on fresh login
     localStorage.removeItem("last_pulse");
     localStorage.removeItem("last_phq9");
     localStorage.removeItem("last_gad7");
-  };
-
-  const loginFromCallback = async (accessToken: string): Promise<JWTPayload> => {
-    const decoded = decodeJWT(accessToken);
-    if (!decoded) {
-      throw new Error("Failed to decode token from OIDC callback");
-    }
-    setAccessToken(accessToken);
-    setUser(decoded);
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(decoded));
-    localStorage.removeItem("last_pulse");
-    localStorage.removeItem("last_phq9");
-    localStorage.removeItem("last_gad7");
-    return decoded;
-  };
-
-  const fetchCurrentUser = async (): Promise<JWTPayload | null> => {
-    try {
-      const response = await fetch("/api/auth/me", {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          clearAuthState();
-          return null;
-        }
-        throw new Error(`Failed to fetch user: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const user = data.data as JWTPayload;
-
-      // Store the user locally
-      setUser(user);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-
-      return user;
-    } catch (error) {
-      console.error("Error fetching current user:", error);
-      clearAuthState();
-      return null;
-    }
   };
 
   const logout = async (): Promise<void> => {
@@ -268,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, isLoading, login, loginFromCallback, fetchCurrentUser, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, accessToken, isLoading, login, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

@@ -130,7 +130,8 @@ async def list_appointments(
     current_user: dict = require_roles("psychologist", "admin", "staff", "student"),
 ):
     # Students may only see their own appointments
-    if current_user.get("role") == "student":
+    user_roles = current_user.get("roles", [])
+    if "student" in user_roles:
         student_id = current_user.get("student_id")
 
     result = await AppointmentService.get_all(

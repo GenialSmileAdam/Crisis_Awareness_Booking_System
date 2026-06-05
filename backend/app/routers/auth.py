@@ -1,257 +1,141 @@
+"""
+Authentication Router - Minimal Clean Implementation
+
+Supports:
+1. Campus One OIDC flow (preferred)
+2. Password login (fallback)
+"""
+
+import logging
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-import secrets
-import base64
-import hashlib
-import logging
-from urllib.parse import urlencode
-from uuid import UUID
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.limiter import limiter
-from app.core.security import get_current_user, create_access_token
-from app.schemas.auth import TokenResponse, RegisterRequest
+from app.core.security import (
+    get_current_user,
+    create_access_token,
+    create_refresh_token,
+    hash_token,
+)
+from app.core.campus_one_oidc import CampusOneOIDC
+from app.core.config import settings
+from app.models.users import User
+from app.models.refresh_tokens import RefreshToken
 from app.services.auth_service import AuthService
 from app.services.campus_one_service import CampusOneService
-from app.core.oidc import oidc_provider
+from app.schemas.auth import TokenResponse, RegisterRequest
 from app.utils.response import success
-from app.routers.dependencies import handle_idempotency, cache_idempotent_response
-from app.models.users import User
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["auth"])
 
-def set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=60 * 60 * 24 * 7,
-    )
 
-@router.post("/auth/register")
-async def register(payload: RegisterRequest, db=Depends(get_db)):
-    result = await AuthService.register(db, payload)
-    return success("User registered successfully", result)
+# ============================================================================
+# CAMPUS ONE OIDC FLOW
+# ============================================================================
 
-# ✅ OAuth2-compatible login (Swagger works)
-@router.post("/auth/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def login(
-    request: Request,
-    response: Response,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    db=Depends(get_db),
-):
-    cache_key, cached = await handle_idempotency(request, idempotency_key)
-    if cached:
-        return cached
+@router.get("/api/auth/authorize")
+async def authorize(request: Request):
+    """Initiate Campus One OIDC login.
 
-    # ⚠️ Swagger sends "username", map it to email
-    email = form_data.username
-    password = form_data.password
+    Generates PKCE parameters and redirects to Campus One.
+    """
+    oidc = CampusOneOIDC()
+    auth_url, state, code_verifier = await oidc.generate_authorize_url()
 
-    tokens = await AuthService.login(db, email, password)
-
-    # Set refresh token cookie
-    set_refresh_cookie(response, tokens["refresh_token"])
-
-    body = {
-        "access_token": tokens["access_token"],
-        "token_type": "bearer",  # 🔥 REQUIRED for Swagger
-    }
-
-    return cache_idempotent_response(cache_key, body)
-
-
-@router.get("/auth/me")
-async def get_current_user_endpoint(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get current user info (used by frontend after OIDC callback)."""
-    from app.services.auth_service import AuthService
-
-    try:
-        # Get identity claims from database
-        user = await db.execute(
-            select(User).where(User.id == UUID(current_user["id"]))
-        )
-        user_obj = user.scalar_one_or_none()
-
-        if not user_obj:
-            raise HTTPException(status_code=401, detail="User not found")
-
-        # Get extended identity information
-        identity = await AuthService._get_identity_claims(db, user_obj)
-
-        return success("User authenticated", {
-            "id": str(user_obj.id),
-            "email": user_obj.email,
-            "name": user_obj.full_name,
-            "user_type": identity["user_type"],
-            "role": current_user["role"],
-            "is_admin": user_obj.is_admin,
-            "staff_type": identity.get("staff_type"),
-            "staff_id": identity.get("staff_id"),
-            "student_id": identity.get("student_id"),
-        })
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Failed to get user: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get user info")
-
-
-@router.post("/auth/refresh")
-async def refresh(
-    request: Request,
-    response: Response,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    db=Depends(get_db),
-):
-    cache_key, cached = await handle_idempotency(request, idempotency_key)
-    if cached:
-        return cached
-
-    refresh_token = request.cookies.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing",
-        )
-
-    tokens = await AuthService.refresh(db, refresh_token)
-
-    set_refresh_cookie(response, tokens["refresh_token"])
-
-    body = {
-        "access_token": tokens["access_token"],
-        "token_type": "bearer",
-    }
-
-    return cache_idempotent_response(cache_key, body)
-
-
-@router.post("/auth/logout")
-async def logout(
-    request: Request,
-    response: Response,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    current_user=Depends(get_current_user),
-    db=Depends(get_db),
-):
-    cache_key, cached = await handle_idempotency(request, idempotency_key)
-    if cached:
-        return cached
-
-    refresh_token = request.cookies.get("refresh_token")
-    if refresh_token:
-        await AuthService.logout(db, refresh_token)
-
-    response.delete_cookie(
-        key="refresh_token",
-        httponly=True,
-        secure=True,
-        samesite="none",
-    )
-
-    body = success("Logged out")
-    return cache_idempotent_response(cache_key, body)
-
-
-@router.get("/auth/campus-one/authorize")
-async def campus_one_authorize(request: Request):
-    """Initiate Campus One OIDC login flow."""
-    state = secrets.token_urlsafe(32)
-    code_verifier = secrets.token_urlsafe(32)
-    code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode()).digest()
-    ).decode().rstrip("=")
-
-    # Store in session (use secure, httponly cookie)
+    # Store PKCE params in secure cookies
+    is_dev = request.url.hostname in ("localhost", "127.0.0.1")
     response = Response()
-
-    # Determine if we're in development (localhost)
-    is_dev = request.url.hostname == "localhost" or request.url.hostname == "127.0.0.1"
-
     response.set_cookie(
         key="oidc_state",
         value=state,
         httponly=True,
-        secure=not is_dev,  # Only require secure in production
+        secure=not is_dev,
         samesite="lax",
-        max_age=600,  # 10 min expiry
+        max_age=600,
         path="/",
     )
     response.set_cookie(
         key="oidc_code_verifier",
         value=code_verifier,
         httponly=True,
-        secure=not is_dev,  # Only require secure in production
+        secure=not is_dev,
         samesite="lax",
         max_age=600,
         path="/",
     )
-
-    auth_url = oidc_provider.get_authorization_url(state, code_challenge)
     response.status_code = 302
     response.headers["location"] = auth_url
     return response
 
 
 @router.get("/api/auth/callback")
-async def auth_callback(
+async def callback(
     code: str = None,
     state: str = None,
     error: str = None,
-    error_description: str = None,
     request: Request = None,
-    db = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Campus One OIDC callback handler - REBUILT for security and simplicity."""
-    from app.core.config import settings
-    from app.core.security import create_refresh_token, hash_token
-    from datetime import datetime, timedelta, timezone
-    from app.models.refresh_tokens import RefreshToken
+    """Handle Campus One OIDC callback.
 
+    1. Validate state (CSRF protection)
+    2. Exchange code for tokens
+    3. Verify JWT signature
+    4. Create/update user
+    5. Create session
+    6. Redirect to frontend
+    """
     frontend_url = settings.FRONTEND_URL
     is_dev = request.url.hostname in ("localhost", "127.0.0.1")
 
-    # Handle Campus One errors
+    # Handle errors
     if error:
-        error_msg = error_description or error
-        logging.warning(f"Campus One OAuth error: {error_msg}")
         return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/error?message={error_msg}",
-            status_code=302
+            url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': error})}",
+            status_code=302,
         )
 
     if not code or not state:
-        logging.error("Missing authorization code or state")
         return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/error?message=Invalid+request",
-            status_code=302
+            url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': 'Invalid request'})}",
+            status_code=302,
         )
 
     try:
-        # 1. Verify state for CSRF protection
+        logger.info(f"=" * 70)
+        logger.info(f"🎯 STARTING OIDC CALLBACK FLOW")
+        logger.info(f"=" * 70)
+
+        # Step 1: Validate state
+        logger.info(f"STEP 1️⃣: Validate CSRF state")
         stored_state = request.cookies.get("oidc_state")
+        logger.info(f"   Stored state: {stored_state[:30]}..." if stored_state else "   Stored state: MISSING")
+        logger.info(f"   Callback state: {state[:30]}...")
         if not stored_state or stored_state != state:
-            logging.warning("CSRF attack detected: state mismatch")
-            raise ValueError("CSRF validation failed")
+            raise ValueError("State mismatch - CSRF protection failed")
+        logger.info(f"   ✅ State validated")
 
-        # 2. Get code verifier for PKCE
+        # Step 2: Get code verifier
+        logger.info(f"STEP 2️⃣: Get PKCE code verifier")
         code_verifier = request.cookies.get("oidc_code_verifier")
+        logger.info(f"   Code verifier: {code_verifier[:30]}..." if code_verifier else "   Code verifier: MISSING")
         if not code_verifier:
-            raise ValueError("PKCE code verifier missing")
+            raise ValueError("Missing code verifier")
+        logger.info(f"   ✅ Code verifier found")
 
-        # 3. Exchange authorization code for tokens
-        token_response = await oidc_provider.exchange_code_for_token(code, code_verifier)
+        # Step 3: Exchange code for tokens
+        logger.info(f"STEP 3️⃣: Exchange authorization code for tokens")
+        logger.info(f"   Authorization code: {code[:30]}...")
+        oidc = CampusOneOIDC()
+        token_response = await oidc.exchange_code_for_tokens(code, code_verifier)
         id_token = token_response.get("id_token")
         access_token = token_response.get("access_token")
         refresh_token = token_response.get("refresh_token")
@@ -259,53 +143,131 @@ async def auth_callback(
         if not id_token:
             raise ValueError("No ID token from Campus One")
 
-        # 4. Verify and decode ID token signature
-        claims = await oidc_provider.verify_id_token(id_token)
-        logging.info(f"Authenticated user: {claims.get('sub')} ({claims.get('email')})")
+        # Step 4: Verify ID token
+        logger.info(f"STEP 4️⃣: Verify and decode ID token")
+        claims = await oidc.verify_and_decode_id_token(id_token)
+        logger.info(f"   ✅ Authentication successful: {claims.get('sub')} ({claims.get('email')})")
 
-        # 5. Get or create user in database
+        # Step 5: Get or create user
+        logger.info(f"STEP 5️⃣: Get or create user in database")
         user, is_new = await CampusOneService.get_or_create_user_from_oidc_claims(db, claims)
+        logger.info(f"   User ID: {user.id}")
+        logger.info(f"   Email: {user.email}")
+        logger.info(f"   Role: {user.role}")
+        logger.info(f"   Is Admin: {user.is_admin}")
+        logger.info(f"   Status: {'✅ NEW USER CREATED' if is_new else '✅ EXISTING USER UPDATED'}")
 
-        if is_new:
-            logging.info(f"New user created: {user.id} ({user.email})")
-
-        # 6. Store Campus One tokens for later use (notifications, etc.)
+        # Store Campus One tokens
+        logger.info(f"STEP 6️⃣: Store Campus One tokens")
         user.campus_one_access_token = access_token
         if refresh_token:
             user.campus_one_refresh_token = refresh_token
         await db.commit()
+        logger.info(f"   ✅ Tokens stored")
 
-        # 7. Create our internal refresh token (HTTP-only cookie)
-        our_refresh_token = create_refresh_token(str(user.id))
-        token_hash = hash_token(our_refresh_token)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        # Step 7: Create our access token with roles from Campus One claims
+        logger.info(f"STEP 7️⃣: Generate JWT access token")
+        roles = claims.get("roles", [])
+        logger.info(f"   Roles from Campus One: {roles}")
+        jwt_token = create_access_token(
+            user_id=str(user.id),
+            user_type=user.role,
+            full_name=user.full_name,
+            roles=roles,
+            is_admin=user.is_admin,
+        )
+        logger.info(f"   JWT Token: {jwt_token[:50]}...{jwt_token[-50:]}")
+        logger.info(f"   ✅ JWT generated")
 
-        db.add(RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at))
-        await db.commit()
-
-        # 8. Build response - redirect WITHOUT token in URL (security!)
-        response = RedirectResponse(url=f"{frontend_url.rstrip('/')}/auth/callback", status_code=302)
-
-        # 9. Set refresh token as HTTP-only cookie (secure by default)
-        response.set_cookie(
-            key="refresh_token",
-            value=our_refresh_token,
-            httponly=True,
-            secure=not is_dev,
-            samesite="lax",
-            max_age=60 * 60 * 24 * 7,
-            path="/",
+        # Build response with token in fragment (safer than query param)
+        response = RedirectResponse(
+            url=f"{frontend_url.rstrip('/')}/auth/callback#{urlencode({'token': jwt_token})}",
+            status_code=302,
         )
 
-        # 10. Clean up OIDC session cookies
-        response.delete_cookie("oidc_state", httponly=True, secure=not is_dev, samesite="lax", path="/")
-        response.delete_cookie("oidc_code_verifier", httponly=True, secure=not is_dev, samesite="lax", path="/")
+        # Clean up OIDC cookies
+        response.delete_cookie("oidc_state", path="/")
+        response.delete_cookie("oidc_code_verifier", path="/")
 
+        logger.info(f"✓ Auth successful for {user.email}")
         return response
 
     except Exception as e:
-        logging.error(f"Auth callback failed: {type(e).__name__}: {str(e)}", exc_info=True)
+        error_msg = str(e)
+        logger.error(f"Callback error: {error_msg}", exc_info=True)
         return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/error?message=Authentication+failed",
-            status_code=302
+            url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': error_msg})}",
+            status_code=302,
         )
+
+
+# ============================================================================
+# ENDPOINTS
+# ============================================================================
+
+@router.get("/auth/me")
+async def get_current_user(current_user: dict = Depends(get_current_user)):
+    """Return current user info from JWT."""
+    return success(
+        "User authenticated",
+        {
+            "id": str(current_user.get("id")),
+            "user_type": current_user.get("user_type"),
+            "role": current_user.get("role"),
+            "is_admin": current_user.get("is_admin"),
+            "roles": current_user.get("roles", []),  # Campus One roles array
+            "name": current_user.get("name"),
+        },
+    )
+
+
+@router.post("/api/auth/login", response_model=TokenResponse)
+async def login(
+    request: Request,
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    """Password-based login (fallback)."""
+    tokens = await AuthService.login(db, form_data.username, form_data.password)
+    return {
+        "access_token": tokens["access_token"],
+        "token_type": "bearer",
+    }
+
+
+@router.post("/api/auth/logout")
+async def logout(
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+):
+    """Logout (frontend clears token from localStorage)."""
+    return success("Logged out")
+
+
+@router.post("/api/auth/register")
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Register new user (password-based)."""
+    result = await AuthService.register(db, payload)
+    return success("User registered successfully", result)
+
+
+@router.post("/api/auth/refresh")
+async def refresh(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Refresh access token."""
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token",
+        )
+
+    tokens = await AuthService.refresh(db, refresh_token)
+    return {
+        "access_token": tokens["access_token"],
+        "token_type": "bearer",
+    }

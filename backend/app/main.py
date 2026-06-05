@@ -1,3 +1,5 @@
+import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +20,21 @@ from app.routers import (
 from app import models
 
 from app.routers import session_ai
+
+# Configure logging to show all debug info
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+
+# Set specific loggers
+logging.getLogger("app.core.campus_one_oidc").setLevel(logging.INFO)
+logging.getLogger("app.routers.auth").setLevel(logging.INFO)
+logging.getLogger("app.services").setLevel(logging.INFO)
+logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 app = FastAPI(
     title="PsyUnit API",

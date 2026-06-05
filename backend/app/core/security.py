@@ -4,11 +4,14 @@ import secrets
 from uuid import UUID
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.core.config import settings
+from app.core.database import get_db
 
 bearer_scheme = HTTPBearer()
 
@@ -47,6 +50,7 @@ def create_access_token(
     user_id: str,
     user_type: str,
     full_name: str,
+    roles: list[str] | None = None,
     *,
     is_admin: bool = False,
     staff_type: str | None = None,
@@ -55,13 +59,18 @@ def create_access_token(
 ) -> str:
     """Create short-lived JWT access token (15 min by default).
 
-    SIMPLIFIED: Role comes from database, not Campus One.
-    Single source of truth: user_type + is_admin flag.
+    Authorization is based on the roles array from Campus One:
+    - "unit_head" → admin access
+    - "psychologist" → psychologist access
+    - "student" → student access
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    # Determine role from database fields (single source of truth)
+    # Use Campus One roles directly
+    campus_roles = roles or []
+
+    # Determine role from database fields (for display/fallback)
     if is_admin:
         role = "admin"
     elif user_type == "staff" and staff_type == "psychologist":
@@ -75,6 +84,7 @@ def create_access_token(
         "name": full_name,
         "role": role,
         "is_admin": is_admin,
+        "roles": campus_roles,  # Campus One roles array - authorization based on these!
         "staff_type": staff_type,
         "staff_id": staff_id,
         "student_id": student_id,
@@ -93,6 +103,84 @@ def hash_token(token: str) -> str:
     """Hash a refresh token for storage — use hashlib.sha256."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+async def get_current_user_from_refresh_token(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Get current user from refresh_token cookie (for OIDC callback).
+
+    Used by /auth/me endpoint to identify user via secure HTTP-only cookie.
+    """
+    from app.models.refresh_tokens import RefreshToken
+    from app.models.users import User
+
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    try:
+        # Hash the token to find it in database
+        token_hash = hash_token(refresh_token)
+
+        # Look up the refresh token in database
+        result = await db.execute(
+            select(RefreshToken)
+            .where(RefreshToken.token_hash == token_hash)
+            .where(RefreshToken.revoked == False)
+        )
+        db_token = result.scalar_one_or_none()
+
+        if not db_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        # Check if token is expired
+        from datetime import datetime, timezone
+        if db_token.expires_at < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        # Get the user
+        result = await db.execute(select(User).where(User.id == db_token.user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        # Determine role from database
+        if user.is_admin:
+            role = "admin"
+        elif user.role == "staff":
+            role = "staff"
+        else:
+            role = user.role
+
+        return {
+            "id": user.id,
+            "email": user.email,
+            "name": user.full_name,
+            "role": role,
+            "user_type": user.role,  # Map database role to user_type
+            "is_admin": user.is_admin,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
 
 
 async def get_current_user(
@@ -134,6 +222,7 @@ async def get_current_user(
         "role": role,
         "user_type": user_type,
         "is_admin": bool(payload.get("is_admin", False)),
+        "roles": payload.get("roles", []),  # Campus One roles array - authorization!
         "staff_type": payload.get("staff_type"),
         "staff_id": payload.get("staff_id"),
         "student_id": payload.get("student_id"),

@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import Notification, NotificationCategory, NotificationStatus, NotificationType, User
-from app.core.oidc import oidc_provider
+# Note: Campus One notification requires refresh token handling
+# TODO: Implement refresh_access_token if needed later
 from app.utils.pagination import paginate
 import logging
 
@@ -52,21 +53,9 @@ class NotificationService:
                 response = await client.post(url, json=payload, headers=headers, timeout=10)
                 
                 # Check for token expiration / auth error (401/403)
-                if response.status_code in (401, 403) and user.campus_one_refresh_token:
-                    logger.info(f"Campus One token for user {user.id} expired or unauthorized. Attempting to refresh...")
-                    try:
-                        new_tokens = await oidc_provider.refresh_access_token(user.campus_one_refresh_token)
-                        if new_tokens and "access_token" in new_tokens:
-                            user.campus_one_access_token = new_tokens["access_token"]
-                            if "refresh_token" in new_tokens:
-                                user.campus_one_refresh_token = new_tokens["refresh_token"]
-                            await db.commit()
-                            
-                            # Retry request with new token
-                            headers["Authorization"] = f"Bearer {user.campus_one_access_token}"
-                            response = await client.post(url, json=payload, headers=headers, timeout=10)
-                    except Exception as refresh_err:
-                        logger.error(f"Failed to refresh Campus One token for user {user.id}: {refresh_err}")
+                # TODO: Implement token refresh if needed
+                if response.status_code in (401, 403):
+                    logger.warning(f"Campus One token for user {user.id} may have expired. Skipping refresh for now.")
                 
                 if response.status_code == 200:
                     logger.info(f"Notification successfully sent to user {user.id} via Campus One.")

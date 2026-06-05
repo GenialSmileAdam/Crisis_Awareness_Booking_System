@@ -11,6 +11,7 @@ import { StudentRoute } from "@/components/StudentRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
+import AuthError from "./pages/AuthError";
 import StudentPortal from "./pages/student/StudentPortal";
 import StudentHistory from "./pages/student/StudentHistory";
 import StudentAppointments from "./pages/student/StudentAppointments";
@@ -45,6 +46,7 @@ const App = () => (
                 <Route path="/" element={<Landing />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/auth/error" element={<AuthError />} />
                 <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />
                 <Route path="/student/checkin" element={<StudentRoute><StudentPortal /></StudentRoute>} />
                 <Route path="/student/consent" element={<StudentRoute><StudentConsent /></StudentRoute>} />
@@ -52,19 +54,19 @@ const App = () => (
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
                 <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
-                <Route path="/counselor" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/students" element={<ProtectedRoute role={["psychologist", "staff"]}><MyStudents /></ProtectedRoute>} />
-                <Route path="/counselor/sessions" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/counselor/availability" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorAvailability /></ProtectedRoute>} />
-                <Route path="/counselor/forum" element={<ProtectedRoute role={["psychologist", "staff"]}><CounselorForum /></ProtectedRoute>} />
-                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "admin", "staff"]}><CounselorStudent /></ProtectedRoute>} />
-                <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["admin", "psychologist", "staff"]}><CounselorStudent /></ProtectedRoute>} />
-                <Route path="/counselor/session/:id" element={<ProtectedRoute role={["psychologist", "staff"]}><SessionReviewer /></ProtectedRoute>} />
-                <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
-                <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsers /></ProtectedRoute>} />
-                <Route path="/admin/forum" element={<ProtectedRoute role="admin"><AdminForum /></ProtectedRoute>} />
-                <Route path="/admin/resources" element={<ProtectedRoute role="admin"><AdminResources /></ProtectedRoute>} />
-                <Route path="/admin/settings" element={<ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute>} />
+                <Route path="/counselor" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/students" element={<ProtectedRoute role={["psychologist", "unit_head"]}><MyStudents /></ProtectedRoute>} />
+                <Route path="/counselor/sessions" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/counselor/availability" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorAvailability /></ProtectedRoute>} />
+                <Route path="/counselor/forum" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorForum /></ProtectedRoute>} />
+                <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["unit_head", "psychologist"]}><CounselorStudent /></ProtectedRoute>} />
+                <Route path="/counselor/session/:id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><SessionReviewer /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute role="unit_head"><AdminDashboard /></ProtectedRoute>} />
+                <Route path="/admin/users" element={<ProtectedRoute role="unit_head"><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin/forum" element={<ProtectedRoute role="unit_head"><AdminForum /></ProtectedRoute>} />
+                <Route path="/admin/resources" element={<ProtectedRoute role="unit_head"><AdminResources /></ProtectedRoute>} />
+                <Route path="/admin/settings" element={<ProtectedRoute role="unit_head"><AdminSettings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

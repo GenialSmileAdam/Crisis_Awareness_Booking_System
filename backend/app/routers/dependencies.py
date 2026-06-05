@@ -4,13 +4,26 @@ from app.core.security import get_current_user
 from app.utils.idempotency import idempotency_store
 
 
-def require_roles(*roles: str):
+def require_roles(*allowed_roles: str):
     def dependency(current_user: dict = Depends(get_current_user)) -> dict:
-        is_allowed = current_user["role"] in roles
-        if "admin" in roles and current_user.get("is_admin"):
-            is_allowed = True
-        if "staff" in roles and current_user.get("user_type") == "staff":
-            is_allowed = True
+        # Authorization based on Campus One roles array
+        user_roles = current_user.get("roles", [])
+
+        # Map Campus One roles to required permission roles
+        role_mapping = {
+            "unit_head": ["admin", "staff"],  # unit_head can access admin/staff routes
+            "psychologist": ["psychologist", "admin", "staff"],  # psychologist can access their routes + staff
+            "student": ["student"],  # students can only access student routes
+        }
+
+        # Check if user's Campus One roles satisfy any of the required roles
+        is_allowed = False
+        for user_role in user_roles:
+            allowed_for_role = role_mapping.get(user_role, [])
+            if any(req_role in allowed_for_role for req_role in allowed_roles):
+                is_allowed = True
+                break
+
         if not is_allowed:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user

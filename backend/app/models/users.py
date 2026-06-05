@@ -4,7 +4,7 @@ import enum
 from datetime import date, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, String, Text, func, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

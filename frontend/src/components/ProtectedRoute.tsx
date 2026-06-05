@@ -3,9 +3,15 @@ import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
-type Role = "student" | "psychologist" | "admin" | "staff";
+type CampusOneRole = "unit_head" | "psychologist" | "student";
 
-export function ProtectedRoute({ role, children }: { role: Role | Role[]; children: ReactNode }) {
+export function ProtectedRoute({
+  role,
+  children
+}: {
+  role: CampusOneRole | CampusOneRole[];
+  children: ReactNode
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   useTokenRefresh();
@@ -19,23 +25,16 @@ export function ProtectedRoute({ role, children }: { role: Role | Role[]; childr
     return () => window.removeEventListener("safespace:session-expired", handleSessionExpired as EventListener);
   }, [navigate]);
 
-  const allowedRoles = Array.isArray(role) ? role : [role];
   if (!user) return <Navigate to="/login" replace />;
 
-  // Simple authorization: check if user's role is in allowed roles
-  let hasAccess = allowedRoles.includes(user.role as Role);
+  // Authorization based on Campus One roles array from JWT
+  const allowedRoles = Array.isArray(role) ? role : [role];
+  const userRoles = user.roles || [];
 
-  // For staff users, also check staff_type for psychologist routes
-  if (!hasAccess && user.user_type === "staff") {
-    // Psychologists can access psychologist routes
-    if ((user as any).staff_type === "psychologist" && allowedRoles.includes("psychologist")) {
-      hasAccess = true;
-    }
-    // Staff can access staff routes
-    else if (allowedRoles.includes("staff")) {
-      hasAccess = true;
-    }
-  }
+  // Check if user has any of the allowed Campus One roles
+  const hasAccess = allowedRoles.some(allowedRole =>
+    userRoles.includes(allowedRole)
+  );
 
   if (!hasAccess) return <Navigate to="/login" replace />;
   return <>{children}</>;

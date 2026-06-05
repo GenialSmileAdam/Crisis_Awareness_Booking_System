@@ -22,7 +22,9 @@ router = APIRouter(prefix="/availability", tags=["Availability"])
 
 
 def _require_psychologist(current_user: dict) -> None:
-    if current_user["role"] not in {"psychologist", "admin", "staff"}:
+    # Check if user has psychologist or unit_head role in Campus One roles
+    user_roles = current_user.get("roles", [])
+    if "psychologist" not in user_roles and "unit_head" not in user_roles:
         raise HTTPException(status_code=403, detail="Psychologists only")
 
 

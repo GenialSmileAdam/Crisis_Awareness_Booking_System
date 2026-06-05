@@ -81,16 +81,9 @@ async def list_student_checkins(
 ):
     """Get check-in history for a student."""
     # Check permissions: admin, psychologist, staff, or the student themselves
-    is_authorized = (
-        current_user.get("is_admin") or
-        current_user.get("role") == "staff" or
-        current_user.get("role") == "psychologist" or
-        current_user.get("staff_type") == "psychologist"
-    )
-    is_self = (
-        current_user.get("user_type") == "student" and
-        current_user.get("student_id") == student_id
-    )
+    user_roles = current_user.get("roles", [])
+    is_authorized = any(role in user_roles for role in ["psychologist", "unit_head"])
+    is_self = "student" in user_roles and current_user.get("student_id") == student_id
 
     if not (is_authorized or is_self):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -127,7 +120,8 @@ async def list_pending_checkins(
     current_user: dict = Depends(get_current_user)
 ):
     """Get pending check-ins for the current student."""
-    if current_user.get("role") != "student":
+    user_roles = current_user.get("roles", [])
+    if "student" not in user_roles:
         return []
 
     student_id = current_user.get("student_id")
