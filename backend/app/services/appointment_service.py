@@ -11,11 +11,12 @@ from app.models.crisis_logs import CrisisLog, SeverityLevel
 from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
 from app.models.staff import Staff, StaffType
 from app.models.students import Student
+from app.services.scheduling_service import check_confirmed_appointment_conflict
 from app.models.tables import sessions_table, users_table
 from app.schemas.appointments import (
     AppointmentCreate,
+    AppointmentRequestCreate,
     AppointmentUpdate,
-    StudentAppointmentCreate,
 )
 from app.utils.notification_stub import send_crisis_alert
 from app.utils.pagination import paginate
@@ -93,59 +94,124 @@ class AppointmentService:
         end_time: datetime,
         exclude_id: UUID | None = None,
     ) -> Appointment | None:
-        conflict = await db.execute(
-            select(Appointment).where(
-                Appointment.psychologist_id == psychologist_id,
-                Appointment.status == AppointmentStatus.booked,
-                Appointment.deleted_at.is_(None),
-                Appointment.id != exclude_id,
-                func.tstzrange(Appointment.start_time, Appointment.end_time).op("&&")(
-                    func.tstzrange(start_time, end_time)
-                ),
-            ).limit(1)
+        return await check_confirmed_appointment_conflict(
+            db,
+            psychologist_id,
+            start_time,
+            end_time,
+            exclude_id=exclude_id,
         )
-        return conflict.scalar_one_or_none()
 
     @staticmethod
-    async def _count_daily_appointments(
+    async def _validate_time_granularity(
+        start_time: datetime,
+        end_time: datetime,
+        granularity_minutes: int = 15,
+    ) -> None:
+        if start_time.second != 0 or start_time.microsecond != 0:
+            raise ValueError("start_time must be on a 15-minute boundary")
+        if end_time.second != 0 or end_time.microsecond != 0:
+            raise ValueError("end_time must be on a 15-minute boundary")
+        total_minutes = int((end_time - start_time).total_seconds() / 60)
+        if total_minutes <= 0 or total_minutes % granularity_minutes != 0:
+            raise ValueError("Appointment duration must use 15-minute increments")
+
+    @staticmethod
+    async def _ensure_fits_availability(
         db: AsyncSession,
         psychologist_id: UUID,
         start_time: datetime,
-    ) -> int:
-        day_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
-        return (
+        end_time: datetime,
+    ) -> None:
+        availability = (
             await db.execute(
-                select(func.count())
-                .select_from(Appointment)
+                select(PsychologistAvailability)
                 .where(
-                    Appointment.psychologist_id == psychologist_id,
-                    Appointment.deleted_at.is_(None),
-                    Appointment.start_time >= day_start,
-                    Appointment.start_time < day_end,
+                    PsychologistAvailability.psychologist_id == psychologist_id,
+                    PsychologistAvailability.date == start_time.date(),
+                    PsychologistAvailability.start_time <= start_time.time(),
+                    PsychologistAvailability.end_time >= end_time.time(),
                 )
             )
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if not availability:
+            raise FileExistsError("Requested time is outside psychologist availability")
+
+    @staticmethod
+    async def _ensure_does_not_overlap_busy_block(
+        db: AsyncSession,
+        psychologist_id: UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
+        busy = await db.execute(
+            select(PsychologistBusyBlock)
+            .where(
+                PsychologistBusyBlock.psychologist_id == psychologist_id,
+                PsychologistBusyBlock.block_end > start_time,
+                PsychologistBusyBlock.block_start < end_time,
+            )
+            .limit(1)
+        )
+        if busy.scalar_one_or_none():
+            raise FileExistsError("Requested time overlaps an unavailable busy block")
+
+    @staticmethod
+    async def _ensure_session_duration_matches(
+        staff: Staff,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
+        if staff.session_duration_minutes and (end_time - start_time) != timedelta(minutes=staff.session_duration_minutes):
+            raise ValueError(
+                f"Appointments must match psychologist session duration of {staff.session_duration_minutes} minutes"
+            )
+
+    @staticmethod
+    async def _get_appointment_entity(db: AsyncSession, appointment_id: UUID) -> Appointment:
+        appointment = (
+            await db.execute(
+                select(Appointment)
+                .where(Appointment.id == appointment_id, Appointment.deleted_at.is_(None))
+            )
+        ).scalar_one_or_none()
+        if not appointment:
+            raise LookupError("Appointment not found")
+        return appointment
 
     @classmethod
-    async def book_student_appointment(
+    async def request_appointment(
         cls,
         db: AsyncSession,
         current_user: dict,
-        appointment_data: StudentAppointmentCreate,
+        appointment_data: AppointmentRequestCreate,
     ) -> Appointment:
         student = await cls._get_student_by_user_id(db, current_user["id"])
         staff = await cls._ensure_psychologist_active(db, appointment_data.psychologist_id)
 
-        daily_count = await cls._count_daily_appointments(
-            db,
-            appointment_data.psychologist_id,
+        await cls._validate_time_granularity(
             appointment_data.start_time,
+            appointment_data.end_time,
         )
-        if daily_count >= staff.max_appointments_per_day:
-            raise FileExistsError("Psychologist has reached the maximum appointments for this day")
+        await cls._ensure_session_duration_matches(
+            staff,
+            appointment_data.start_time,
+            appointment_data.end_time,
+        )
 
         if not appointment_data.is_crisis:
+            await cls._ensure_fits_availability(
+                db,
+                appointment_data.psychologist_id,
+                appointment_data.start_time,
+                appointment_data.end_time,
+            )
+            await cls._ensure_does_not_overlap_busy_block(
+                db,
+                appointment_data.psychologist_id,
+                appointment_data.start_time,
+                appointment_data.end_time,
+            )
             conflict = await cls._find_conflict(
                 db,
                 appointment_data.psychologist_id,
@@ -153,18 +219,17 @@ class AppointmentService:
                 appointment_data.end_time,
             )
             if conflict:
-                raise FileExistsError("Psychologist has a conflicting booking at this time")
+                raise FileExistsError("Psychologist has a conflicting confirmed appointment at this time")
 
         appointment = Appointment(
             student_id=student.student_id,
             psychologist_id=appointment_data.psychologist_id,
             start_time=appointment_data.start_time,
             end_time=appointment_data.end_time,
-            status=AppointmentStatus.booked,
+            status=AppointmentStatus.confirmed if appointment_data.is_crisis else AppointmentStatus.pending,
             is_crisis=appointment_data.is_crisis,
             crisis_note=appointment_data.crisis_note,
             booking_source=BookingSource.student_portal,
-            pending_approval=not appointment_data.is_crisis,
         )
         db.add(appointment)
         await db.flush()
@@ -183,6 +248,56 @@ class AppointmentService:
         await db.commit()
         await db.refresh(appointment)
         return appointment
+
+    @classmethod
+    async def approve_appointment(cls, db: AsyncSession, appointment_id: UUID) -> dict[str, Any]:
+        appointment = await cls._get_appointment_entity(db, appointment_id)
+        if appointment.status != AppointmentStatus.pending:
+            raise ValueError("Only pending requests can be approved")
+
+        conflict = await cls._find_conflict(
+            db,
+            appointment.psychologist_id,
+            appointment.start_time,
+            appointment.end_time,
+            exclude_id=appointment.id,
+        )
+        if conflict:
+            raise FileExistsError("Appointment conflicts with an existing confirmed appointment")
+
+        await db.execute(
+            update(Appointment)
+            .where(Appointment.id == appointment.id)
+            .values(status=AppointmentStatus.confirmed)
+        )
+        await db.execute(
+            update(Appointment)
+            .where(
+                Appointment.psychologist_id == appointment.psychologist_id,
+                Appointment.id != appointment.id,
+                Appointment.status == AppointmentStatus.pending,
+                Appointment.deleted_at.is_(None),
+                func.tstzrange(Appointment.start_time, Appointment.end_time).op("&&")(
+                    func.tstzrange(appointment.start_time, appointment.end_time)
+                ),
+            )
+            .values(status=AppointmentStatus.rejected)
+        )
+        await db.commit()
+        return await cls.get_by_id(db, appointment.id)
+
+    @classmethod
+    async def reject_appointment(cls, db: AsyncSession, appointment_id: UUID) -> dict[str, Any]:
+        appointment = await cls._get_appointment_entity(db, appointment_id)
+        if appointment.status != AppointmentStatus.pending:
+            raise ValueError("Only pending requests can be rejected")
+        await db.execute(
+            update(Appointment)
+            .where(Appointment.id == appointment.id)
+            .values(status=AppointmentStatus.rejected)
+        )
+        await db.commit()
+        return await cls.get_by_id(db, appointment.id)
 
     @classmethod
     async def create(
@@ -291,7 +406,6 @@ class AppointmentService:
                 "is_crisis": row.Appointment.is_crisis,
                 "crisis_note": row.Appointment.crisis_note,
                 "booking_source": row.Appointment.booking_source,
-                "pending_approval": row.Appointment.pending_approval,
                 "calendar_event_id": row.Appointment.calendar_event_id,
                 "deleted_at": row.Appointment.deleted_at,
                 "created_at": row.Appointment.created_at,
@@ -304,44 +418,74 @@ class AppointmentService:
         return _paginate_payload(data, total, limit, offset)
 
     @classmethod
+    async def list_availability(
+        cls,
+        db: AsyncSession,
+        psychologist_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[dict[str, Any]]:
+        query = select(PsychologistAvailability)
+        if psychologist_id:
+            query = query.where(PsychologistAvailability.psychologist_id == psychologist_id)
+        if start_date:
+            query = query.where(PsychologistAvailability.date >= start_date)
+        if end_date:
+            query = query.where(PsychologistAvailability.date <= end_date)
+
+        rows = (
+            await db.execute(
+                query.order_by(
+                    PsychologistAvailability.date.asc(),
+                    PsychologistAvailability.start_time.asc(),
+                )
+            )
+        ).scalars().all()
+
+        return [
+            {
+                "id": str(row.id),
+                "psychologist_id": str(row.psychologist_id),
+                "date": row.date.isoformat(),
+                "start_time": row.start_time.strftime("%H:%M"),
+                "end_time": row.end_time.strftime("%H:%M"),
+                "status": "available",
+            }
+            for row in rows
+        ]
+
+    @classmethod
     async def get_availability(cls, db: AsyncSession, psychologist_id: UUID, day: date) -> list[str]:
         staff = await cls._ensure_psychologist_active(db, psychologist_id)
 
-        # Respect the psychologist's configured weekly schedule (0=Mon…6=Sun)
-        avail = (
+        blocks = (
             await db.execute(
-                select(PsychologistAvailability).where(
+                select(PsychologistAvailability)
+                .where(
                     PsychologistAvailability.psychologist_id == psychologist_id,
-                    PsychologistAvailability.day_of_week == day.weekday(),
+                    PsychologistAvailability.date == day,
                 )
+                .order_by(PsychologistAvailability.start_time.asc())
             )
-        ).scalar_one_or_none()
+        ).scalars().all()
 
-        if avail is None or not avail.is_available:
+        if not blocks:
             return []
 
-        start_of_day = datetime.combine(day, avail.start_time)
-        end_of_day = datetime.combine(day, avail.end_time)
-
-        # Existing booked appointments within the window
         appointments = (
             await db.execute(
                 select(Appointment.start_time, Appointment.end_time)
                 .where(
                     Appointment.psychologist_id == psychologist_id,
                     Appointment.deleted_at.is_(None),
-                    Appointment.status == AppointmentStatus.booked,
-                    Appointment.start_time >= start_of_day,
-                    Appointment.end_time <= end_of_day,
+                    Appointment.status.in_({AppointmentStatus.confirmed, AppointmentStatus.booked}),
+                    Appointment.start_time >= datetime.combine(day, time.min),
+                    Appointment.end_time <= datetime.combine(day, time.max),
                 )
                 .order_by(Appointment.start_time.asc())
             )
         ).all()
 
-        if len(appointments) >= staff.max_appointments_per_day:
-            return []
-
-        # One-off busy blocks that overlap this calendar day
         day_start_dt = datetime.combine(day, time.min)
         day_end_dt = datetime.combine(day, time.max)
         busy_rows = (
@@ -361,15 +505,19 @@ class AppointmentService:
         busy_ranges = [(_naive(r.block_start), _naive(r.block_end)) for r in busy_rows]
         appt_ranges = [(_naive(r.start_time), _naive(r.end_time)) for r in appointments]
 
+        duration = timedelta(minutes=staff.session_duration_minutes)
         slots: list[str] = []
-        current = start_of_day
-        while current < end_of_day:
-            next_hour = current + timedelta(hours=1)
-            appt_overlap = any(current < e and next_hour > s for s, e in appt_ranges)
-            busy_overlap = any(current < e and next_hour > s for s, e in busy_ranges)
-            if not appt_overlap and not busy_overlap:
-                slots.append(f"{current.isoformat()} / {next_hour.isoformat()}")
-            current = next_hour
+
+        for block in blocks:
+            current = datetime.combine(day, block.start_time)
+            block_end = datetime.combine(day, block.end_time)
+            while current + duration <= block_end:
+                candidate_end = current + duration
+                overlaps = any(current < e and candidate_end > s for s, e in appt_ranges + busy_ranges)
+                if not overlaps:
+                    slots.append(f"{current.isoformat()} / {candidate_end.isoformat()}")
+                current += duration
+
         return slots[: staff.max_appointments_per_day]
 
     @classmethod
@@ -414,7 +562,6 @@ class AppointmentService:
             "is_crisis": row.Appointment.is_crisis,
             "crisis_note": row.Appointment.crisis_note,
             "booking_source": row.Appointment.booking_source,
-            "pending_approval": row.Appointment.pending_approval,
             "calendar_event_id": row.Appointment.calendar_event_id,
             "deleted_at": row.Appointment.deleted_at,
             "created_at": row.Appointment.created_at,

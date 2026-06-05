@@ -41,6 +41,7 @@ class Staff(Base):
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     work_start_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     work_end_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    session_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=45)
     max_appointments_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

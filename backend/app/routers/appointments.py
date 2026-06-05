@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.routers.dependencies import cache_idempotent_response, handle_idempotency, require_roles
 from app.schemas.appointments import (
     AppointmentCreate,
+    AppointmentRequestCreate,
     AppointmentUpdate,
     StudentAppointmentCreate,
 )
@@ -69,18 +70,47 @@ async def book_student_appointment(
     if cached:
         return cached
     try:
-        appointment = await AppointmentService.book_student_appointment(
+        appointment = await AppointmentService.request_appointment(
             db,
             current_user,
             payload,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except FileExistsError as exc:
+    except (FileExistsError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     response = success(
-        "Appointment booked successfully",
+        "Appointment request submitted successfully",
+        _serialize_appointment(appointment),
+    )
+    return cache_idempotent_response(cache_key, response)
+
+
+@router.post("/request")
+async def request_appointment(
+    payload: AppointmentRequestCreate,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("student"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        appointment = await AppointmentService.request_appointment(
+            db,
+            current_user,
+            payload,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileExistsError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    response = success(
+        "Appointment request submitted successfully",
         _serialize_appointment(appointment),
     )
     return cache_idempotent_response(cache_key, response)
@@ -189,6 +219,48 @@ async def get_appointment(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return success("Appointment retrieved successfully", result)
+
+
+@router.patch("/{id}/approve")
+async def approve_appointment(
+    id: UUID,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("psychologist", "admin"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        result = await AppointmentService.approve_appointment(db, id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileExistsError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response = success("Appointment approved successfully", result)
+    return cache_idempotent_response(cache_key, response)
+
+
+@router.patch("/{id}/reject")
+async def reject_appointment(
+    id: UUID,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("psychologist", "admin"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        result = await AppointmentService.reject_appointment(db, id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response = success("Appointment rejected successfully", result)
+    return cache_idempotent_response(cache_key, response)
 
 
 @router.patch("/{id}")

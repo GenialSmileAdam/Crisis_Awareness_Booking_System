@@ -20,10 +20,13 @@ if TYPE_CHECKING:
 
 
 class AppointmentStatus(str, enum.Enum):
-    booked = "booked"
-    completed = "completed"
+    pending = "pending"
+    confirmed = "confirmed"
+    rejected = "rejected"
     cancelled = "cancelled"
+    completed = "completed"
     no_show = "no_show"
+    booked = "booked"
 
 
 class BookingSource(str, enum.Enum):
@@ -57,7 +60,6 @@ class Appointment(Base):
     is_crisis: Mapped[bool] = mapped_column(nullable=False, default=False)
     crisis_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     booking_source: Mapped[BookingSource] = mapped_column(nullable=False)
-    pending_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     session_type: Mapped[SessionType] = mapped_column(nullable=False, default=SessionType.in_person)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     calendar_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
