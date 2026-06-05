@@ -494,9 +494,9 @@ export default function CounselorStudent() {
                   <span>Showing {checkinOffset + 1}–{Math.min(checkinOffset + 10, checkinTotal)} of {checkinTotal}</span>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" disabled={checkinOffset === 0}
-                      onClick={() => fetchCheckins(Math.max(0, checkinOffset - 10))}>Previous</Button>
+                      onClick={() => setCheckinOffset(Math.max(0, checkinOffset - 10))}>Previous</Button>
                     <Button size="sm" variant="outline" disabled={checkinOffset + 10 >= checkinTotal}
-                      onClick={() => fetchCheckins(checkinOffset + 10)}>Next</Button>
+                      onClick={() => setCheckinOffset(checkinOffset + 10)}>Next</Button>
                   </div>
                 </div>
               )}

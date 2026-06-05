@@ -657,10 +657,10 @@ export default function CounselorDashboard() {
                   Showing {offset + 1}-{Math.min(offset + 10, pagination.total)} of {pagination.total} sessions
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={offset === 0 || loading} onClick={() => fetchAppointments(offset - 10)}>
+                  <Button size="sm" variant="outline" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 10))}>
                     <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                   </Button>
-                  <Button size="sm" variant="outline" disabled={!pagination.has_next || loading} onClick={() => fetchAppointments(offset + 10)}>
+                  <Button size="sm" variant="outline" disabled={!pagination.has_next || loading} onClick={() => setOffset(offset + 10)}>
                     Next <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
