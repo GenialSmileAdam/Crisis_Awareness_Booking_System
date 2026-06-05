@@ -93,7 +93,7 @@ export default function SessionReviewer() {
   const executeUpload = async () => {
     if (!aiSessionId || !audioFile) return;
     try {
-      await uploadAudioMutate({ session_id: aiSessionId, audio: audioFile });
+      await uploadAudioMutate({ sessionId: aiSessionId, audioFile });
       setAudioUploaded(true);
       toast.success("Audio uploaded successfully");
       setStep(3); // auto-advance after confirmed upload

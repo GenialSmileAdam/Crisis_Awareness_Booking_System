@@ -16,7 +16,7 @@ export interface AISessionResponse {
 export function useCreateAISession(): UseMutationResult<AISessionResponse, Error, { appointment_id: string; client_name: string; notes: string }> {
   return useMutation({
     mutationFn: async (data: { appointment_id: string; client_name: string; notes: string }) => {
-      return apiRequest<AISessionResponse>("POST", "/session-ai/sessions", data);
+      return apiRequest<AISessionResponse>("POST", "/ai/sessions", data);
     },
     onError: (error: Error) => {
       console.error("Failed to create AI session:", error);
@@ -32,7 +32,7 @@ export function useUploadSessionAudio(): UseMutationResult<AISessionResponse, Er
     mutationFn: async ({ sessionId, audioFile }: { sessionId: string; audioFile: File }) => {
       const formData = new FormData();
       formData.append("audio", audioFile);
-      return apiRequest<AISessionResponse>("POST", `/session-ai/sessions/${sessionId}/audio`, formData);
+      return apiRequest<AISessionResponse>("POST", `/ai/sessions/${sessionId}/audio`, formData);
     },
     onError: (error: Error) => {
       console.error("Failed to upload audio:", error);
@@ -46,7 +46,7 @@ export function useUploadSessionAudio(): UseMutationResult<AISessionResponse, Er
 export function useTranscribeSession(): UseMutationResult<AISessionResponse, Error, string> {
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      return apiRequest<AISessionResponse>("POST", `/session-ai/sessions/${sessionId}/transcribe`, {});
+      return apiRequest<AISessionResponse>("POST", `/ai/transcribe/${sessionId}`, {});
     },
     onError: (error: Error) => {
       console.error("Failed to transcribe session:", error);
@@ -60,7 +60,7 @@ export function useTranscribeSession(): UseMutationResult<AISessionResponse, Err
 export function useSummariseSession(): UseMutationResult<AISessionResponse, Error, string> {
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      return apiRequest<AISessionResponse>("POST", `/session-ai/sessions/${sessionId}/summarise`, {});
+      return apiRequest<AISessionResponse>("POST", `/ai/summarise/${sessionId}`, {});
     },
     onError: (error: Error) => {
       console.error("Failed to summarise session:", error);
