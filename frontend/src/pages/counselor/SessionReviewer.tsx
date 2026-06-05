@@ -50,6 +50,8 @@ export default function SessionReviewer() {
   const { mutateAsync: transcribeMutate, isPending: transcribeLoading } = useTranscribeSession();
   const { mutateAsync: summariseMutate, isPending: summariseLoading } = useSummariseSession();
 
+  const loading = uploadLoading || transcribeLoading || summariseLoading;
+
   // Initialize AI session on appointment load
   useEffect(() => {
     if (appointment && !aiSessionId && step === 1) {
