@@ -122,6 +122,7 @@ export default function CounselorStudent() {
   const checkins = checkinsData?.data || [];
   const checkinTotal = checkinsData?.pagination?.total || 0;
   const appointments = appointmentsData?.data || [];
+  const crisisLogsData = crisisLogs || [];
   const loading = studentLoading;
   const error = null;
 
@@ -369,7 +370,7 @@ export default function CounselorStudent() {
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <TierBadge tier={currentTier} pulse />
-                  <WrsTrendIcon history={wrsHistory} />
+                  <WrsTrendIcon history={historyData} />
                 </div>
               </div>
             </div>
@@ -551,14 +552,14 @@ export default function CounselorStudent() {
               <h2 className="font-display text-lg font-bold">Crisis Logs</h2>
               <ShieldAlert className="h-5 w-5 text-muted-foreground" />
             </div>
-            {crisisLogs.length === 0 ? (
+            {crisisLogsData.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-6">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500/50" />
                 <p className="text-sm text-muted-foreground">No crisis events recorded.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {crisisLogs.map((log: any) => {
+                {crisisLogsData.map((log: any) => {
                   const sevColor = log.severity_level === "high"
                     ? "#B00020" : log.severity_level === "medium"
                     ? "#FF8C42" : "#FF4560";
