@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2, LogOut, FileAudio, FileText, BrainCircuit } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
@@ -50,21 +50,24 @@ export default function SessionReviewer() {
   const { mutateAsync: transcribeMutate, isPending: transcribeLoading } = useTranscribeSession();
   const { mutateAsync: summariseMutate, isPending: summariseLoading } = useSummariseSession();
 
-  // Initialize AI session on appointment load (no auto-create in useEffect)
-  if (appointment && !aiSessionId && step === 1) {
-    createAISessionMutate({
-      appointment_id: id!,
-      client_name: appointment.student_full_name,
-      notes: ""
-    }).then(session => {
-      setAiSessionId(session.id);
-      toast.success("AI Session created successfully");
-    }).catch(err => {
-      toast.error("Failed to initialize session");
-      console.error("Initialization error:", err);
-    });
-  }
+  // Initialize AI session on appointment load
+  useEffect(() => {
+    if (appointment && !aiSessionId && step === 1) {
+      createAISessionMutate({
+        appointment_id: id!,
+        client_name: appointment.student_full_name,
+        notes: ""
+      }).then(session => {
+        setAiSessionId(session.id);
+        toast.success("AI Session created successfully");
+      }).catch(err => {
+        toast.error("Failed to initialize session");
+        console.error("Initialization error:", err);
+      });
+    }
+  }, [appointment, id, step, aiSessionId, createAISessionMutate]);
 
+  // Audio playback progress simulation
   useEffect(() => {
     if (!playing) return;
     const t = setInterval(() => setProgress((p) => (p >= 100 ? 0 : p + 0.5)), 50);
