@@ -36,7 +36,7 @@ export default function MyStudents() {
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
 
   // React Query hooks
-  const { data: studentsData, isLoading: loading } = useStudents(100, 0);
+  const { data: studentsData, isLoading: loading } = useStudents({}, 100, 0);
   const { data: alertsData } = useRiskAlerts(100, 0, null);
   const { data: cohortData } = useRiskScoreCohort();
 

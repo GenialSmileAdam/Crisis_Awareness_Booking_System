@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   const pagination = { limit: 10, offset: 0 };
 
   // React Query hooks
-  const { data: studentsData, isLoading: studentsLoading } = useStudents(100, 0);
+  const { data: studentsData, isLoading: studentsLoading } = useStudents({}, 100, 0);
   const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(100, 0, null);
   const { data: cohortData } = useRiskScoreCohort();
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useRealAnalytics(days);

@@ -385,7 +385,7 @@ export default function CounselorStudent() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total assessments</span>
-                <span className="font-medium">{wrsHistory.length}</span>
+                <span className="font-medium">{historyData.length}</span>
               </div>
               {riskScore?.override && (
                 <div className="pt-2 border-t border-border">

@@ -28,8 +28,8 @@ export default function AdminUsers() {
   const [linkCopied, setLinkCopied] = useState(false);
 
   // React Query hooks
-  const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useStudents(10, studentsOffset);
-  const { data: staffData, isLoading: staffLoading, refetch: refetchStaff } = useStaff(10, 0);
+  const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useStudents({}, 10, studentsOffset);
+  const { data: staffData, isLoading: staffLoading, refetch: refetchStaff } = useStaff({}, 10, 0);
 
   const { mutateAsync: createStaffMutate } = useCreateStaff();
 
