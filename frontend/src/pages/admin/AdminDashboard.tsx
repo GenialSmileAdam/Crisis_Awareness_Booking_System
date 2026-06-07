@@ -165,7 +165,7 @@ export default function AdminDashboard() {
   }, [cohort]);
 
   const kpis = [
-    { label: "Total Students Monitored", value: loading ? "—" : pagination.total, icon: Users, scrollTo: "trend" },
+    { label: "Total Students Monitored", value: loading ? "—" : students.length, icon: Users, scrollTo: "trend" },
     { label: "Active High-Risk Alerts", value: loading ? "—" : activeHighRiskCount, icon: AlertTriangle, danger: true, scrollTo: "alerts" },
     { label: "Check-ins This Week", value: analyticsLoading ? "—" : (analytics?.checkins_7d ?? "—"), icon: ClipboardCheck, scrollTo: "year-group" },
     { label: "Avg Campus WRS", value: (loading || analyticsLoading) ? "—" : (avgWrsCurrent ? formatWRS(avgWrsCurrent) : avgCampusWrs), icon: Activity, scrollTo: "trend" },

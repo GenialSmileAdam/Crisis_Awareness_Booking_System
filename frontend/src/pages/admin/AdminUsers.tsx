@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { PaginationInfo } from "@/api/types";
 import { useStudents, useStaff } from "@/hooks/queries";
-import { useCreateStaff, useDeactivateStudent, useAdminResetPassword } from "@/hooks/mutations";
+import { useCreateStaff, useDeactivateStudent, useActivateStudent, useAdminResetPassword } from "@/hooks/mutations";
 
 const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
@@ -27,6 +27,7 @@ export default function AdminUsers() {
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
   const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
 
   // React Query hooks
@@ -35,6 +36,7 @@ export default function AdminUsers() {
 
   const { mutateAsync: createStaffMutate } = useCreateStaff();
   const { mutateAsync: deactivateStudentMutate } = useDeactivateStudent();
+  const { mutateAsync: activateStudentMutate } = useActivateStudent();
   const { mutateAsync: resetPasswordMutate } = useAdminResetPassword();
 
   const students = studentsData?.data || [];
@@ -70,6 +72,19 @@ export default function AdminUsers() {
       toast.error(`Failed to deactivate ${studentName}`);
     } finally {
       setDeactivatingId(null);
+    }
+  };
+
+  const handleActivateStudent = async (studentId: string, studentName: string) => {
+    setActivatingId(studentId);
+    try {
+      await activateStudentMutate(studentId);
+      toast.success(`${studentName} has been activated`);
+      refetchStudents();
+    } catch {
+      toast.error(`Failed to activate ${studentName}`);
+    } finally {
+      setActivatingId(null);
     }
   };
 
@@ -203,23 +218,39 @@ export default function AdminUsers() {
                     </td>
                     <td className="p-3">
                       <span className={cn(
-                        "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", 
-                        (u as any).crisis_flag ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success-foreground"
+                        "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider",
+                        (u as any).is_active === false
+                          ? "bg-muted/50 text-muted-foreground"
+                          : (u as any).crisis_flag
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-success/15 text-success-foreground"
                       )}>
-                        {(u as any).crisis_flag ? "At Risk" : "Active"}
+                        {(u as any).is_active === false ? "Deactivated" : (u as any).crisis_flag ? "At Risk" : "Active"}
                       </span>
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs"
-                          disabled={deactivatingId === u.student_id}
-                          onClick={() => handleDeactivateStudent(u.student_id, u.full_name)}
-                        >
-                          {deactivatingId === u.student_id ? "..." : "Deactivate"}
-                        </Button>
+                        {(u as any).is_active === false ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={activatingId === u.student_id}
+                            onClick={() => handleActivateStudent(u.student_id, u.full_name)}
+                          >
+                            {activatingId === u.student_id ? "..." : "Activate"}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            disabled={deactivatingId === u.student_id}
+                            onClick={() => handleDeactivateStudent(u.student_id, u.full_name)}
+                          >
+                            {deactivatingId === u.student_id ? "..." : "Deactivate"}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
