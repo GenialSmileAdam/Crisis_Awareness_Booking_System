@@ -64,17 +64,20 @@ export function AvailabilityCalendarNew() {
     setIsSaving(true);
     try {
       const dayOfWeek = selectedDay.getDay();
-      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const selectedDayName = dayNames[dayOfWeek];
 
-      // Save the schedule
-      await saveScheduleMutate({
-        day_of_week: dayNames[dayOfWeek],
-        is_available: true,
+      // Build schedule for the entire week with selected day's availability
+      const schedule = dayNames.map((day) => ({
+        day: day,
         start_time: "09:00",
         end_time: "18:00",
-      });
+      }));
 
-      toast.success(`${selectedDay.toDateString()} schedule saved!`);
+      // Save the full week schedule
+      await saveScheduleMutate({ schedule });
+
+      toast.success(`Schedule saved for ${selectedDayName}!`);
       setSelectedDay(null);
     } catch (error) {
       toast.error("Failed to save schedule");
