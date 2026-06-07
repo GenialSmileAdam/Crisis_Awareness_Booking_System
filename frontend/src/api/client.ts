@@ -52,7 +52,7 @@ export async function apiRequest<T>(
     });
 
     // ── 401 → attempt token refresh ONLY if we had a token ──
-    if (res.status === 401 && retry && hasToken && path !== "/auth/refresh") {
+    if (res.status === 401 && retry && hasToken && path !== "/api/auth/refresh") {
       const refreshed = await attemptTokenRefresh();
       if (refreshed) {
         // Token was successfully refreshed, retry the original request
@@ -102,7 +102,7 @@ export async function apiRequest<T>(
  */
 async function attemptTokenRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
       method: "POST",
       credentials: "include",
     });
