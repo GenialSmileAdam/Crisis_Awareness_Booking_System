@@ -119,7 +119,13 @@ async def list_pending_checkins(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get pending check-ins for the current student."""
+    """Get pending check-ins for the current student.
+
+    Schedule:
+    - Pulse: Daily
+    - PHQ-9: Every 4 weeks
+    - GAD-7: Every 4 weeks
+    """
     user_roles = current_user.get("roles", [])
     if "student" not in user_roles:
         return []
@@ -136,45 +142,52 @@ async def list_pending_checkins(
 
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
-    one_day_ago = now - timedelta(days=1)
-
-    # Check if they have submitted any check-ins today
-    recent_checkins = (await db.execute(
-        select(WellnessCheckin).where(
-            WellnessCheckin.student_id == student_id,
-            WellnessCheckin.submitted_at >= one_day_ago
-        )
-    )).scalars().all()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     pending = []
 
-    if not recent_checkins:
-        pending.append({
-            "type": "pulse",
-            "message": "It's time for your daily wellness pulse check!"
-        })
-
-    # If student is elevated risk and hasn't assessed in 7 days, suggest a full test
-    from app.models.risk_scores import RiskScore
-    latest_score = (await db.execute(
-        select(RiskScore).where(RiskScore.student_id == student_id)
-        .order_by(RiskScore.computed_at.desc()).limit(1)
+    # 1. Check Pulse: Daily
+    pulse_today = (await db.execute(
+        select(WellnessCheckin).where(
+            WellnessCheckin.student_id == student_id,
+            WellnessCheckin.type == WellnessCheckinType.pulse,
+            WellnessCheckin.submitted_at >= today_start
+        )
     )).scalar_one_or_none()
 
-    if latest_score and latest_score.tier in (RiskTier.amber, RiskTier.red, RiskTier.critical):
-        seven_days_ago = now - timedelta(days=7)
-        recent_tests = (await db.execute(
-            select(WellnessCheckin).where(
-                WellnessCheckin.student_id == student_id,
-                WellnessCheckin.type.in_((WellnessCheckinType.phq9, WellnessCheckinType.gad7)),
-                WellnessCheckin.submitted_at >= seven_days_ago
-            )
-        )).scalars().all()
+    if not pulse_today:
+        pending.append({
+            "type": "pulse",
+            "message": "Time for your daily wellness pulse check!"
+        })
 
-        if not recent_tests:
-            pending.append({
-                "type": "phq9",
-                "message": f"Based on your latest {latest_score.tier.value} risk score, we recommend taking a new PHQ-9 wellness assessment."
-            })
+    # 2. Check PHQ-9: Every 4 weeks (28 days)
+    last_phq9 = (await db.execute(
+        select(WellnessCheckin).where(
+            WellnessCheckin.student_id == student_id,
+            WellnessCheckin.type == WellnessCheckinType.phq9
+        ).order_by(WellnessCheckin.submitted_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    four_weeks_ago = now - timedelta(days=28)
+    if not last_phq9 or last_phq9.submitted_at < four_weeks_ago:
+        pending.append({
+            "type": "phq9",
+            "message": "It's time for your PHQ-9 depression assessment (every 4 weeks)"
+        })
+
+    # 3. Check GAD-7: Every 4 weeks (28 days)
+    last_gad7 = (await db.execute(
+        select(WellnessCheckin).where(
+            WellnessCheckin.student_id == student_id,
+            WellnessCheckin.type == WellnessCheckinType.gad7
+        ).order_by(WellnessCheckin.submitted_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    if not last_gad7 or last_gad7.submitted_at < four_weeks_ago:
+        pending.append({
+            "type": "gad7",
+            "message": "It's time for your GAD-7 anxiety assessment (every 4 weeks)"
+        })
 
     return pending
