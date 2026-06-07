@@ -634,7 +634,7 @@ export default function CounselorDashboard() {
                           <div className="flex justify-end gap-2">
                             {a.status === "booked" && (
                               <>
-                                <Button size="sm" variant="outline" onClick={() => handleAction(a.id, "complete")} className="h-8 text-xs bg-success/5 hover:bg-success/10 text-success-foreground border-success/20">
+                                <Button size="sm" onClick={() => handleAction(a.id, "complete")} className="h-8 text-xs bg-[#A8FF3E] hover:bg-[#96e836] text-black font-semibold">
                                   <CheckCircle className="h-3.5 w-3.5 mr-1" /> Mark Complete
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => handleAction(a.id, "cancel")} className="h-8 text-xs text-destructive hover:bg-destructive/10">

@@ -38,14 +38,18 @@ export function useAppointments(
   limit: number = 20,
   offset: number = 0
 ): UseQueryResult<AppointmentsResponse> {
+  // Ensure limit is at least 1
+  const validLimit = Math.max(1, limit);
+  const validOffset = Math.max(0, offset);
+
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       params.append(key, String(value));
     }
   });
-  params.append("limit", String(limit));
-  params.append("offset", String(offset));
+  params.append("limit", String(validLimit));
+  params.append("offset", String(validOffset));
 
   return useQuery({
     queryKey: ["appointments", filters, limit, offset],
@@ -69,12 +73,15 @@ export function useStudentAppointments(
   limit: number = 20,
   offset: number = 0
 ): UseQueryResult<AppointmentsResponse> {
+  const validLimit = Math.max(1, limit);
+  const validOffset = Math.max(0, offset);
+
   return useQuery({
-    queryKey: ["appointments", "student", studentId, limit, offset],
+    queryKey: ["appointments", "student", studentId, validLimit, validOffset],
     queryFn: async () => {
       return apiRequest<AppointmentsResponse>(
         "GET",
-        `/appointments?student_id=${studentId}&limit=${limit}&offset=${offset}`
+        `/appointments?student_id=${studentId}&limit=${validLimit}&offset=${validOffset}`
       );
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
