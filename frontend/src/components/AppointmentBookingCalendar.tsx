@@ -53,12 +53,21 @@ export function AppointmentBookingCalendar({ psychologistId, psychologistName }:
     }
   };
 
+  const { data: availableSlots = [] } = useAppointmentAvailability(
+    psychologistId,
+    selectedDate || new Date().toISOString().split("T")[0]
+  );
+
   const getAvailableSlots = (dateStr: string) => {
-    // In a real implementation, fetch from useAppointmentAvailability
-    // For now, return mock available slots
+    if (!availableSlots || availableSlots.length === 0) {
+      return HOURS.map(hour => ({
+        time: hour,
+        available: false,
+      }));
+    }
     return HOURS.map(hour => ({
       time: hour,
-      available: Math.random() > 0.3, // 70% availability
+      available: availableSlots.some(slot => slot.startsWith(hour)),
     }));
   };
 

@@ -1,4 +1,4 @@
-import { Home, ClipboardList, Calendar, History, MessageSquare, BookOpen, LayoutDashboard, Users, Settings, Library, Clock } from "lucide-react";
+import { Home, ClipboardList, Calendar, History, MessageSquare, BookOpen, LayoutDashboard, Users, Settings, Library, Clock, CheckCircle2 } from "lucide-react";
 import { SidebarItem } from "@/components/AppSidebar";
 
 export const studentSidebarItems: SidebarItem[] = [
@@ -13,6 +13,7 @@ export const studentSidebarItems: SidebarItem[] = [
 export const counselorSidebarItems: SidebarItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", to: "/counselor", end: true },
   { icon: Users, label: "My Students", to: "/counselor/students" },
+  { icon: CheckCircle2, label: "Pending Approvals", to: "/counselor/pending-appointments" },
   { icon: Calendar, label: "Sessions", to: "/counselor/sessions" },
   { icon: Clock, label: "Availability", to: "/counselor/availability" },
   { icon: MessageSquare, label: "Forum", to: "/counselor/forum" },
@@ -23,5 +24,6 @@ export const adminSidebarItems: SidebarItem[] = [
   { icon: Users, label: "User Management", to: "/admin/users" },
   { icon: MessageSquare, label: "Forum", to: "/admin/forum" },
   { icon: Library, label: "Resources", to: "/admin/resources" },
+  { icon: ClipboardList, label: "Feedback", to: "/admin/feedback" },
   { icon: Settings, label: "Settings", to: "/admin/settings" },
 ];

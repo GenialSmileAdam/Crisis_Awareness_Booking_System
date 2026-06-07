@@ -22,6 +22,7 @@ import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import CounselorForum from "./pages/counselor/CounselorForum";
 import CounselorStudent from "./pages/counselor/CounselorStudent";
 import CounselorAvailability from "./pages/counselor/CounselorAvailability";
+import PendingAppointments from "./pages/counselor/PendingAppointments";
 import MyStudents from "./pages/counselor/MyStudents";
 import SessionReviewer from "./pages/counselor/SessionReviewer";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -29,6 +30,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminForum from "./pages/admin/AdminForum";
 import AdminResources from "./pages/admin/AdminResources";
+import AdminFeedback from "./pages/admin/AdminFeedback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +60,7 @@ const App = () => (
                 <Route path="/counselor/students" element={<ProtectedRoute role={["psychologist", "unit_head"]}><MyStudents /></ProtectedRoute>} />
                 <Route path="/counselor/sessions" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorDashboard /></ProtectedRoute>} />
                 <Route path="/counselor/availability" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorAvailability /></ProtectedRoute>} />
+                <Route path="/counselor/pending-appointments" element={<ProtectedRoute role={["psychologist", "unit_head"]}><PendingAppointments /></ProtectedRoute>} />
                 <Route path="/counselor/forum" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorForum /></ProtectedRoute>} />
                 <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorStudent /></ProtectedRoute>} />
                 <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["unit_head", "psychologist"]}><CounselorStudent /></ProtectedRoute>} />
@@ -66,6 +69,7 @@ const App = () => (
                 <Route path="/admin/users" element={<ProtectedRoute role="unit_head"><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/forum" element={<ProtectedRoute role="unit_head"><AdminForum /></ProtectedRoute>} />
                 <Route path="/admin/resources" element={<ProtectedRoute role="unit_head"><AdminResources /></ProtectedRoute>} />
+                <Route path="/admin/feedback" element={<ProtectedRoute role="unit_head"><AdminFeedback /></ProtectedRoute>} />
                 <Route path="/admin/settings" element={<ProtectedRoute role="unit_head"><AdminSettings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
