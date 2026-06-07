@@ -67,11 +67,29 @@ export function AvailabilityCalendarNew() {
       const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const selectedDayName = dayNames[dayOfWeek];
 
-      // Build schedule for the entire week with selected day's availability
+      // Find earliest and latest selected hours
+      const selectedHours = Object.keys(dayAvailability)
+        .filter((hour) => dayAvailability[parseInt(hour)])
+        .map((h) => parseInt(h))
+        .sort((a, b) => a - b);
+
+      if (selectedHours.length === 0) {
+        toast.error("Please select at least one hour");
+        setIsSaving(false);
+        return;
+      }
+
+      const startHour = selectedHours[0];
+      const endHour = selectedHours[selectedHours.length - 1] + 1; // +1 to get the end of the last hour
+
+      const startTime = `${String(startHour).padStart(2, "0")}:00`;
+      const endTime = `${String(endHour).padStart(2, "0")}:00`;
+
+      // Build schedule for the entire week with same times each day
       const schedule = dayNames.map((day) => ({
         day: day,
-        start_time: "09:00",
-        end_time: "18:00",
+        start_time: startTime,
+        end_time: endTime,
       }));
 
       // Save the full week schedule
