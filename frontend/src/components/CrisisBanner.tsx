@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useCrisisHotlineConfig } from "@/hooks/queries/usePublicConfig";
 
 export function BookingModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [date, setDate] = useState("");
@@ -47,17 +48,24 @@ export function BookingModal({ open, onOpenChange }: { open: boolean; onOpenChan
 }
 
 export function HotlineModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const number = "0800-SAFESPACE (0800-723-373)";
+  const { data: hotlineConfig } = useCrisisHotlineConfig();
+  const number = hotlineConfig?.number || "1-800-CRISIS-LINE";
+  const description = hotlineConfig?.description || "Free. Confidential. Available now.";
+  const title = hotlineConfig?.name || "24/7 Crisis Hotline";
+
+  // Extract just the digits for clipboard
+  const numberForClipboard = number.replace(/\D/g, '');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>24/7 Crisis Hotline</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="text-center py-6">
           <div className="font-display text-3xl font-bold mb-2">{number}</div>
-          <p className="text-sm text-muted-foreground">Free. Confidential. Available now.</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <DialogFooter className="sm:justify-center">
-          <Button onClick={() => { navigator.clipboard.writeText("0800-723-373"); toast.success("Number copied to clipboard"); }} variant="outline">
+          <Button onClick={() => { navigator.clipboard.writeText(numberForClipboard); toast.success("Number copied to clipboard"); }} variant="outline">
             <Copy className="h-4 w-4 mr-2" /> Copy Number
           </Button>
         </DialogFooter>

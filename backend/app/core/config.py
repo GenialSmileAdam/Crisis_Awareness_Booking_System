@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     GCAL_ENABLED: bool = False
     SMS_ENABLED: bool = False
 
+    # Crisis Hotline Configuration
+    CRISIS_HOTLINE_NUMBER: str = "0800-SAFESPACE (0800-723-373)"
+    CRISIS_HOTLINE_NAME: str = "24/7 Crisis Support"
+    CRISIS_HOTLINE_DESCRIPTION: str = "Free. Confidential. Available now."
+
     EMAIL_ENABLED: bool = False
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = ""

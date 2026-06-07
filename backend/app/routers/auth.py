@@ -274,6 +274,23 @@ async def refresh(
 
 
 # ============================================================================
+# PUBLIC CONFIG
+# ============================================================================
+
+@router.get("/api/public/crisis-hotline")
+async def get_crisis_hotline_config():
+    """Get crisis hotline configuration (public, no auth required)."""
+    return success(
+        "Crisis hotline configuration",
+        {
+            "number": settings.CRISIS_HOTLINE_NUMBER,
+            "name": settings.CRISIS_HOTLINE_NAME,
+            "description": settings.CRISIS_HOTLINE_DESCRIPTION,
+        }
+    )
+
+
+# ============================================================================
 # PASSWORD RESET
 # ============================================================================
 
