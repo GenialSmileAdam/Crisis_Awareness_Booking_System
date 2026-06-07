@@ -1,16 +1,14 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
-import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
-import { NeonSpinner } from "@/components/NeonSpinner";
+import { AvailabilityCalendarNew } from "@/components/AvailabilityCalendarNew";
 
 export default function CounselorAvailability() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -18,7 +16,7 @@ export default function CounselorAvailability() {
       <div className="flex items-center justify-between py-4 h-16 px-4 md:px-8 border-b border-border bg-background/60 backdrop-blur-sm sticky top-0 z-30">
         <div>
           <h1 className="font-display text-xl font-bold">My Availability</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Set your weekly schedule and manage busy blocks</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Set your schedule so students can book appointments</p>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -28,8 +26,8 @@ export default function CounselorAvailability() {
         </div>
       </div>
 
-      <div className="p-4 md:p-8 max-w-6xl mx-auto">
-        <AvailabilityCalendar />
+      <div className="p-4 md:p-8 max-w-4xl mx-auto">
+        <AvailabilityCalendarNew />
       </div>
     </AppShell>
   );
