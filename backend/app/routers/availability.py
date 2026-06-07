@@ -79,6 +79,16 @@ class BusyBlockPayload(BaseModel):
         return block_end
 
 
+class DaySchedule(BaseModel):
+    day: str  # Monday, Tuesday, etc.
+    start_time: str  # HH:MM format
+    end_time: str  # HH:MM format
+
+
+class SchedulePayload(BaseModel):
+    schedule: list[DaySchedule]
+
+
 @router.post("")
 async def create_availability(
     payload: AvailabilityBlockPayload,
@@ -257,6 +267,81 @@ async def delete_availability(
     await db.delete(block)
     await db.commit()
     return success("Availability block deleted", {"id": str(availability_id)})
+
+
+@router.post("/schedule")
+async def save_weekly_schedule(
+    payload: SchedulePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Save a recurring weekly schedule. Creates availability blocks for upcoming 4 weeks."""
+    _require_psychologist(current_user)
+    psych_id = await _get_staff_user_id(db, current_user)
+
+    DAY_MAP = {
+        "Monday": 0,
+        "Tuesday": 1,
+        "Wednesday": 2,
+        "Thursday": 3,
+        "Friday": 4,
+        "Saturday": 5,
+        "Sunday": 6,
+    }
+
+    created_blocks = []
+    today = datetime.now(timezone.utc).date()
+
+    # Create blocks for the next 4 weeks
+    for week in range(4):
+        for day_schedule in payload.schedule:
+            day_name = day_schedule.day
+            if day_name not in DAY_MAP:
+                raise HTTPException(status_code=422, detail=f"Invalid day: {day_name}")
+
+            target_weekday = DAY_MAP[day_name]
+            # Calculate the date for this day in this week
+            days_ahead = target_weekday - today.weekday()
+            if days_ahead < 0:  # Target day already happened this week
+                days_ahead += 7
+            if week > 0:
+                days_ahead += week * 7
+
+            block_date = today + timedelta(days=days_ahead)
+
+            start_time = _parse_time(day_schedule.start_time)
+            end_time = _parse_time(day_schedule.end_time)
+            _validate_availability_range(start_time, end_time)
+
+            # Check for conflicts
+            overlap = await check_availability_overlap(
+                db,
+                psych_id,
+                block_date,
+                start_time,
+                end_time,
+            )
+            if overlap:
+                continue  # Skip if already exists
+
+            block = PsychologistAvailability(
+                psychologist_id=psych_id,
+                date=block_date,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            db.add(block)
+            created_blocks.append({
+                "date": block_date.isoformat(),
+                "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"),
+            })
+
+    await db.commit()
+    return success("Weekly schedule saved", {
+        "blocks_created": len(created_blocks),
+        "blocks": created_blocks,
+    })
 
 
 # ── Busy blocks endpoints ─────────────────────────────────────────────────────
