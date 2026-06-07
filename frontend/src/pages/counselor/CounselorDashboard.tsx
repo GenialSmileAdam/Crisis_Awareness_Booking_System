@@ -56,8 +56,12 @@ export default function CounselorDashboard() {
   const tierModalRequestRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
-  // React Query hooks
-  const { data: studentsData, isLoading: studentsLoading } = useStudents({}, 10, 0);
+  // React Query hooks - filter by assigned psychologist
+  const { data: studentsData, isLoading: studentsLoading } = useStudents(
+    user?.sub ? { assigned_psychologist_id: user.sub } : {},
+    10,
+    0
+  );
   const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(200, 0, null);
   const { data: appointmentsData, isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments({}, 10, offset);
   const { data: cohortData } = useRiskScoreCohort();

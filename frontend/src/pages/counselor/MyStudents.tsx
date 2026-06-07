@@ -35,8 +35,12 @@ export default function MyStudents() {
   const [overrides, setOverrides] = useState<Record<string, RiskTier>>({});
   const [overrideModal, setOverrideModal] = useState<{ id: string; name: string; currentTier: string; newTier: string; justification: string } | null>(null);
 
-  // React Query hooks
-  const { data: studentsData, isLoading: loading } = useStudents({}, 100, 0);
+  // React Query hooks - filter by assigned psychologist
+  const { data: studentsData, isLoading: loading } = useStudents(
+    user?.sub ? { assigned_psychologist_id: user.sub } : {},
+    100,
+    0
+  );
   const { data: alertsData } = useRiskAlerts(100, 0, null);
   const { data: cohortData } = useRiskScoreCohort();
 

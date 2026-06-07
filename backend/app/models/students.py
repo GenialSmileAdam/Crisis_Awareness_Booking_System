@@ -43,6 +43,7 @@ class Student(Base):
     emergency_contact: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     emergency_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     crisis_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

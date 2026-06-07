@@ -249,6 +249,40 @@ class StudentService:
         await db.commit()
 
     @staticmethod
+    async def deactivate(db: AsyncSession, student_id: str) -> dict[str, Any]:
+        student = (
+            await db.execute(select(Student).where(Student.student_id == student_id))
+        ).scalar_one_or_none()
+        if student is None:
+            raise LookupError("Student not found")
+        student.is_active = False
+        student.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(student)
+        return {
+            "student_id": student.student_id,
+            "is_active": student.is_active,
+            "updated_at": student.updated_at.isoformat() if student.updated_at else None,
+        }
+
+    @staticmethod
+    async def activate(db: AsyncSession, student_id: str) -> dict[str, Any]:
+        student = (
+            await db.execute(select(Student).where(Student.student_id == student_id))
+        ).scalar_one_or_none()
+        if student is None:
+            raise LookupError("Student not found")
+        student.is_active = True
+        student.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(student)
+        return {
+            "student_id": student.student_id,
+            "is_active": student.is_active,
+            "updated_at": student.updated_at.isoformat() if student.updated_at else None,
+        }
+
+    @staticmethod
     async def get_sessions(
         db: AsyncSession,
         student_id: str,

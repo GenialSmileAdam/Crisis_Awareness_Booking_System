@@ -45,3 +45,9 @@ export {
   useSummariseSession,
   type AISessionResponse,
 } from "./useAISessionMutations";
+
+export {
+  useDeactivateStudent,
+  useActivateStudent,
+  type StudentStatusResponse,
+} from "./useStudentMutations";

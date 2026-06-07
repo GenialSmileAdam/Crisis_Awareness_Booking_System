@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { PaginationInfo } from "@/api/types";
 import { useStudents, useStaff } from "@/hooks/queries";
-import { useCreateStaff } from "@/hooks/mutations";
+import { useCreateStaff, useDeactivateStudent } from "@/hooks/mutations";
 
 const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
@@ -26,12 +26,14 @@ export default function AdminUsers() {
   const [search, setSearch] = useState("");
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   // React Query hooks
   const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useStudents({}, 10, studentsOffset);
   const { data: staffData, isLoading: staffLoading, refetch: refetchStaff } = useStaff({}, 10, 0);
 
   const { mutateAsync: createStaffMutate } = useCreateStaff();
+  const { mutateAsync: deactivateStudentMutate } = useDeactivateStudent();
 
   const students = studentsData?.data || [];
   const studentsPagination = studentsData?.pagination;
@@ -54,6 +56,19 @@ export default function AdminUsers() {
     setLinkCopied(true);
     toast.success("Link copied to clipboard!");
     setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const handleDeactivateStudent = async (studentId: string, studentName: string) => {
+    setDeactivatingId(studentId);
+    try {
+      await deactivateStudentMutate(studentId);
+      toast.success(`${studentName} has been deactivated`);
+      refetchStudents();
+    } catch {
+      toast.error(`Failed to deactivate ${studentName}`);
+    } finally {
+      setDeactivatingId(null);
+    }
   };
 
   return (
@@ -182,8 +197,14 @@ export default function AdminUsers() {
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.success("Feature coming soon")}>
-                          Deactivate
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          disabled={deactivatingId === u.student_id}
+                          onClick={() => handleDeactivateStudent(u.student_id, u.full_name)}
+                        >
+                          {deactivatingId === u.student_id ? "..." : "Deactivate"}
                         </Button>
                       </div>
                     </td>

@@ -114,6 +114,44 @@ async def update_student(
     return cache_idempotent_response(cache_key, response)
 
 
+@router.post("/{id}/deactivate")
+async def deactivate_student(
+    id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    _: dict = require_roles("admin"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        result = await StudentService.deactivate(db, id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    response = success("Student deactivated successfully", result)
+    return cache_idempotent_response(cache_key, response)
+
+
+@router.post("/{id}/activate")
+async def activate_student(
+    id: str,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    _: dict = require_roles("admin"),
+):
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    try:
+        result = await StudentService.activate(db, id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    response = success("Student activated successfully", result)
+    return cache_idempotent_response(cache_key, response)
+
+
 @router.delete("/{id}")
 async def delete_student(
     id: str,
