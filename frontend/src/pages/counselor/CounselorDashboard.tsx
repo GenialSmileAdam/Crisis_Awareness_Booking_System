@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { tierFromWrs, colorFromWrs, RiskTier, trendData } from "@/data/mock";
+import { tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
 import { cn, formatWRS } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -119,8 +119,6 @@ export default function CounselorDashboard() {
     }).length;
   }, [alerts]);
 
-  const trend = useMemo(() => trendData(7), []);
-
   const tierData = useMemo(() => {
     // Count alerts by tier
     const tierCounts: { [key: string]: number } = {
@@ -159,8 +157,8 @@ export default function CounselorDashboard() {
         count: d.count,
       }));
     }
-    return trend;
-  }, [analytics, trend]);
+    return [];
+  }, [analytics]);
 
   const riskDistributionData = useMemo(() => {
     if (analytics?.risk_distribution) {
