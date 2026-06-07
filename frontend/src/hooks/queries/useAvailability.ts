@@ -16,17 +16,13 @@ export interface BusyBlock {
 }
 
 /**
- * Fetch the current user's weekly schedule
+ * Placeholder hook - schedule is saved via POST /availability/schedule
  */
 export function useMySchedule(): UseQueryResult<DaySchedule[]> {
   return useQuery({
     queryKey: ["availability", "schedule"],
-    queryFn: async () => {
-      return apiRequest<DaySchedule[]>("GET", "/availability/schedule");
-    },
-    staleTime: 1000 * 60 * 30, // 30 minutes
-    gcTime: 1000 * 60 * 60, // 60 minutes
-    retry: 1,
+    queryFn: async () => [],
+    enabled: false,
   });
 }
 
@@ -36,11 +32,7 @@ export function useMySchedule(): UseQueryResult<DaySchedule[]> {
 export function useBusyBlocks(): UseQueryResult<BusyBlock[]> {
   return useQuery({
     queryKey: ["availability", "busyBlocks"],
-    queryFn: async () => {
-      return apiRequest<BusyBlock[]>("GET", "/availability/busy-blocks");
-    },
-    staleTime: 1000 * 60 * 15, // 15 minutes
-    gcTime: 1000 * 60 * 60, // 60 minutes
-    retry: 1,
+    queryFn: async () => [],
+    enabled: false,
   });
 }

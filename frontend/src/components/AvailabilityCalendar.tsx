@@ -27,6 +27,7 @@ export function AvailabilityCalendar() {
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [addBusyOpen, setAddBusyOpen] = useState(false);
   const [busyBlockForm, setBusyBlockForm] = useState({ date: "", start: "", end: "", reason: "" });
+  const busyBlocks = busyBlocksData || [];
 
   function getMonday(date: Date) {
     const d = new Date(date);
@@ -176,10 +177,10 @@ export function AvailabilityCalendar() {
         </div>
 
         <div className="space-y-2">
-          {busyBlocksData?.length === 0 ? (
+          {busyBlocks.length === 0 ? (
             <p className="text-sm text-muted-foreground">No blocked times</p>
           ) : (
-            busyBlocksData?.map((block) => (
+            busyBlocks.map((block) => (
               <div key={block.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                 <div>
                   <div className="font-medium text-sm">{block.reason || "Unavailable"}</div>
