@@ -25,6 +25,9 @@ load_dotenv(os.path.join(ROOT, ".env"))
 from app.core.config import settings
 from app.models.students import Student
 from app.models.wellness_checkins import WellnessCheckin, WellnessCheckinType
+from app.models.risk_scores import RiskScore, RiskTier
+from app.services.risk_simple import calculate_wrs_and_tier
+import uuid
 
 engine = create_async_engine(settings.DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -77,6 +80,18 @@ async def seed_checkins():
                     submitted_at=checkin_date,
                 )
                 db.add(checkin)
+
+                # Only create RiskScore for PHQ-9 and GAD-7 (not Pulse)
+                if checkin_type in [WellnessCheckinType.phq9, WellnessCheckinType.gad7]:
+                    wrs_score, tier_str = calculate_wrs_and_tier(checkin_type.value, score)
+                    risk_score = RiskScore(
+                        student_id=student.student_id,
+                        wrs_score=wrs_score,
+                        tier=RiskTier(tier_str),
+                        computed_at=checkin_date,
+                    )
+                    db.add(risk_score)
+
                 created += 1
 
         await db.commit()
