@@ -298,8 +298,6 @@ async def get_student_risk_score(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if current_score is None:
-        raise HTTPException(status_code=404, detail="Risk score not found")
 
     window_start = datetime.now(timezone.utc) - timedelta(days=30)
     trend = (
@@ -325,7 +323,7 @@ async def get_student_risk_score(
     return success(
         "Risk score retrieved successfully",
         {
-            "current": _serialize_risk_score(current_score),
+            "current": _serialize_risk_score(current_score) if current_score else None,
             "trend": [_serialize_risk_score(row) for row in trend],
             "override": _serialize_risk_override(override) if override else None,
         },
