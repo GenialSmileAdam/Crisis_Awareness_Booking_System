@@ -45,8 +45,8 @@ export default function AdminDashboard() {
   const pagination = { limit: 10, offset: 0 };
 
   // React Query hooks
-  const { data: studentsData, isLoading: studentsLoading } = useStudents({}, 100, 0);
-  const { data: alertsData, isLoading: alertsLoading } = useRiskAlerts(100, 0, null);
+  const { data: studentsData, isLoading: studentsLoading, error: studentsError } = useStudents({}, 100, 0);
+  const { data: alertsData, isLoading: alertsLoading, error: alertsError } = useRiskAlerts(100, 0, null);
   const { data: cohortData } = useRiskScoreCohort();
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useRealAnalytics(days);
 
@@ -54,7 +54,7 @@ export default function AdminDashboard() {
   const alerts = alertsData?.data || [];
   const cohort = cohortData || [];
   const loading = studentsLoading || alertsLoading;
-  const error = null;
+  const error = studentsError || alertsError;
   const analytics = analyticsData?.charts;
   const insights = analyticsData?.insights || {};
 
