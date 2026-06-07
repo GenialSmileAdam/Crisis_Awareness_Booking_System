@@ -271,3 +271,85 @@ async def refresh(
         "access_token": tokens["access_token"],
         "token_type": "bearer",
     }
+
+
+# ============================================================================
+# PASSWORD RESET
+# ============================================================================
+
+@router.post("/api/auth/request-password-reset")
+async def request_password_reset(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Request password reset email. Public endpoint."""
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    await AuthService.request_password_reset(db, email)
+    return success(
+        "If an account exists with that email, a password reset link has been sent",
+        None
+    )
+
+
+@router.post("/api/auth/reset-password")
+async def reset_password(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset password using token from email."""
+    token = payload.get("token")
+    new_password = payload.get("new_password")
+
+    if not token or not new_password:
+        raise HTTPException(status_code=400, detail="Token and new password are required")
+
+    result = await AuthService.reset_password(db, token, new_password)
+    if not result:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    return success("Password reset successfully", None)
+
+
+@router.post("/api/auth/admin/reset-staff-password")
+async def admin_reset_staff_password(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: Send password reset email to staff member."""
+    # Check if admin
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    staff_id = payload.get("staff_id")
+    if not staff_id:
+        raise HTTPException(status_code=400, detail="Staff ID is required")
+
+    # Find user by staff_id
+    from app.models.staff import Staff
+
+    staff = (await db.execute(
+        select(Staff).where(Staff.staff_id == staff_id)
+    )).scalar_one_or_none()
+
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    # Get the user
+    user = (await db.execute(
+        select(User).where(User.id == staff.user_id)
+    )).scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Request password reset
+    await AuthService.request_password_reset(db, user.email)
+
+    return success(
+        f"Password reset link sent to {user.email}",
+        None
+    )

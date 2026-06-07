@@ -16,6 +16,7 @@ from app.models.session import Session
 from app.models.tables import sessions_table, users_table
 from app.models.feedback import Feedback
 from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
+from app.models.password_reset import PasswordResetToken
 
 __all__ = [
     "User",
@@ -45,4 +46,5 @@ __all__ = [
     "feedbacks",
     "PsychologistAvailability",
     "PsychologistBusyBlock",
+    "PasswordResetToken",
 ]

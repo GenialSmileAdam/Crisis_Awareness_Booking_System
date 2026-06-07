@@ -51,3 +51,9 @@ export {
   useActivateStudent,
   type StudentStatusResponse,
 } from "./useStudentMutations";
+
+export {
+  useAdminResetPassword,
+  useRequestPasswordReset,
+  useResetPassword,
+} from "./useAuthMutations";

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { PaginationInfo } from "@/api/types";
 import { useStudents, useStaff } from "@/hooks/queries";
-import { useCreateStaff, useDeactivateStudent } from "@/hooks/mutations";
+import { useCreateStaff, useDeactivateStudent, useAdminResetPassword } from "@/hooks/mutations";
 
 const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
 
@@ -27,6 +27,7 @@ export default function AdminUsers() {
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
 
   // React Query hooks
   const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useStudents({}, 10, studentsOffset);
@@ -34,6 +35,7 @@ export default function AdminUsers() {
 
   const { mutateAsync: createStaffMutate } = useCreateStaff();
   const { mutateAsync: deactivateStudentMutate } = useDeactivateStudent();
+  const { mutateAsync: resetPasswordMutate } = useAdminResetPassword();
 
   const students = studentsData?.data || [];
   const studentsPagination = studentsData?.pagination;
@@ -68,6 +70,18 @@ export default function AdminUsers() {
       toast.error(`Failed to deactivate ${studentName}`);
     } finally {
       setDeactivatingId(null);
+    }
+  };
+
+  const handleResetPassword = async (staffId: string, email: string) => {
+    setResetPasswordId(staffId);
+    try {
+      await resetPasswordMutate(staffId);
+      toast.success(`Password reset link sent to ${email}`);
+    } catch {
+      toast.error(`Failed to send reset link to ${email}`);
+    } finally {
+      setResetPasswordId(null);
     }
   };
 
@@ -287,7 +301,15 @@ export default function AdminUsers() {
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-primary/10 text-primary">Active</span>
                     </td>
                     <td className="p-3">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.success(`Password reset link sent to ${u.email}`)}>Reset Password</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        disabled={resetPasswordId === u.staff_id}
+                        onClick={() => handleResetPassword(u.staff_id, u.email)}
+                      >
+                        {resetPasswordId === u.staff_id ? "Sending..." : "Reset Password"}
+                      </Button>
                     </td>
                   </tr>
                 ))}

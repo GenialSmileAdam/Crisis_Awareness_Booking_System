@@ -273,3 +273,76 @@ class AuthService:
         if token:
             token.revoked = True
             await db.commit()
+
+    @staticmethod
+    async def request_password_reset(db: AsyncSession, email: str) -> None:
+        """Generate password reset token and send email."""
+        from app.models.users import User
+        from app.models.password_reset import PasswordResetToken
+        from app.services.email_service import EmailService
+        import secrets
+
+        user = (await db.execute(
+            select(User).where(User.email == email)
+        )).scalar_one_or_none()
+
+        if not user:
+            # Don't leak user existence, just return success
+            return
+
+        # Generate reset token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        reset_token = PasswordResetToken(
+            user_id=user.id,
+            token=token,
+            expires_at=expires_at,
+        )
+        db.add(reset_token)
+        await db.commit()
+
+        # Send email
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        await EmailService.send_password_reset(
+            user_email=user.email,
+            user_name=user.full_name or "User",
+            reset_link=reset_link,
+        )
+
+    @staticmethod
+    async def reset_password(db: AsyncSession, token: str, new_password: str) -> bool:
+        """Reset password using valid token."""
+        from app.models.users import User
+        from app.models.password_reset import PasswordResetToken
+
+        reset_token = (await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token == token,
+                PasswordResetToken.used_at.is_(None),
+            )
+        )).scalar_one_or_none()
+
+        if not reset_token:
+            return False
+
+        # Check expiry
+        if reset_token.expires_at < datetime.now(timezone.utc):
+            return False
+
+        # Get user and update password
+        user = (await db.execute(
+            select(User).where(User.id == reset_token.user_id)
+        )).scalar_one_or_none()
+
+        if not user:
+            return False
+
+        user.hashed_password = security.hash_password(new_password)
+        user.updated_at = datetime.now(timezone.utc)
+
+        # Mark token as used
+        reset_token.used_at = datetime.now(timezone.utc)
+
+        await db.commit()
+        return True
