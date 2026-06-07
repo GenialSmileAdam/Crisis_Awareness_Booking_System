@@ -406,10 +406,10 @@ export default function AdminDashboard() {
                       contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
                     />
-                    <Bar dataKey="green" name="Green" stackId="a" fill="#A8FF3E" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Green"); }} />
-                    <Bar dataKey="amber" name="Amber" stackId="a" fill="#FF8C42" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Amber"); }} />
-                    <Bar dataKey="red" name="Red" stackId="a" fill="#FF4560" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Red"); }} />
-                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#B00020" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); setPagination(p => ({ ...p, offset: 0 })); openTierModal("Critical"); }} />
+                    <Bar dataKey="green" name="Green" stackId="a" fill="#A8FF3E" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); openTierModal("Green"); }} />
+                    <Bar dataKey="amber" name="Amber" stackId="a" fill="#FF8C42" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); openTierModal("Amber"); }} />
+                    <Bar dataKey="red" name="Red" stackId="a" fill="#FF4560" cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); openTierModal("Red"); }} />
+                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#B00020" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.class_level); openTierModal("Critical"); }} />
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="flex gap-4 text-xs mt-3 justify-center">
