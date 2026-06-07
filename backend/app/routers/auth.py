@@ -337,8 +337,10 @@ async def admin_reset_staff_password(
     current_user: dict = Depends(get_current_user),
 ):
     """Admin: Send password reset email to staff member."""
-    # Check if admin
-    if not current_user.get("is_admin"):
+    # Check if admin - accept is_admin flag or unit_head role
+    user_roles = current_user.get("roles", [])
+    is_admin = current_user.get("is_admin", False)
+    if not (is_admin or "unit_head" in user_roles):
         raise HTTPException(status_code=403, detail="Admin only")
 
     staff_id = payload.get("staff_id")

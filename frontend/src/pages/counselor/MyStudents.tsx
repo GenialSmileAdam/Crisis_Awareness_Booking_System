@@ -136,9 +136,11 @@ export default function MyStudents() {
 
     try {
       await riskOverrideMutate({
-        student_id: overrideModal.id,
-        override_tier: overrideModal.newTier.toLowerCase() as any,
-        justification: overrideModal.justification
+        studentId: overrideModal.id,
+        payload: {
+          override_tier: overrideModal.newTier.toLowerCase() as any,
+          justification: overrideModal.justification
+        }
       });
       setOverrides((prev) => ({ ...prev, [overrideModal.id]: overrideModal.newTier.toLowerCase() as RiskTier }));
       toast.success(`Risk tier overridden for ${overrideModal.name}`);
