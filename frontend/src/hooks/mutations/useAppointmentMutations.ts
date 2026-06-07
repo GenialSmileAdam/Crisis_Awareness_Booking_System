@@ -59,3 +59,60 @@ export function useUpdateAppointment(): UseMutationResult<AppointmentResponse, E
     },
   });
 }
+
+/**
+ * Request an appointment (student submits request)
+ */
+export function useRequestAppointment(): UseMutationResult<AppointmentResponse, Error, BookAppointmentPayload> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: BookAppointmentPayload) => {
+      return apiRequest<AppointmentResponse>("POST", "/appointments/request", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+    onError: (error: Error) => {
+      console.error("Failed to request appointment:", error);
+    },
+  });
+}
+
+/**
+ * Approve an appointment request (psychologist/admin only)
+ */
+export function useApproveAppointment(): UseMutationResult<AppointmentResponse, Error, string> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (appointmentId: string) => {
+      return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/approve`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+    onError: (error: Error) => {
+      console.error("Failed to approve appointment:", error);
+    },
+  });
+}
+
+/**
+ * Reject an appointment request (psychologist/admin only)
+ */
+export function useRejectAppointment(): UseMutationResult<AppointmentResponse, Error, string> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (appointmentId: string) => {
+      return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/reject`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+    onError: (error: Error) => {
+      console.error("Failed to reject appointment:", error);
+    },
+  });
+}
