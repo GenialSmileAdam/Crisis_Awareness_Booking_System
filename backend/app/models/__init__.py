@@ -43,7 +43,7 @@ __all__ = [
     "AuditLog",
     "sessions_table",
     "users_table",
-    "feedbacks",
+    "Feedback",
     "PsychologistAvailability",
     "PsychologistBusyBlock",
     "PasswordResetToken",
