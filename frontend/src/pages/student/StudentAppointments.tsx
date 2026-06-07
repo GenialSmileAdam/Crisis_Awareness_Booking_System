@@ -92,7 +92,6 @@ export default function StudentAppointments() {
     setSelectedPsychologist(null);
     setSelectedDate(null);
     setSelectedSlot(null);
-    setAvailableSlots([]);
     setNotes("");
     setMode("Virtual");
     setBookingSuccess(false);
@@ -106,7 +105,6 @@ export default function StudentAppointments() {
     setSelectedPsychologist(p);
     setSelectedDate(null);
     setSelectedSlot(null);
-    setAvailableSlots([]);
     setStep(2);
   };
 
@@ -288,7 +286,7 @@ export default function StudentAppointments() {
                       <div className="font-semibold text-sm">{selectedPsychologist?.full_name}</div>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setStep(1); setSelectedDate(null); setSelectedSlot(null); setAvailableSlots([]); }} className="text-xs gap-1.5">
+                  <Button variant="ghost" size="sm" onClick={() => { setStep(1); setSelectedDate(null); setSelectedSlot(null); }} className="text-xs gap-1.5">
                     <Pencil className="h-3 w-3" /> Change
                   </Button>
                 </div>
@@ -528,7 +526,6 @@ export default function StudentAppointments() {
                       </div>
                       <div className="flex gap-2 pt-1">
                         <Button size="sm" variant="ghost" className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => {
-                          setMyAppointments((prev) => prev.filter((x) => x.id !== a.id));
                           toast.success("Appointment cancelled");
                         }}>
                           Cancel
