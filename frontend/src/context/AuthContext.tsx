@@ -200,9 +200,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearAuthState();
       toast.success("You've been signed out.");
-      // Redirect to Campus One logout endpoint
-      const CAMPUS_ONE_LOGOUT_URL = "https://auth.campusone.com.ng/api/auth/logout";
-      window.location.href = CAMPUS_ONE_LOGOUT_URL;
+      // Redirect to login page - Campus One session will be handled on next auth attempt
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 500);
     }
   };
 
