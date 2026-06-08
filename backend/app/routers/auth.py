@@ -176,7 +176,7 @@ async def callback(
             select(StaffModel).where(StaffModel.user_id == user.id)
         )).scalar_one_or_none()
         staff_type_val = staff_record.staff_type.value if staff_record and staff_record.staff_type else None
-        staff_id_val = str(staff_record.id) if staff_record else None
+        staff_id_val = staff_record.staff_id if staff_record else None
 
         # Fetch student_id if student
         from app.models.students import Student as StudentModel
