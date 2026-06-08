@@ -378,7 +378,8 @@ class AppointmentService:
                 psychologist_user.c.deleted_at.is_(None),
             )
         )
-        if current_user and current_user.get("role") == "psychologist":
+        _cu_roles = current_user.get("roles", []) if current_user else []
+        if current_user and "psychologist" in _cu_roles and "unit_head" not in _cu_roles:
             query = query.where(Appointment.psychologist_id == current_user["id"])
         if filters.get("psychologist_id"):
             query = query.where(Appointment.psychologist_id == filters["psychologist_id"])
@@ -547,7 +548,8 @@ class AppointmentService:
                 psychologist_user.c.deleted_at.is_(None),
             )
         )
-        if current_user and current_user.get("role") == "psychologist":
+        _cu_roles = current_user.get("roles", []) if current_user else []
+        if current_user and "psychologist" in _cu_roles and "unit_head" not in _cu_roles:
             query = query.where(Appointment.psychologist_id == current_user["id"])
         row = (await db.execute(query)).first()
         if not row:

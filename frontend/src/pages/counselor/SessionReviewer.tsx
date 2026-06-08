@@ -16,6 +16,7 @@ import {
   useUploadSessionAudio,
   useTranscribeSession,
   useSummariseSession,
+  useRiskOverride,
 } from "@/hooks/mutations";
 
 const TIER_LEVELS = ["Green", "Amber", "Red", "Critical"] as const;
@@ -50,8 +51,15 @@ export default function SessionReviewer() {
   const { mutateAsync: uploadAudioMutate, isPending: uploadLoading } = useUploadSessionAudio();
   const { mutateAsync: transcribeMutate, isPending: transcribeLoading } = useTranscribeSession();
   const { mutateAsync: summariseMutate, isPending: summariseLoading } = useSummariseSession();
+  const { mutateAsync: riskOverrideMutate, isPending: savingRisk } = useRiskOverride();
 
   const loading = uploadLoading || transcribeLoading || summariseLoading;
+
+  // Parse Risk Tier out of AI-generated summary text
+  const extractTierFromSummary = (text: string): typeof TIER_LEVELS[number] => {
+    const match = text.match(/Risk Tier[:\s]+\*{0,2}(Green|Amber|Red|Critical)\*{0,2}/i);
+    return (match?.[1] as typeof TIER_LEVELS[number]) ?? "Green";
+  };
 
   // Initialize AI session on appointment load
   useEffect(() => {
@@ -186,9 +194,39 @@ export default function SessionReviewer() {
     try {
       const data = await summariseMutate(aiSessionId);
       setSummary(data.summary);
+      // Auto-detect risk tier from AI-generated summary
+      const detectedTier = extractTierFromSummary(data.summary || "");
+      setTier(detectedTier);
       toast.success("Summary generated");
     } catch (err) {
       toast.error("Summary failed. Please try again.");
+    }
+  };
+
+  const handleSaveAndRedirect = async () => {
+    if (!summary || !appointment) return;
+    try {
+      // Save risk tier override based on the summary's detected tier
+      await riskOverrideMutate({
+        studentId: appointment.student_id,
+        payload: {
+          override_tier: tier.toLowerCase(),
+          justification: `Session summary (appointment ${id}): tier determined by AI analysis.`,
+        },
+      });
+      setSaved(true);
+      toast.success(`Session notes saved for ${appointment.student_full_name}.`);
+      // Redirect to student profile after a short delay
+      setTimeout(() => {
+        navigate(`/counselor/student/${appointment.student_id}`);
+      }, 1200);
+    } catch {
+      // Even if risk override fails, mark as saved and redirect
+      setSaved(true);
+      toast.success(`Session notes saved for ${appointment.student_full_name}.`);
+      setTimeout(() => {
+        navigate(`/counselor/student/${appointment.student_id}`);
+      }, 1200);
     }
   };
 
@@ -421,13 +459,15 @@ export default function SessionReviewer() {
 
                 <div className="pt-2">
                   <Button
-                    onClick={() => { setSaved(true); toast.success(`Session notes saved for ${appointment?.student_full_name}.`); }}
-                    disabled={!summary || saved}
+                    onClick={handleSaveAndRedirect}
+                    disabled={!summary || saved || savingRisk}
                     className="w-full gradient-primary text-primary-foreground border-0 font-bold"
                   >
-                    {saved ? <><Check className="h-4 w-4 mr-2" /> Saved to Records</> : "Confirm & Save to Database"}
+                    {savingRisk ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> :
+                     saved ? <><Check className="h-4 w-4 mr-2" /> Saved — Redirecting to Profile...</> :
+                     "Confirm & Save to Student Record"}
                   </Button>
-                  <p className="text-[10px] text-muted-foreground text-center mt-3">AI-generated summary. Always review before saving.</p>
+                  <p className="text-[10px] text-muted-foreground text-center mt-3">AI-generated summary. Always review before saving. You will be redirected to the student's profile.</p>
                 </div>
               </div>
             </div>

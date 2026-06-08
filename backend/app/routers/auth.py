@@ -169,20 +169,71 @@ async def callback(
         logger.info(f"STEP 7️⃣: Generate JWT access token")
         roles = claims.get("roles", [])
         logger.info(f"   Roles from Campus One: {roles}")
+
+        # Fetch staff_type from Staff record so JWT has correct role string
+        from app.models.staff import Staff as StaffModel
+        staff_record = (await db.execute(
+            select(StaffModel).where(StaffModel.user_id == user.id)
+        )).scalar_one_or_none()
+        staff_type_val = staff_record.staff_type.value if staff_record and staff_record.staff_type else None
+        staff_id_val = str(staff_record.id) if staff_record else None
+
+        # Fetch student_id if student
+        from app.models.students import Student as StudentModel
+        student_record = (await db.execute(
+            select(StudentModel).where(StudentModel.user_id == user.id)
+        )).scalar_one_or_none()
+        student_id_val = student_record.student_id if student_record else None
+
         jwt_token = create_access_token(
             user_id=str(user.id),
             user_type=user.role,
             full_name=user.full_name,
             roles=roles,
             is_admin=user.is_admin,
+            staff_type=staff_type_val,
+            staff_id=staff_id_val,
+            student_id=student_id_val,
         )
-        logger.info(f"   JWT Token: {jwt_token[:50]}...{jwt_token[-50:]}")
+        logger.info(f"   staff_type={staff_type_val}, student_id={student_id_val}")
         logger.info(f"   ✅ JWT generated")
+
+        # Step 8: Create and store our own refresh token, set as HTTP-only cookie
+        logger.info(f"STEP 8️⃣: Create SafeSpace refresh token")
+        ss_refresh_token = create_refresh_token(str(user.id))
+        tok_hash = hash_token(ss_refresh_token)
+        tok_expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        # Revoke any existing refresh tokens for this user first
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked == False)
+            .values(revoked=True)
+        )
+        db.add(RefreshToken(
+            user_id=user.id,
+            token_hash=tok_hash,
+            expires_at=tok_expires,
+        ))
+        await db.commit()
+        logger.info(f"   ✅ Refresh token stored (expires {tok_expires})")
 
         # Build response with token in fragment (safer than query param)
         response = RedirectResponse(
             url=f"{frontend_url.rstrip('/')}/auth/callback#{urlencode({'token': jwt_token})}",
             status_code=302,
+        )
+
+        # Set refresh token as HTTP-only cookie (30 days)
+        is_production = "localhost" not in settings.FRONTEND_URL
+        response.set_cookie(
+            "refresh_token",
+            ss_refresh_token,
+            httponly=True,
+            secure=is_production,
+            samesite="lax",
+            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+            path="/",
         )
 
         # Clean up OIDC cookies

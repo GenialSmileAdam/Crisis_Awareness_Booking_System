@@ -93,7 +93,7 @@ export function AvailabilityCalendarNew() {
       }));
 
       // Save the full week schedule
-      await saveScheduleMutate({ schedule });
+      await saveScheduleMutate(schedule);
 
       toast.success(`Schedule saved for ${selectedDayName}!`);
       setSelectedDay(null);
