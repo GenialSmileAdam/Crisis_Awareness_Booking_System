@@ -11,6 +11,7 @@ from app.routers import (
     checkins,
     consent,
     forum,
+    notifications,
     risk_scores,
     staff,
     students,
@@ -67,6 +68,7 @@ app.include_router(analytics.router)
 app.include_router(availability.router)
 app.include_router(forum.router)
 app.include_router(feedback.router)
+app.include_router(notifications.router)
 
 @app.get("/")
 async def root():

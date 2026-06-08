@@ -1,21 +1,23 @@
 import httpx
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.core.config import settings
 from app.models.feedback import Feedback
 from app.schemas.feedback import FeedbackRequest
 
 
-def log_feedback(db: Session, feedback: FeedbackRequest) -> Feedback:
+async def log_feedback(db: AsyncSession, feedback: FeedbackRequest, user_type: Optional[str] = None) -> Feedback:
     record = Feedback(
         name=feedback.name,
         email=feedback.email,
         message=feedback.message,
         rating=feedback.rating,
+        user_type=user_type,
     )
     db.add(record)
-    db.commit()
-    db.refresh(record)
+    await db.commit()
+    await db.refresh(record)
     return record
 
 

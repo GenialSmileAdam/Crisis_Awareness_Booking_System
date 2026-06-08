@@ -66,6 +66,7 @@ class CampusOneOIDC:
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
+            "prompt": "select_account",  # Force account selection on every login
         }
 
         url = f"{self.AUTHORIZE_URL}?{urlencode(params)}"

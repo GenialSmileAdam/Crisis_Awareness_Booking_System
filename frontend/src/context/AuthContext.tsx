@@ -74,8 +74,14 @@ function hasValidSession(token: string | null, user: JWTPayload | null): boolean
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Initialize state from localStorage with safe parsing
+  // Always decode from the stored JWT so all fields (student_id, staff_id, etc.)
+  // are present, even if the stored USER_KEY object is stale/incomplete.
   const [user, setUser] = useState<JWTPayload | null>(() => {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (token && token.split(".").length === 3) {
+      const decoded = decodeJWT(token);
+      if (decoded) return decoded;
+    }
     const stored = localStorage.getItem(USER_KEY);
     return safeParseJSON(stored, null);
   });
@@ -173,7 +179,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: userInfo.role,
       is_admin: userInfo.is_admin,
       name: userInfo.name,
-      roles: userInfo.roles || [],  // Store Campus One roles array
+      roles: userInfo.roles || [],
+      student_id: userInfo.student_id ?? null,
+      staff_id: userInfo.staff_id ?? null,
     };
 
     // Get token from localStorage (set by AuthCallback)

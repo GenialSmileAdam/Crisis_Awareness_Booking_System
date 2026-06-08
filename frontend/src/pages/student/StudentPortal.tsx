@@ -1,15 +1,15 @@
 import { useMemo, useState, useEffect } from "react";
-import { Bell, Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle, LogOut } from "lucide-react";
+import { Home, ClipboardList, History, BookOpen, Calendar, MessageSquare, ChevronRight, Check, AlertTriangle, LogOut } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { Link } from "react-router-dom";
 import { useWrs } from "@/context/WrsContext";
 import { useAuth } from "@/context/AuthContext";
-import { tierFromWrs, RECENT_CHECKINS, PHQ9_QUESTIONS, PHQ9_OPTIONS, GAD7_QUESTIONS, GAD7_OPTIONS, PULSE_QUESTIONS, colorFromWrs } from "@/data/mock";
+import { tierFromWrs, colorFromWrs } from "@/lib/wrs";
+import { PHQ9_QUESTIONS, PHQ9_OPTIONS, GAD7_QUESTIONS, GAD7_OPTIONS, PULSE_QUESTIONS } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
@@ -20,8 +20,31 @@ import { usePendingCheckins, useStudentAppointments, useStudentCheckins, useNext
 import { useSubmitCheckin } from "@/hooks/mutations";
 import { studentSidebarItems } from "@/data/sidebar";
 import { OnboardingSlides } from "@/components/OnboardingSlides";
+import { NotificationBell } from "@/components/NotificationBell";
 
-function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
+function SubmitButton({ onClick, isSubmitting }: { onClick: () => void; isSubmitting: boolean }) {
+  return (
+    <Button
+      onClick={onClick}
+      disabled={isSubmitting}
+      className={cn(
+        "w-full text-primary-foreground border-0 transition-all duration-200",
+        isSubmitting ? "bg-primary/70 cursor-not-allowed" : "gradient-primary active:scale-[0.98]"
+      )}
+    >
+      {isSubmitting ? (
+        <span className="flex items-center gap-2">
+          <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          Submitting…
+        </span>
+      ) : (
+        "Submit Check-in"
+      )}
+    </Button>
+  );
+}
+
+function PHQ9Form({ onSubmit, isSubmitting }: { onSubmit: (responses: Record<string, number>) => void; isSubmitting: boolean }) {
   const [answers, setAnswers] = useState<number[]>(Array(9).fill(-1));
   const submit = () => {
     if (answers.some((a) => a < 0)) return toast.error("Please answer all questions");
@@ -43,12 +66,12 @@ function PHQ9Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) 
           </div>
         </div>
       ))}
-      <Button onClick={submit} className="w-full gradient-primary text-primary-foreground border-0">Submit Check-in</Button>
+      <SubmitButton onClick={submit} isSubmitting={isSubmitting} />
     </div>
   );
 }
 
-function GAD7Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
+function GAD7Form({ onSubmit, isSubmitting }: { onSubmit: (responses: Record<string, number>) => void; isSubmitting: boolean }) {
   const [answers, setAnswers] = useState<number[]>(Array(7).fill(-1));
   const submit = () => {
     if (answers.some((a) => a < 0)) return toast.error("Please answer all questions");
@@ -70,12 +93,12 @@ function GAD7Form({ onSubmit }: { onSubmit: (responses: Record<string, number>) 
           </div>
         </div>
       ))}
-      <Button onClick={submit} className="w-full gradient-primary text-primary-foreground border-0">Submit Check-in</Button>
+      <SubmitButton onClick={submit} isSubmitting={isSubmitting} />
     </div>
   );
 }
 
-function PulseForm({ onSubmit }: { onSubmit: (responses: Record<string, number>) => void }) {
+function PulseForm({ onSubmit, isSubmitting }: { onSubmit: (responses: Record<string, number>) => void; isSubmitting: boolean }) {
   const [vals, setVals] = useState<number[]>(Array(5).fill(3));
   const submit = () => {
     const responses: Record<string, number> = {};
@@ -89,12 +112,17 @@ function PulseForm({ onSubmit }: { onSubmit: (responses: Record<string, number>)
         <div key={i}>
           <div className="text-sm font-medium mb-3">{i + 1}. {q}</div>
           <div className="flex items-center gap-4">
-            <Slider value={[vals[i]]} min={1} max={5} step={1} onValueChange={(v) => setVals((arr) => arr.map((x, j) => (j === i ? v[0] : x)))} className="flex-1" />
+            <div className="flex-1">
+              <Slider value={[vals[i]]} min={1} max={5} step={1} onValueChange={(v) => setVals((arr) => arr.map((x, j) => (j === i ? v[0] : x)))} />
+              <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5 px-0.5">
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+              </div>
+            </div>
             <span className="text-2xl w-10 text-center">{emojis[vals[i] - 1]}</span>
           </div>
         </div>
       ))}
-      <Button onClick={submit} className="w-full gradient-primary text-primary-foreground border-0">Submit Check-in</Button>
+      <SubmitButton onClick={submit} isSubmitting={isSubmitting} />
     </div>
   );
 }
@@ -120,35 +148,46 @@ export default function StudentPortal() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [hotlineOpen, setHotlineOpen] = useState(false);
 
+  // Only auto-switch tab when the pending list changes (e.g. after submit),
+  // NOT on every tab change — removing 'tab' from deps prevents the reset loop.
   useEffect(() => {
     const pending = pendingCheckinsQuery.data || [];
-    if (pending.length > 0 && tab !== (pending[0].type as SurveyTab)) {
+    if (pending.length > 0) {
       setTab(pending[0].type as SurveyTab);
     }
-  }, [pendingCheckinsQuery.data?.length, tab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCheckinsQuery.data?.length]);
 
   const pendingSurveys = pendingCheckinsQuery.data || [];
   const isLoading = pendingCheckinsQuery.isPending;
   const pendingLoadError = !!pendingCheckinsQuery.error;
   const hasCompletedRecently = pendingSurveys.length === 0 && !isLoading;
 
-  const upcomingAppointments = (appointmentsQuery.data?.data || []).filter(
+  const allAppointments = appointmentsQuery.data?.data || [];
+  const upcomingAppointments = allAppointments.filter(
     (a) => a.status === "booked" && new Date(a.start_time) > new Date()
   );
+  const completedSessions = allAppointments.filter((a) => a.status === "completed");
+  // Assigned counselor = psychologist from most recent appointment (any status)
+  const assignedCounselor = allAppointments.length > 0
+    ? [...allAppointments].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0]
+    : null;
   const recentCheckins = checkinsQuery.data?.data || [];
   const nextSlot = nextSlotQuery.data;
-  const homeLoading = appointmentsQuery.isPending || checkinsQuery.isPending || nextSlotQuery.isPending;
+  // Disabled queries (when studentId is null) have isPending:true in React Query v5
+  // but will never fetch — only count them as loading when studentId is known.
+  const homeLoading = nextSlotQuery.isPending ||
+    (!!studentId && (appointmentsQuery.isPending || checkinsQuery.isPending));
 
   const tier = tierFromWrs(wrs);
 
   const handleSubmit = async (responses: Record<string, number>) => {
-    if (!studentId) return;
     const score = tab === "phq9" || tab === "gad7"
       ? Object.values(responses).reduce((a, b) => a + b, 0)
       : null;
 
     submitMutation.mutate(
-      { student_id: studentId, type: tab, responses, score },
+      { student_id: studentId ?? "", type: tab, responses, score },
       {
         onSuccess: (result) => {
           if (result.crisis_escalation_required) {
@@ -156,9 +195,11 @@ export default function StudentPortal() {
           } else {
             toast.success("Check-in recorded. Thank you.");
           }
-          if (score !== null) {
-            const newWrs = Math.round((score / 27) * 100);
-            setWrs(newWrs);
+          if (result.wrs_score !== undefined) {
+            setWrs(Math.round(result.wrs_score));
+          } else if (score !== null) {
+            const maxScore = tab === "gad7" ? 21 : 27;
+            setWrs(Math.round((score / maxScore) * 100));
           }
           const pending = pendingSurveys.filter(p => p.type !== tab);
           if (pending.length > 0) {
@@ -203,21 +244,7 @@ export default function StudentPortal() {
           </p>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full relative">
-                <Bell className="h-4 w-4" />
-                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuItem className="flex-col items-start py-3">
-                <div className="text-sm font-medium">Session reviewed</div>
-                <div className="text-xs text-muted-foreground">Your counselor Dr. Amara reviewed your last session.</div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NotificationBell />
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => { localStorage.removeItem("checkin_gate_passed"); logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />
@@ -239,7 +266,7 @@ export default function StudentPortal() {
                 We noticed you recently accessed crisis resources. Please complete this quick pulse survey to help us understand how you're feeling right now.
               </p>
               <div className="w-full text-left bg-muted/30 p-4 rounded-xl border border-border mt-4">
-                <PulseForm onSubmit={handleSubmit} />
+                <PulseForm onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} />
               </div>
             </div>
           </DialogContent>
@@ -298,9 +325,9 @@ export default function StudentPortal() {
                 {tabLabels[tab]} already submitted. Select another survey above.
               </div>
             ) : (
-              tab === "phq9" ? <PHQ9Form onSubmit={handleSubmit} /> :
-              tab === "gad7" ? <GAD7Form onSubmit={handleSubmit} /> :
-              <PulseForm onSubmit={handleSubmit} />
+              tab === "phq9" ? <PHQ9Form onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} /> :
+              tab === "gad7" ? <GAD7Form onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} /> :
+              <PulseForm onSubmit={handleSubmit} isSubmitting={submitMutation.isPending} />
             )}
           </div>
         )}
@@ -392,43 +419,58 @@ export default function StudentPortal() {
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-display font-bold">Recent Check-ins</h3>
+                <h3 className="font-display font-bold">Recent Activity</h3>
                 <Link to="/student/history" className="text-xs text-primary hover:underline">View all</Link>
               </div>
               {homeLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted rounded animate-pulse" />)}
                 </div>
-              ) : recentCheckins.length === 0 ? (
+              ) : recentCheckins.length === 0 && completedSessions.length === 0 ? (
                 <div className="py-4 flex flex-col items-center justify-center text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest">No recent data</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">Complete a check-in to see history</p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentCheckins.slice(0, 4).map((c) => {
-                    const typeLabel = c.type === "phq9" ? "PHQ-9" : c.type === "gad7" ? "GAD-7" : "Pulse";
+              ) : (() => {
+                const checkinItems = recentCheckins.map(c => ({
+                  key: `c-${c.id}`,
+                  label: c.type === "phq9" ? "PHQ-9" : c.type === "gad7" ? "GAD-7" : "Pulse Survey",
+                  date: c.submitted_at,
+                  badge: (() => {
                     const wrs = (c.type === "phq9" || c.type === "gad7") && c.score !== null
                       ? Math.round((c.score / 27) * 100) : null;
-                    const color = wrs !== null ? colorFromWrs(wrs) : "#6B7280";
-                    return (
-                      <div key={c.id} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50 last:border-0">
+                    return wrs !== null ? { text: `${wrs}/100`, color: colorFromWrs(wrs) } : null;
+                  })(),
+                }));
+                const sessionItems = completedSessions.map(a => ({
+                  key: `s-${a.id}`,
+                  label: `Session · ${a.psychologist_full_name || "Counselor"}`,
+                  date: a.start_time,
+                  badge: { text: "✓ Done", color: "#A8FF3E" },
+                }));
+                const merged = [...checkinItems, ...sessionItems]
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .slice(0, 4);
+                return (
+                  <div className="space-y-2">
+                    {merged.map((item) => (
+                      <div key={item.key} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50 last:border-0">
                         <div>
-                          <span className="font-medium">{typeLabel}</span>
+                          <span className="font-medium">{item.label}</span>
                           <span className="text-muted-foreground ml-2">
-                            {new Date(c.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
                         </div>
-                        {wrs !== null && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${color}25`, color }}>
-                            {wrs}/100
+                        {item.badge && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${item.badge.color}25`, color: item.badge.color }}>
+                            {item.badge.text}
                           </span>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div className="pt-4 mt-auto border-t border-border flex flex-col">
               <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Your recent trend</div>
@@ -460,15 +502,15 @@ export default function StudentPortal() {
                     <div className="h-2.5 bg-muted rounded w-2/3 animate-pulse" />
                   </div>
                 </div>
-              ) : upcomingAppointments.length > 0 ? (
+              ) : assignedCounselor ? (
                 <>
                   <div className="flex items-center gap-3">
                     <div className="h-12 w-12 rounded-full gradient-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
-                      {(upcomingAppointments[0].psychologist_full_name || "?").split(" ").map(p => p[0]).slice(0, 2).join("")}
+                      {(assignedCounselor.psychologist_full_name || "?").split(" ").map(p => p[0]).slice(0, 2).join("")}
                     </div>
                     <div>
-                      <div className="font-semibold">{upcomingAppointments[0].psychologist_full_name}</div>
-                      <div className="text-xs text-muted-foreground">Counselor</div>
+                      <div className="font-semibold">{assignedCounselor.psychologist_full_name}</div>
+                      <div className="text-xs text-muted-foreground">Your Counselor</div>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4 mb-5">
@@ -476,7 +518,7 @@ export default function StudentPortal() {
                       <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Message
                     </Button>
                     <Link to="/student/appointments" className="flex-1">
-                      <Button size="sm" className="gradient-primary text-primary-foreground border-0 w-full">Book</Button>
+                      <Button size="sm" className="gradient-primary text-primary-foreground border-0 w-full">Book Again</Button>
                     </Link>
                   </div>
                 </>
@@ -487,8 +529,8 @@ export default function StudentPortal() {
                       <MessageSquare className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="font-semibold text-sm">No counselor assigned</div>
-                      <div className="text-xs text-muted-foreground">Book a session to get started</div>
+                      <div className="font-semibold text-sm">No counselor yet</div>
+                      <div className="text-xs text-muted-foreground">You'll be matched when you book your first session</div>
                     </div>
                   </div>
                   <div className="mt-4 mb-5">

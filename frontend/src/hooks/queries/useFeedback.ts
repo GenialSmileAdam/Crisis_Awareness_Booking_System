@@ -8,6 +8,7 @@ export interface FeedbackItem {
   email: string;
   message: string;
   rating: number | null;
+  user_type: "student" | "psychologist" | "admin" | null;
   created_at: string;
 }
 

@@ -19,7 +19,7 @@ import { CrisisBanner } from "@/components/CrisisBanner";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { counselorSidebarItems, adminSidebarItems } from "@/data/sidebar";
-import { colorFromWrs } from "@/data/mock";
+import { colorFromWrs } from "@/lib/wrs";
 import {
   useStudent,
   useStudentRiskScore,
@@ -101,7 +101,7 @@ export default function CounselorStudent() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const { student_id } = useParams<{ student_id: string }>();
-  const sidebarItems = user?.role === "admin" ? adminSidebarItems : counselorSidebarItems;
+  const sidebarItems = user?.roles?.includes("unit_head") ? adminSidebarItems : counselorSidebarItems;
 
   // UI state only
   const [checkinOffset, setCheckinOffset] = useState(0);

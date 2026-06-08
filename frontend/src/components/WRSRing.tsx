@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { colorFromWrs } from "@/data/mock";
+import { colorFromWrs } from "@/lib/wrs";
 
 export function WRSRing({ value, size = 220, label, hideValue = false }: { value: number; size?: number; label?: string; hideValue?: boolean }) {
   const [animated, setAnimated] = useState(0);

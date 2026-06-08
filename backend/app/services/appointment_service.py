@@ -244,6 +244,15 @@ class AppointmentService:
                     alert_sent_at=datetime.utcnow(),
                 )
             )
+            # Crisis bookings are auto-confirmed — assign psychologist immediately
+            await db.execute(
+                update(Student)
+                .where(
+                    Student.student_id == student.student_id,
+                    Student.assigned_psychologist_id.is_(None),
+                )
+                .values(assigned_psychologist_id=appointment_data.psychologist_id)
+            )
 
         await db.commit()
         await db.refresh(appointment)
@@ -282,6 +291,15 @@ class AppointmentService:
                 ),
             )
             .values(status=AppointmentStatus.rejected)
+        )
+        # Assign the psychologist to the student if not already assigned
+        await db.execute(
+            update(Student)
+            .where(
+                Student.student_id == appointment.student_id,
+                Student.assigned_psychologist_id.is_(None),
+            )
+            .values(assigned_psychologist_id=appointment.psychologist_id)
         )
         await db.commit()
         return await cls.get_by_id(db, appointment.id)

@@ -1,17 +1,16 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Bell, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { tierFromWrs, colorFromWrs, RiskTier } from "@/data/mock";
+import { tierFromWrs, colorFromWrs, RiskTier } from "@/lib/wrs";
 import { cn, formatWRS } from "@/lib/utils";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -31,6 +30,7 @@ import {
 } from "@/hooks/mutations";
 import type { Appointment } from "@/api/appointments";
 import type { RiskTier as RiskTierType } from "@/api/riskScores";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const TIERS = ["All", "Green", "Amber", "Red", "Critical"] as const;
 const SESSION_FILTERS = ["All", "Upcoming", "Completed", "Cancelled"] as const;
@@ -304,21 +304,7 @@ export default function CounselorDashboard() {
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <h1 className="font-display text-lg md:text-xl font-bold">Welcome, {user?.name} 👋</h1>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full relative">
-                <Bell className="h-4 w-4" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuItem className="flex-col items-start">
-                <div className="text-sm font-medium">3 new High-Risk alerts</div>
-                <div className="text-xs text-muted-foreground">Review priority students now</div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NotificationBell />
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />

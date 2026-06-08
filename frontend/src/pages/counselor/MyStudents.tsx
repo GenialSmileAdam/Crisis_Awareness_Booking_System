@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { colorFromWrs, RiskTier, FACULTY_WRS } from "@/data/mock";
+import { colorFromWrs, RiskTier } from "@/lib/wrs";
 import { cn, formatWRS } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
@@ -48,6 +48,15 @@ export default function MyStudents() {
 
   const students = studentsData?.data || [];
   const alerts = alertsData?.data || [];
+
+  const facultyChartData = useMemo(
+    () => (cohortData || []).map(d => ({
+      faculty: d.group,
+      avg: Math.round(d.average_wrs_score),
+      count: d.total || 0,
+    })),
+    [cohortData]
+  );
   const cohort = cohortData || [];
 
   const colorFromTier = (t: string) => {
@@ -326,12 +335,12 @@ export default function MyStudents() {
               <div className="label-eyebrow mb-1">Faculty WRS</div>
               <div className="font-display text-sm font-bold mb-4">Click bar to filter</div>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={FACULTY_WRS} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
+                <BarChart data={facultyChartData} margin={{ top: 20, right: 8, bottom: 0, left: -20 }}>
                   <XAxis dataKey="faculty" tick={false} axisLine={false} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
                   <Bar dataKey="avg" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(d: any) => { setFacultyFilter(d.faculty); setRosterPagination(p => ({ ...p, offset: 0 })); }}>
-                    {FACULTY_WRS.map((d, i) => (
+                    {facultyChartData.map((d, i) => (
                       <Cell key={i} fill={colorFromWrs(d.avg)} opacity={facultyFilter && facultyFilter !== d.faculty ? 0.3 : 1} />
                     ))}
                   </Bar>

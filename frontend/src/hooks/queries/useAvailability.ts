@@ -1,38 +1,26 @@
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
-import { apiRequest } from "@/api/client";
+import { getMySchedule, getBusyBlocks } from "@/api/availability";
+import type { DaySchedule, BusyBlock } from "@/api/availability";
+import { useAuth } from "@/context/AuthContext";
 
-export interface DaySchedule {
-  day: string;
-  start_time: string;
-  end_time: string;
-}
+export type { DaySchedule, BusyBlock };
 
-export interface BusyBlock {
-  id: string;
-  block_start: string;
-  block_end: string;
-  reason: string;
-  created_at: string;
-}
-
-/**
- * Placeholder hook - schedule is saved via POST /availability/schedule
- */
 export function useMySchedule(): UseQueryResult<DaySchedule[]> {
+  const { user } = useAuth();
+  const isStaff = user?.roles?.some(r => r === "psychologist" || r === "unit_head");
   return useQuery({
     queryKey: ["availability", "schedule"],
-    queryFn: async () => [],
-    enabled: false,
+    queryFn: getMySchedule,
+    enabled: !!isStaff,
   });
 }
 
-/**
- * Fetch busy blocks for the current user
- */
 export function useBusyBlocks(): UseQueryResult<BusyBlock[]> {
+  const { user } = useAuth();
+  const isStaff = user?.roles?.some(r => r === "psychologist" || r === "unit_head");
   return useQuery({
     queryKey: ["availability", "busyBlocks"],
-    queryFn: async () => [],
-    enabled: false,
+    queryFn: () => getBusyBlocks(false),
+    enabled: !!isStaff,
   });
 }

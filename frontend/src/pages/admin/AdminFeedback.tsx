@@ -70,7 +70,7 @@ export default function AdminFeedback() {
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
                   <th className="text-left p-3">Name</th>
-                  <th className="text-left p-3">Email</th>
+                  <th className="text-left p-3">Role</th>
                   <th className="text-left p-3">Message</th>
                   <th className="text-left p-3">Rating</th>
                   <th className="text-left p-3">Date</th>
@@ -90,19 +90,35 @@ export default function AdminFeedback() {
                     </td>
                   </tr>
                 ) : (
-                  feedback.map((item) => (
-                    <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                      <td className="p-3 font-medium">{item.name}</td>
-                      <td className="p-3 text-muted-foreground font-mono text-xs">{item.email}</td>
-                      <td className="p-3 text-muted-foreground max-w-xs truncate" title={item.message}>
-                        {item.message}
-                      </td>
-                      <td className="p-3">{renderStars(item.rating)}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {new Date(item.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </td>
-                    </tr>
-                  ))
+                  feedback.map((item) => {
+                    const roleColor = item.user_type === "student"
+                      ? "bg-blue-500/15 text-blue-500"
+                      : item.user_type === "psychologist"
+                      ? "bg-purple-500/15 text-purple-500"
+                      : item.user_type === "admin"
+                      ? "bg-amber-500/15 text-amber-600"
+                      : "bg-muted text-muted-foreground";
+                    const roleLabel = item.user_type
+                      ? item.user_type.charAt(0).toUpperCase() + item.user_type.slice(1)
+                      : "Unknown";
+                    return (
+                      <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                        <td className="p-3 font-medium">{item.name}</td>
+                        <td className="p-3">
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", roleColor)}>
+                            {roleLabel}
+                          </span>
+                        </td>
+                        <td className="p-3 text-muted-foreground max-w-xs truncate" title={item.message}>
+                          {item.message}
+                        </td>
+                        <td className="p-3">{renderStars(item.rating)}</td>
+                        <td className="p-3 text-muted-foreground">
+                          {new Date(item.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -110,7 +126,9 @@ export default function AdminFeedback() {
 
           <div className="flex items-center justify-between mt-6">
             <div className="text-xs text-muted-foreground">
-              Showing {offset + 1} to {Math.min(offset + limit, pagination?.total || 0)} of {pagination?.total || 0} feedback items
+              {pagination?.total
+                ? `Showing ${offset + 1} to ${Math.min(offset + limit, pagination.total)} of ${pagination.total} feedback items`
+                : "No feedback items"}
             </div>
             <div className="flex gap-2">
               <Button

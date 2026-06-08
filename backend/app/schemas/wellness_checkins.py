@@ -41,7 +41,7 @@ class WellnessCheckinResponse(WellnessCheckinBase):
 
 # What the client sends to submit a test
 class TestSubmission(BaseModel):
-    student_id: str
+    student_id: Optional[str] = None  # Informational only — server uses JWT for auth
     test_type: WellnessCheckinType   # 'pulse', 'phq9', 'gad7', etc.
     responses: Dict[str, Any]        # answers to questions
     score: Optional[int] = None      # total score (0-27 for PHQ-9, etc.)

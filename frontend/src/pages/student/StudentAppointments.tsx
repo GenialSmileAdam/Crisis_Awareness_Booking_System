@@ -34,6 +34,11 @@ export default function StudentAppointments() {
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
 
+  // State must be declared BEFORE any hooks that reference these values
+  const [selectedPsychologist, setSelectedPsychologist] = useState<any>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
   const appointmentsQuery = useStudentAppointments(studentId, 50, 0);
   const psychologistsQuery = usePsychologists();
   const availabilityQuery = useAppointmentAvailability(
@@ -41,10 +46,6 @@ export default function StudentAppointments() {
     selectedDate
   );
   const bookMutation = useBookAppointment();
-
-  const [selectedPsychologist, setSelectedPsychologist] = useState<any>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
 
@@ -227,16 +228,10 @@ export default function StudentAppointments() {
                       <div className="md:col-span-3 flex items-center justify-center gap-3 py-10 text-muted-foreground text-sm">
                         <NeonSpinner size={20} /> Loading counselors…
                       </div>
-                    ) : psychologistLoadError ? (
+                    ) : psychologistsQuery.error ? (
                       <div className="md:col-span-3 rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center">
                         <div className="font-semibold text-sm text-destructive mb-3">Unable to load counselors.</div>
-                        <Button variant="outline" onClick={async () => {
-                          setPsychologistLoadError(false);
-                          setPsychologistsLoading(true);
-                          try { setPsychologists(await listPsychologists()); }
-                          catch { setPsychologistLoadError(true); toast.error("Still failing — please refresh."); }
-                          finally { setPsychologistsLoading(false); }
-                        }}>Retry</Button>
+                        <Button variant="outline" onClick={() => psychologistsQuery.refetch()}>Retry</Button>
                       </div>
                     ) : (
                       psychologists.map((p) => (

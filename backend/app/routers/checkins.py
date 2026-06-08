@@ -25,10 +25,16 @@ async def submit_test(
     if current_user.get("user_type") != "student":
         raise HTTPException(status_code=403, detail="Only students can submit check-ins")
 
-    # Get student_id from JWT (not from request)
+    # Get student_id from JWT first, fall back to DB lookup
     student_id = current_user.get("student_id")
     if not student_id:
-        raise HTTPException(status_code=400, detail="Student ID not found in authentication token")
+        from app.models.students import Student
+        student_row = (await db.execute(
+            select(Student).where(Student.user_id == current_user["id"])
+        )).scalar_one_or_none()
+        if not student_row:
+            raise HTTPException(status_code=400, detail="Student record not found")
+        student_id = student_row.student_id
 
     # Optionally verify that the submitted student_id matches (security check)
     if data.student_id and data.student_id != student_id:
@@ -43,20 +49,21 @@ async def submit_test(
     )
     db.add(checkin)
     
-    # 2. Calculate WRS and tier (only for PHQ-9/GAD-7 that have a score)
-    wrs_score = 50.0
-    risk_tier = RiskTier.green
-    if data.score is not None and data.test_type in ("phq9", "gad7"):
-        wrs_score, tier_str = calculate_wrs_and_tier(data.test_type, data.score)
-        risk_tier = RiskTier(tier_str)  # Convert string to enum
+    # 2. Calculate WRS and tier for all check-in types
+    wrs_score, tier_str = calculate_wrs_and_tier(
+        data.test_type.value if hasattr(data.test_type, "value") else str(data.test_type),
+        data.score,
+        data.responses,
+    )
+    risk_tier = RiskTier(tier_str)
 
-        # Save risk score to history
-        risk = RiskScore(
-            student_id=student_id,
-            wrs_score=wrs_score,
-            tier=risk_tier
-        )
-        db.add(risk)
+    # Save risk score to history
+    risk = RiskScore(
+        student_id=student_id,
+        wrs_score=wrs_score,
+        tier=risk_tier,
+    )
+    db.add(risk)
 
     await db.commit()
 
@@ -146,14 +153,14 @@ async def list_pending_checkins(
 
     pending = []
 
-    # 1. Check Pulse: Daily
+    # 1. Check Pulse: Daily — use .scalars().first() to handle duplicate submissions safely
     pulse_today = (await db.execute(
         select(WellnessCheckin).where(
             WellnessCheckin.student_id == student_id,
             WellnessCheckin.type == WellnessCheckinType.pulse,
             WellnessCheckin.submitted_at >= today_start
-        )
-    )).scalar_one_or_none()
+        ).limit(1)
+    )).scalars().first()
 
     if not pulse_today:
         pending.append({
@@ -167,7 +174,7 @@ async def list_pending_checkins(
             WellnessCheckin.student_id == student_id,
             WellnessCheckin.type == WellnessCheckinType.phq9
         ).order_by(WellnessCheckin.submitted_at.desc()).limit(1)
-    )).scalar_one_or_none()
+    )).scalars().first()
 
     four_weeks_ago = now - timedelta(days=28)
     if not last_phq9 or last_phq9.submitted_at < four_weeks_ago:
@@ -182,7 +189,7 @@ async def list_pending_checkins(
             WellnessCheckin.student_id == student_id,
             WellnessCheckin.type == WellnessCheckinType.gad7
         ).order_by(WellnessCheckin.submitted_at.desc()).limit(1)
-    )).scalar_one_or_none()
+    )).scalars().first()
 
     if not last_gad7 or last_gad7.submitted_at < four_weeks_ago:
         pending.append({

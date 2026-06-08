@@ -1,47 +1,159 @@
 import { useState } from "react";
-import { Phone, Calendar, Copy, Check } from "lucide-react";
+import { Phone, Calendar, Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCrisisHotlineConfig } from "@/hooks/queries/usePublicConfig";
+import { usePsychologists, useAppointmentAvailability } from "@/hooks/queries";
+import { useRequestAppointment } from "@/hooks/mutations";
 
 export function BookingModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [date, setDate] = useState("");
+  const today = new Date().toISOString().split("T")[0];
+  const [psychologistId, setPsychologistId] = useState("");
+  const [date, setDate] = useState(today);
   const [slot, setSlot] = useState("");
   const [note, setNote] = useState("");
-  const slots = ["9am", "11am", "2pm", "4pm"];
-  const submit = () => {
-    if (!date || !slot) return toast.error("Pick a date and time");
-    toast.success(`Session booked with Dr. Amara for ${date} at ${slot}`);
-    onOpenChange(false);
-    setDate(""); setSlot(""); setNote("");
+
+  const { data: psychsData, isLoading: psychsLoading } = usePsychologists();
+  const psychologists = psychsData?.data || [];
+
+  const { data: availableSlots = [], isLoading: slotsLoading } = useAppointmentAvailability(
+    psychologistId,
+    date,
+  );
+
+  const { mutateAsync: requestAppointment, isPending: booking } = useRequestAppointment();
+
+  const formatSlot = (s: string) => {
+    const [start] = s.split(" / ");
+    return new Date(start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
+
+  const reset = () => {
+    setPsychologistId("");
+    setDate(today);
+    setSlot("");
+    setNote("");
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) reset();
+    onOpenChange(v);
+  };
+
+  const submit = async () => {
+    if (!psychologistId) return toast.error("Select a counselor");
+    if (!date) return toast.error("Select a date");
+    if (!slot) return toast.error("Select a time slot");
+
+    const [startTime, endTime] = slot.split(" / ");
+    try {
+      await requestAppointment({
+        psychologist_id: psychologistId,
+        start_time: startTime,
+        end_time: endTime,
+      });
+      toast.success("Appointment request submitted — awaiting confirmation.");
+      handleClose(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to submit request. Please try again.");
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Book a session</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
+          {/* Counselor picker */}
           <div>
-            <label className="text-sm font-medium mb-1 block">Date</label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <label className="text-sm font-medium mb-1.5 block">Counselor</label>
+            {psychsLoading ? (
+              <div className="h-10 rounded-md bg-muted animate-pulse" />
+            ) : (
+              <Select value={psychologistId} onValueChange={(v) => { setPsychologistId(v); setSlot(""); }}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select a counselor…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {psychologists.map(p => (
+                    <SelectItem key={p.user_id} value={p.user_id}>
+                      {p.name}{p.department ? ` — ${p.department}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
+
+          {/* Date picker */}
           <div>
-            <label className="text-sm font-medium mb-2 block">Time slot</label>
-            <div className="flex gap-2 flex-wrap">
-              {slots.map((s) => (
-                <button key={s} onClick={() => setSlot(s)} className={cn("px-4 py-2 rounded-full border text-sm transition", slot === s ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted")}>{s}</button>
-              ))}
-            </div>
+            <label className="text-sm font-medium mb-1.5 block">Date</label>
+            <Input
+              type="date"
+              value={date}
+              min={today}
+              onChange={(e) => { setDate(e.target.value); setSlot(""); }}
+              className="h-10"
+            />
           </div>
+
+          {/* Time slot picker */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Available time slots</label>
+            {!psychologistId ? (
+              <p className="text-xs text-muted-foreground">Select a counselor and date first</p>
+            ) : slotsLoading ? (
+              <div className="flex gap-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-9 w-20 rounded-full bg-muted animate-pulse" />)}
+              </div>
+            ) : availableSlots.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No available slots on this date — try another day.</p>
+            ) : (
+              <div className="flex gap-2 flex-wrap">
+                {availableSlots.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setSlot(s)}
+                    className={cn(
+                      "px-3 py-2 rounded-full border text-sm transition font-medium",
+                      slot === s
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border hover:bg-muted"
+                    )}
+                  >
+                    {formatSlot(s)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Optional note */}
           <div>
             <label className="text-sm font-medium mb-1 block">Note (optional)</label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything you'd like Dr. Amara to know..." rows={3} />
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Anything you'd like your counselor to know beforehand…"
+              rows={2}
+            />
           </div>
         </div>
-        <DialogFooter><Button onClick={submit} className="gradient-primary text-primary-foreground border-0">Confirm Booking</Button></DialogFooter>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
+          <Button
+            onClick={submit}
+            disabled={booking || !psychologistId || !slot}
+            className="gradient-primary text-primary-foreground border-0"
+          >
+            {booking ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting…</> : "Request Session"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

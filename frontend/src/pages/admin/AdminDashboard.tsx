@@ -6,7 +6,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { colorFromWrs, downloadCSV, trendData } from "@/data/mock";
+import { colorFromWrs } from "@/lib/wrs";
+import { downloadCSV } from "@/data/mock";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,10 +40,9 @@ export default function AdminDashboard() {
 
   // Derived from range
   const days = range === "week" ? 7 : range === "month" ? 30 : 90;
-  const trend = useMemo(() => trendData(days), [days]);
 
   // Pagination
-  const pagination = { limit: 10, offset: 0 };
+  const [pagination, setPagination] = useState({ limit: 10, offset: 0 });
 
   // React Query hooks
   const { data: studentsData, isLoading: studentsLoading, error: studentsError } = useStudents({}, 100, 0);
@@ -103,15 +103,13 @@ export default function AdminDashboard() {
   }, [alerts]);
 
   const wrsTrendData = useMemo(() => {
-    if (analytics?.wrs_trend && analytics.wrs_trend.length > 0) {
-      return analytics.wrs_trend.map((d: any) => ({
-        day: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        wrs: d.avg_wrs,
-        count: d.count,
-      }));
-    }
-    return trend;
-  }, [analytics, trend]);
+    if (!analytics?.wrs_trend?.length) return [];
+    return analytics.wrs_trend.map((d: any) => ({
+      day: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      wrs: d.avg_wrs,
+      count: d.count,
+    }));
+  }, [analytics]);
 
   const riskDistributionData = useMemo(() => {
     if (analytics?.risk_distribution) {
@@ -689,7 +687,7 @@ export default function AdminDashboard() {
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
                   <th className="text-left p-3">Student ID</th>
-                  <th className="text-left p-3">Level</th>
+                  <th className="text-left p-3">Name</th>
                   <th className="text-left p-3">Faculty</th>
                   <th className="text-left p-3">WRS</th>
                   <th className="text-left p-3">Tier</th>
@@ -729,7 +727,7 @@ export default function AdminDashboard() {
                             {a.student_id}
                           </Link>
                         </td>
-                        <td className="p-3 text-muted-foreground">—</td>
+                        <td className="p-3 text-muted-foreground">{a.full_name || "—"}</td>
                         <td className="p-3 text-muted-foreground">{a.faculty || "—"}</td>
                         <td className="p-3"><span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold" style={{ backgroundColor: `${color}25`, color }}>{formatWRS(a.wrs_score)}</span></td>
                         <td className="p-3">
@@ -743,11 +741,20 @@ export default function AdminDashboard() {
                         <td className="p-3 text-muted-foreground">{formattedTime}</td>
                         <td className="p-3 text-muted-foreground">—</td>
                         <td className="p-3">
-                          <button
-                            className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium transition", "bg-warning/15 text-warning hover:bg-warning/25")}
-                          >
-                            Pending
-                          </button>
+                          {(() => {
+                            const t = baseTier?.toLowerCase();
+                            const label = t === "critical" || t === "red" ? "Urgent" : t === "amber" ? "Review" : "Monitoring";
+                            const cls = t === "critical" || t === "red"
+                              ? "bg-destructive/15 text-destructive"
+                              : t === "amber"
+                              ? "bg-warning/15 text-warning"
+                              : "bg-green-500/15 text-green-600";
+                            return (
+                              <span className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", cls)}>
+                                {label}
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );

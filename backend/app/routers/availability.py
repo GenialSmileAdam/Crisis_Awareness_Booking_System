@@ -142,6 +142,46 @@ async def create_availability(
     })
 
 
+@router.get("/me")
+async def get_my_availability(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the current psychologist's own availability blocks."""
+    _require_psychologist(current_user)
+    psych_id = await _get_staff_user_id(db, current_user)
+
+    query = select(PsychologistAvailability).where(
+        PsychologistAvailability.psychologist_id == psych_id
+    )
+    if start_date:
+        query = query.where(PsychologistAvailability.date >= start_date)
+    if end_date:
+        query = query.where(PsychologistAvailability.date <= end_date)
+
+    rows = (
+        await db.execute(
+            query.order_by(
+                PsychologistAvailability.date.asc(),
+                PsychologistAvailability.start_time.asc(),
+            )
+        )
+    ).scalars().all()
+
+    return success("My availability retrieved", [
+        {
+            "id": str(row.id),
+            "date": row.date.isoformat(),
+            "start_time": row.start_time.strftime("%H:%M"),
+            "end_time": row.end_time.strftime("%H:%M"),
+            "status": "available",
+        }
+        for row in rows
+    ])
+
+
 @router.get("")
 async def list_availability(
     psychologist_id: UUID | None = None,

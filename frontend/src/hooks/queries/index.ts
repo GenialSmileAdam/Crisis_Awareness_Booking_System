@@ -67,3 +67,8 @@ export {
   type DaySchedule,
   type BusyBlock,
 } from "./useAvailability";
+
+export {
+  useNotifications,
+  type Notification,
+} from "./useNotifications";
