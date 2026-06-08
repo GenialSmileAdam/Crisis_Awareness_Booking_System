@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import insert, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock, PsychologistWeeklySchedule
 from app.models.staff import Staff, StaffType
 from app.models.users import User, UserRole
 from app.models.tables import users_table
@@ -119,6 +119,7 @@ class StaffService:
         psych_ids = [row.Staff.user_id for row in rows]
 
         avail_by_id: dict = {}
+        weekly_by_id: dict = {}
         busy_ids: set = set()
         if psych_ids:
             avail_rows = (
@@ -129,9 +130,19 @@ class StaffService:
                     )
                 )
             ).scalars().all()
-            avail_by_id = {}
             for a in avail_rows:
                 avail_by_id.setdefault(a.psychologist_id, []).append(a)
+
+            weekly_rows = (
+                await db.execute(
+                    select(PsychologistWeeklySchedule).where(
+                        PsychologistWeeklySchedule.psychologist_id.in_(psych_ids),
+                        PsychologistWeeklySchedule.day_of_week == today_dow,
+                    )
+                )
+            ).scalars().all()
+            for w in weekly_rows:
+                weekly_by_id.setdefault(w.psychologist_id, []).append(w)
 
             busy_rows = (
                 await db.execute(
@@ -148,10 +159,10 @@ class StaffService:
         for row in rows:
             psych_id = row.Staff.user_id
             avail_blocks = avail_by_id.get(psych_id, [])
-            is_available_now = (
-                any(block.start_time <= now_time < block.end_time for block in avail_blocks)
-                and psych_id not in busy_ids
-            )
+            weekly_blocks = weekly_by_id.get(psych_id, [])
+            in_date_block = any(block.start_time <= now_time < block.end_time for block in avail_blocks)
+            in_weekly_block = any(block.start_time <= now_time < block.end_time for block in weekly_blocks)
+            is_available_now = (in_date_block or in_weekly_block) and psych_id not in busy_ids
             data.append({
                 "user_id": psych_id,
                 "staff_id": row.Staff.staff_id,

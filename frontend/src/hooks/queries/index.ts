@@ -63,9 +63,11 @@ export {
 
 export {
   useMySchedule,
+  useMyWeeklySchedule,
   useBusyBlocks,
   type DaySchedule,
   type BusyBlock,
+  type WeeklyScheduleEntry,
 } from "./useAvailability";
 
 export {

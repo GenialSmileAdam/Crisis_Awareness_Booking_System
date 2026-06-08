@@ -1,9 +1,9 @@
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
-import { getMySchedule, getBusyBlocks } from "@/api/availability";
-import type { DaySchedule, BusyBlock } from "@/api/availability";
+import { getMySchedule, getBusyBlocks, getMyWeeklySchedule } from "@/api/availability";
+import type { DaySchedule, BusyBlock, WeeklyScheduleEntry } from "@/api/availability";
 import { useAuth } from "@/context/AuthContext";
 
-export type { DaySchedule, BusyBlock };
+export type { DaySchedule, BusyBlock, WeeklyScheduleEntry };
 
 export function useMySchedule(): UseQueryResult<DaySchedule[]> {
   const { user } = useAuth();
@@ -11,6 +11,16 @@ export function useMySchedule(): UseQueryResult<DaySchedule[]> {
   return useQuery({
     queryKey: ["availability", "schedule"],
     queryFn: getMySchedule,
+    enabled: !!isStaff,
+  });
+}
+
+export function useMyWeeklySchedule(): UseQueryResult<WeeklyScheduleEntry[]> {
+  const { user } = useAuth();
+  const isStaff = user?.roles?.some(r => r === "psychologist" || r === "unit_head");
+  return useQuery({
+    queryKey: ["availability", "weekly"],
+    queryFn: getMyWeeklySchedule,
     enabled: !!isStaff,
   });
 }

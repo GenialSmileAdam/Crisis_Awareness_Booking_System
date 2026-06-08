@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Clock, X, Trash2, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, X, Trash2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useSaveSchedule } from "@/hooks/mutations";
 import { useAddBusyBlock, useDeleteBusyBlock } from "@/hooks/mutations";
-import { useMySchedule, useBusyBlocks } from "@/hooks/queries";
+import { useMySchedule, useMyWeeklySchedule, useBusyBlocks } from "@/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +34,11 @@ export function AvailabilityCalendarNew() {
   const { mutateAsync: deleteBusyBlock } = useDeleteBusyBlock();
 
   const { data: mySchedule = [], isLoading: scheduleLoading } = useMySchedule();
+  const { data: weeklySchedule = [], isLoading: weeklyLoading } = useMyWeeklySchedule();
   const { data: busyBlocks = [], isLoading: blocksLoading } = useBusyBlocks();
+
+  // Set of day_of_week values that have a recurring pattern configured
+  const recurringDays = useMemo(() => new Set(weeklySchedule.map((w) => w.day_of_week)), [weeklySchedule]);
 
   // Build a set of dates that already have availability (for calendar dot indicators)
   const availableDates = useMemo(() => {
@@ -112,7 +116,8 @@ export function AvailabilityCalendarNew() {
       await saveScheduleMutate([{ day: dayName, start_time: startTime, end_time: endTime }]);
 
       queryClient.invalidateQueries({ queryKey: ["availability", "schedule"] });
-      toast.success(`Availability saved for ${dayName}s`);
+      queryClient.invalidateQueries({ queryKey: ["availability", "weekly"] });
+      toast.success(`Recurring schedule saved for every ${dayName}`);
       setSelectedDay(null);
     } catch {
       toast.error("Failed to save schedule");
@@ -165,8 +170,52 @@ export function AvailabilityCalendarNew() {
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
 
+  // JS getDay(): 0=Sunday…6=Saturday  →  Python weekday(): 0=Monday…6=Sunday
+  const jsToWeekday = (jsDay: number) => (jsDay + 6) % 7;
+  const hasRecurring = (d: number) => {
+    const date = new Date(year, month, d);
+    return recurringDays.has(jsToWeekday(date.getDay()));
+  };
+
   return (
     <div className="space-y-6">
+
+      {/* Recurring weekly schedule summary */}
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-bold">Recurring Weekly Schedule</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Students can book sessions on these days every week
+            </p>
+          </div>
+          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+        </div>
+        {weeklyLoading ? (
+          <div className="flex gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-14 flex-1 rounded-xl bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        ) : weeklySchedule.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-4 text-center">
+            <p className="text-sm text-muted-foreground">No recurring schedule set.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Click any day on the calendar below and save hours to set your weekly availability.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {weeklySchedule.map((w) => (
+              <div key={w.id} className="flex flex-col items-center gap-1 px-4 py-2.5 rounded-xl border border-[#A8FF3E]/30 bg-[#A8FF3E]/5">
+                <span className="text-xs font-semibold">{w.day_name}</span>
+                <span className="text-[11px] text-muted-foreground">{w.start_time} – {w.end_time}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Month Calendar */}
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
@@ -206,8 +255,11 @@ export function AvailabilityCalendarNew() {
               )}
             >
               {day}
-              {day && hasAvailability(day) && (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#A8FF3E]" />
+              {day && (hasAvailability(day) || hasRecurring(day)) && (
+                <span className={cn(
+                  "absolute bottom-1 w-1 h-1 rounded-full",
+                  hasAvailability(day) ? "bg-[#A8FF3E]" : "bg-[#A8FF3E]/50"
+                )} />
               )}
             </button>
           ))}
@@ -223,7 +275,9 @@ export function AvailabilityCalendarNew() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-bold">{selectedDay.toDateString()}</h3>
-              <p className="text-sm text-muted-foreground">Select your available hours for all {DAY_NAMES[selectedDay.getDay()]}s</p>
+              <p className="text-sm text-muted-foreground">
+                Set recurring availability for every {DAY_NAMES[selectedDay.getDay()]}
+              </p>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setSelectedDay(null)}>
               <X className="h-4 w-4" />
@@ -262,7 +316,7 @@ export function AvailabilityCalendarNew() {
           </div>
 
           <p className="text-xs text-muted-foreground mt-4">
-            Selected hours will be saved as recurring availability for all {DAY_NAMES[selectedDay.getDay()]}s over the next 4 weeks.
+            This becomes your permanent recurring schedule for every {DAY_NAMES[selectedDay.getDay()]}. Students can book any future {DAY_NAMES[selectedDay.getDay()]} within these hours.
           </p>
         </div>
       )}

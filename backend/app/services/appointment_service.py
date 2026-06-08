@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointments import Appointment, AppointmentStatus, BookingSource
 from app.models.crisis_logs import CrisisLog, SeverityLevel
-from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock, PsychologistWeeklySchedule
 from app.models.staff import Staff, StaffType
 from app.models.students import Student
 from app.services.scheduling_service import check_confirmed_appointment_conflict
@@ -124,6 +124,7 @@ class AppointmentService:
         start_time: datetime,
         end_time: datetime,
     ) -> None:
+        # Check date-specific block first
         availability = (
             await db.execute(
                 select(PsychologistAvailability)
@@ -135,7 +136,23 @@ class AppointmentService:
                 )
             )
         ).scalar_one_or_none()
-        if not availability:
+        if availability:
+            return
+
+        # Fall back: check recurring weekly schedule for this day of week
+        day_of_week = start_time.date().weekday()
+        weekly = (
+            await db.execute(
+                select(PsychologistWeeklySchedule)
+                .where(
+                    PsychologistWeeklySchedule.psychologist_id == psychologist_id,
+                    PsychologistWeeklySchedule.day_of_week == day_of_week,
+                    PsychologistWeeklySchedule.start_time <= start_time.time(),
+                    PsychologistWeeklySchedule.end_time >= end_time.time(),
+                )
+            )
+        ).scalar_one_or_none()
+        if not weekly:
             raise FileExistsError("Requested time is outside psychologist availability")
 
     @staticmethod
@@ -571,7 +588,29 @@ class AppointmentService:
         ).scalars().all()
 
         if not blocks:
-            return []
+            # Fall back to recurring weekly schedule for this day of week (0=Mon…6=Sun)
+            day_of_week = day.weekday()
+            weekly = (
+                await db.execute(
+                    select(PsychologistWeeklySchedule)
+                    .where(
+                        PsychologistWeeklySchedule.psychologist_id == psychologist_id,
+                        PsychologistWeeklySchedule.day_of_week == day_of_week,
+                    )
+                    .order_by(PsychologistWeeklySchedule.start_time.asc())
+                )
+            ).scalars().all()
+
+            if not weekly:
+                return []
+
+            # Synthesise virtual blocks from weekly schedule
+            class _VirtualBlock:
+                def __init__(self, start: time, end: time):
+                    self.start_time = start
+                    self.end_time = end
+
+            blocks = [_VirtualBlock(w.start_time, w.end_time) for w in weekly]
 
         appointments = (
             await db.execute(

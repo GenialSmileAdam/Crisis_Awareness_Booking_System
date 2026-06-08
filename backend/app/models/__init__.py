@@ -15,7 +15,7 @@ from app.models.audit_logs import AuditLog
 from app.models.session import Session
 from app.models.tables import sessions_table, users_table
 from app.models.feedback import Feedback
-from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock
+from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock, PsychologistWeeklySchedule
 from app.models.password_reset import PasswordResetToken
 
 __all__ = [
@@ -49,5 +49,6 @@ __all__ = [
     "Feedback",
     "PsychologistAvailability",
     "PsychologistBusyBlock",
+    "PsychologistWeeklySchedule",
     "PasswordResetToken",
 ]

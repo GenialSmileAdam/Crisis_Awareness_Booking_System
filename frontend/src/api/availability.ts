@@ -8,6 +8,14 @@ export interface DaySchedule {
   is_available: boolean;
 }
 
+export interface WeeklyScheduleEntry {
+  id: string;
+  day_of_week: number;  // 0=Mon … 6=Sun
+  day_name: string;
+  start_time: string;
+  end_time: string;
+}
+
 export interface BusyBlock {
   id: string;
   block_start: string;
@@ -17,6 +25,10 @@ export interface BusyBlock {
 
 export async function getMySchedule(): Promise<DaySchedule[]> {
   return apiRequest<DaySchedule[]>("GET", "/availability/me");
+}
+
+export async function getMyWeeklySchedule(): Promise<WeeklyScheduleEntry[]> {
+  return apiRequest<WeeklyScheduleEntry[]>("GET", "/availability/weekly");
 }
 
 export async function setMySchedule(schedule: DaySchedule[]): Promise<{ days: number }> {

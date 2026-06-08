@@ -30,6 +30,30 @@ class PsychologistAvailability(Base):
     )
 
 
+class PsychologistWeeklySchedule(Base):
+    """Recurring weekly availability pattern for a psychologist.
+
+    day_of_week follows Python's weekday(): 0=Monday, 6=Sunday.
+    get_availability falls back to this when no date-specific block exists.
+    """
+    __tablename__ = "psychologist_weekly_schedule"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    psychologist_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("staff.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=Mon … 6=Sun
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PsychologistBusyBlock(Base):
     """One-off busy periods that override the recurring availability."""
     __tablename__ = "psychologist_busy_blocks"

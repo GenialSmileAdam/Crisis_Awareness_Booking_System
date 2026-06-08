@@ -27,32 +27,34 @@ export default function PendingAppointments() {
   // Filter for pending appointments only
   const pendingAppointments = appointments.filter(a => a.status === "pending");
 
+  const extractErrorMessage = (error: any, fallback: string): string => {
+    const msg = error?.message;
+    if (!msg) return fallback;
+    if (typeof msg === "string") return msg;
+    if (Array.isArray(msg)) return msg.map((e: any) => e?.msg ?? String(e)).join("; ");
+    return fallback;
+  };
+
   const handleApprove = (appointmentId: string) => {
-    approveAppointment(
-      { appointmentId },
-      {
-        onSuccess: () => {
-          toast.success("Appointment approved");
-        },
-        onError: (error: any) => {
-          toast.error(error.message || "Failed to approve");
-        },
-      }
-    );
+    approveAppointment(appointmentId, {
+      onSuccess: () => {
+        toast.success("Appointment approved");
+      },
+      onError: (error: any) => {
+        toast.error(extractErrorMessage(error, "Failed to approve appointment"));
+      },
+    });
   };
 
   const handleReject = (appointmentId: string) => {
-    rejectAppointment(
-      { appointmentId },
-      {
-        onSuccess: () => {
-          toast.success("Appointment rejected");
-        },
-        onError: (error: any) => {
-          toast.error(error.message || "Failed to reject");
-        },
-      }
-    );
+    rejectAppointment(appointmentId, {
+      onSuccess: () => {
+        toast.success("Appointment rejected");
+      },
+      onError: (error: any) => {
+        toast.error(extractErrorMessage(error, "Failed to reject appointment"));
+      },
+    });
   };
 
   const formatDate = (dateStr: string) =>
