@@ -70,16 +70,19 @@ export default function SessionReviewer() {
     }
   }, [appointment, id, step, aiSessionId, createAISessionMutate]);
 
-  // Create audio element when audioFile is selected
+  // Load audio src whenever the file changes (audio element is always mounted)
   useEffect(() => {
-    if (audioFile && audioRef.current) {
-      const url = URL.createObjectURL(audioFile);
-      audioRef.current.src = url;
-      return () => URL.revokeObjectURL(url);
-    }
+    const audio = audioRef.current;
+    if (!audio || !audioFile) return;
+    const url = URL.createObjectURL(audioFile);
+    audio.src = url;
+    audio.load();
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [audioFile]);
 
-  // Real audio playback with actual audio element
+  // Wire up timeupdate + ended listeners once on mount
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -95,36 +98,41 @@ export default function SessionReviewer() {
       setProgress(0);
     };
 
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("ended", handleEnded);
+    return () => {
+      audio.removeEventListener("timeupdate", updateProgress);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, []);
+
+  // Play / pause in response to state
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
     if (playing) {
       audio.play().catch(() => {
-        toast.error("Could not play audio");
+        toast.error("Could not play audio — make sure you have selected a file");
         setPlaying(false);
       });
     } else {
       audio.pause();
     }
-
-    audio.addEventListener("timeupdate", updateProgress);
-    audio.addEventListener("ended", handleEnded);
-
-    return () => {
-      audio.removeEventListener("timeupdate", updateProgress);
-      audio.removeEventListener("ended", handleEnded);
-    };
   }, [playing]);
 
-  // Update volume
+  // Volume control
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
     }
   }, [volume]);
 
-  // Handle progress slider change
+  // Seek when slider is dragged
   const handleProgressChange = (value: number) => {
     setProgress(value);
-    if (audioRef.current && audioRef.current.duration) {
-      audioRef.current.currentTime = (value / 100) * audioRef.current.duration;
+    const audio = audioRef.current;
+    if (audio && audio.duration) {
+      audio.currentTime = (value / 100) * audio.duration;
     }
   };
 
@@ -189,6 +197,8 @@ export default function SessionReviewer() {
 
   return (
     <AppShell items={counselorSidebarItems}>
+      {/* Always-mounted hidden audio element so ref is available regardless of step */}
+      <audio ref={audioRef} style={{ display: "none" }} />
       <div className="flex items-start md:items-center justify-between py-4 md:h-16 px-4 md:px-8 border-b border-border bg-background md:bg-background/60 md:backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-2 md:gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/counselor")} className="h-8 w-8 md:h-10 md:w-10"><ChevronLeft className="h-4 w-4" /></Button>
@@ -365,7 +375,6 @@ export default function SessionReviewer() {
 
                 <div className="surface-card p-6 space-y-4">
                   <div className="label-eyebrow">Audio Playback</div>
-                  <audio ref={audioRef} />
                   <div className="space-y-2">
                     <Slider value={[progress]} max={100} step={0.5} onValueChange={handleProgressChange} />
                     <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{fmt(progress)}</span><span>{formatDuration()}</span></div>
