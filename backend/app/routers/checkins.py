@@ -8,6 +8,7 @@ from app.models.wellness_checkins import WellnessCheckinType
 from app.models.risk_scores import RiskTier
 from app.schemas.wellness_checkins import TestSubmission, TestResultResponse
 from app.services.risk_simple import calculate_wrs_and_tier
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -69,6 +70,14 @@ async def submit_test(
 
     # Check if crisis escalation is needed (red or critical)
     crisis_escalation_required = risk_tier in (RiskTier.red, RiskTier.critical)
+
+    # Send WRS notification for Red or Critical scores
+    if crisis_escalation_required:
+        try:
+            await NotificationService.notify_wrs_alert(db, student_id, wrs_score, risk_tier.value)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(f"WRS notification failed: {exc}")
 
     return TestResultResponse(
         student_id=student_id,

@@ -481,7 +481,7 @@ export default function StudentAppointments() {
             </div>
           ) : (() => {
             const upcomingAppts = myAppointments.filter(
-              (a) => a.status === "booked" && new Date(a.start_time) > new Date()
+              (a) => (a.status === "confirmed" || a.status === "pending") && new Date(a.start_time) > new Date()
             );
             if (upcomingAppts.length === 0) {
               return (

@@ -14,7 +14,8 @@ import { studentSidebarItems } from "@/data/sidebar";
 
 function checkinWrs(c: { type: string; score?: number | null }): number | null {
   if ((c.type === "phq9" || c.type === "gad7") && c.score !== null && c.score !== undefined) {
-    return Math.round((c.score / 27) * 100);
+    const maxScore = c.type === "gad7" ? 21 : 27;
+    return Math.round((c.score / maxScore) * 100);
   }
   return null;
 }
@@ -48,7 +49,7 @@ export default function StudentHistory() {
   const checkins = checkinsQuery.data?.data || [];
   const checkinsTotal = checkinsQuery.data?.pagination?.total || 0;
   const appointments = (appointmentsQuery.data?.data || []).filter(a => a.status === "completed");
-  const sessionsTotal = (appointmentsQuery.data?.data || []).filter(a => a.status === "completed").length;
+  const sessionsTotal = appointmentsQuery.data?.pagination?.total || 0;
 
   const loading = checkinsQuery.isPending || (!!studentId && appointmentsQuery.isPending);
 

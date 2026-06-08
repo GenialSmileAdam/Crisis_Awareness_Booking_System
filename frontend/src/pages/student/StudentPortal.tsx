@@ -437,8 +437,9 @@ export default function StudentPortal() {
                   label: c.type === "phq9" ? "PHQ-9" : c.type === "gad7" ? "GAD-7" : "Pulse Survey",
                   date: c.submitted_at,
                   badge: (() => {
+                    const maxScore = c.type === "gad7" ? 21 : 27;
                     const wrs = (c.type === "phq9" || c.type === "gad7") && c.score !== null
-                      ? Math.round((c.score / 27) * 100) : null;
+                      ? Math.round((c.score / maxScore) * 100) : null;
                     return wrs !== null ? { text: `${wrs}/100`, color: colorFromWrs(wrs) } : null;
                   })(),
                 }));
@@ -477,7 +478,8 @@ export default function StudentPortal() {
               {recentCheckins.length >= 2 ? (
                 <ResponsiveContainer width="100%" height={60}>
                   <LineChart data={recentCheckins.slice().reverse().map(c => ({
-                    wrs: (c.type === "phq9" || c.type === "gad7") && c.score !== null ? Math.round((c.score / 27) * 100) : null
+                    wrs: (c.type === "phq9" || c.type === "gad7") && c.score !== null
+                      ? Math.round((c.score / (c.type === "gad7" ? 21 : 27)) * 100) : null
                   })).filter(d => d.wrs !== null)}>
                     <Line type="monotone" dataKey="wrs" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                   </LineChart>

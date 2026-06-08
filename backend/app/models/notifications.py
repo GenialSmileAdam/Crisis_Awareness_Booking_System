@@ -25,6 +25,10 @@ class NotificationType(str, enum.Enum):
 class NotificationCategory(str, enum.Enum):
     crisis_alert = "crisis_alert"
     booking_confirmation = "booking_confirmation"
+    appointment_requested = "appointment_requested"
+    appointment_rejected = "appointment_rejected"
+    risk_alert = "risk_alert"
+    counselor_assigned = "counselor_assigned"
     family_invitation = "family_invitation"
     report_ready = "report_ready"
     general = "general"

@@ -5,8 +5,10 @@ export interface Notification {
   id: string;
   type: string;
   category: string;
+  title: string | null;
   message: string;
   status: "pending" | "sent" | "failed";
+  read: boolean;
   sent_at: string | null;
   created_at: string;
 }

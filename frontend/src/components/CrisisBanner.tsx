@@ -56,6 +56,7 @@ export function BookingModal({ open, onOpenChange }: { open: boolean; onOpenChan
         psychologist_id: psychologistId,
         start_time: startTime,
         end_time: endTime,
+        notes: note || undefined,
       });
       toast.success("Appointment request submitted — awaiting confirmation.");
       handleClose(false);

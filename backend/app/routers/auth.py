@@ -225,7 +225,7 @@ async def callback(
         )
 
         # Set refresh token as HTTP-only cookie (30 days)
-        is_production = "localhost" not in settings.FRONTEND_URL
+        is_production = "localhost" not in settings.FRONTEND_URL and "127.0.0.1" not in settings.FRONTEND_URL
         response.set_cookie(
             "refresh_token",
             ss_refresh_token,

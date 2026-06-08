@@ -70,6 +70,20 @@ export default function StudentForum() {
   }, []);
 
   const posts = postsQuery.data?.data || [];
+
+  useEffect(() => {
+    if (posts.length === 0) return;
+    setLocalRelateCounts(prev => {
+      const seeded = { ...prev };
+      posts.forEach((post: any) => {
+        if (!(post.id in seeded)) {
+          seeded[post.id] = post.relate_count ?? 0;
+        }
+      });
+      return seeded;
+    });
+  }, [posts]);
+
   const pagination = postsQuery.data?.pagination;
 
   const filteredPosts = useMemo(() => {

@@ -9,7 +9,7 @@ from app.models.staff import Staff, StaffType
 from app.models.students import Student
 from app.models.users import User
 from app.models.wellness_checkins import WellnessCheckin, WellnessCheckinType
-from app.models.notifications import Notification
+from app.models.notifications import Notification, NotificationCategory, NotificationStatus, NotificationType
 from app.models.refresh_tokens import RefreshToken
 from app.models.audit_logs import AuditLog
 from app.models.session import Session
@@ -39,6 +39,9 @@ __all__ = [
     "ForumPost",
     "Consent",
     "Notification",
+    "NotificationCategory",
+    "NotificationStatus",
+    "NotificationType",
     "RefreshToken",
     "AuditLog",
     "sessions_table",

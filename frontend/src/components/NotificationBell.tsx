@@ -13,10 +13,12 @@ import { cn } from "@/lib/utils";
 function categoryLabel(category: string): string {
   switch (category) {
     case "crisis_alert": return "Crisis alert";
-    case "appointment_confirmed": return "Appointment confirmed";
-    case "appointment_reminder": return "Appointment reminder";
-    case "session_reviewed": return "Session reviewed";
-    case "risk_escalation": return "Risk escalation";
+    case "booking_confirmation": return "Session confirmed";
+    case "appointment_requested": return "Session request";
+    case "appointment_rejected": return "Session declined";
+    case "risk_alert": return "Wellness alert";
+    case "counselor_assigned": return "Counselor matched";
+    case "report_ready": return "Report ready";
     default: return category.replace(/_/g, " ");
   }
 }
@@ -24,7 +26,7 @@ function categoryLabel(category: string): string {
 export function NotificationBell() {
   const { data, isLoading } = useNotifications(8);
   const notifications = data?.data || [];
-  const hasNew = notifications.some(n => n.status === "pending");
+  const hasNew = notifications.some(n => !n.read);
 
   return (
     <DropdownMenu>
@@ -55,16 +57,19 @@ export function NotificationBell() {
           </div>
         ) : (
           notifications.map(n => (
-            <DropdownMenuItem key={n.id} className="flex-col items-start py-3 gap-0.5">
-              <div className={cn("text-sm font-medium", n.status === "pending" && "text-foreground")}>
-                {categoryLabel(n.category)}
+            <DropdownMenuItem key={n.id} className={cn("flex-col items-start py-3 gap-0.5", !n.read && "bg-muted/40")}>
+              <div className={cn("text-sm font-semibold leading-snug", !n.read ? "text-foreground" : "text-muted-foreground")}>
+                {n.title || categoryLabel(n.category)}
               </div>
-              <div className="text-xs text-muted-foreground line-clamp-2">{n.message}</div>
-              {n.created_at && (
-                <div className="text-xs text-muted-foreground/60 mt-1">
-                  {new Date(n.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </div>
-              )}
+              <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{n.message}</div>
+              <div className="flex items-center justify-between w-full mt-1">
+                <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wide">{categoryLabel(n.category)}</span>
+                {n.created_at && (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(n.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
             </DropdownMenuItem>
           ))
         )}

@@ -20,6 +20,7 @@ from app.schemas.appointments import (
 )
 from app.utils.notification_stub import send_crisis_alert
 from app.utils.pagination import paginate
+from app.models.users import User
 
 
 def _paginate_payload(items: list[dict[str, Any]], total: int, limit: int, offset: int) -> dict[str, Any]:
@@ -256,6 +257,38 @@ class AppointmentService:
 
         await db.commit()
         await db.refresh(appointment)
+
+        # Notifications (fire-and-forget — never let notification failure block booking)
+        try:
+            from app.services.notification_service import NotificationService
+            student_user = (await db.execute(
+                select(User).join(Student, Student.user_id == User.id)
+                .where(Student.student_id == student.student_id)
+            )).scalar_one_or_none()
+            psychologist_user = (await db.execute(
+                select(User).where(User.id == appointment_data.psychologist_id)
+            )).scalar_one_or_none()
+
+            if appointment_data.is_crisis:
+                await NotificationService.send_crisis_alert(
+                    db,
+                    psychologist_id=appointment_data.psychologist_id,
+                    student_id=student.student_id,
+                    appointment_id=appointment.id,
+                )
+            else:
+                if psychologist_user and student_user:
+                    await NotificationService.notify_appointment_requested(
+                        db,
+                        appointment_id=appointment.id,
+                        student_name=student_user.full_name or "A student",
+                        psychologist_id=appointment_data.psychologist_id,
+                        start_time=appointment_data.start_time,
+                    )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(f"Appointment request notification failed: {exc}")
+
         return appointment
 
     @classmethod
@@ -302,7 +335,36 @@ class AppointmentService:
             .values(assigned_psychologist_id=appointment.psychologist_id)
         )
         await db.commit()
-        return await cls.get_by_id(db, appointment.id)
+        result = await cls.get_by_id(db, appointment.id)
+
+        # Notify student that session is confirmed
+        try:
+            from app.services.notification_service import NotificationService
+            psych_user = (await db.execute(
+                select(User).where(User.id == appointment.psychologist_id)
+            )).scalar_one_or_none()
+            psych_name = psych_user.full_name if psych_user else "Your counselor"
+            await NotificationService.notify_appointment_confirmed(
+                db,
+                appointment_id=appointment.id,
+                student_id=appointment.student_id,
+                psychologist_name=psych_name,
+                start_time=appointment.start_time,
+                end_time=appointment.end_time,
+            )
+            # Also notify if this is first time being assigned to a counselor
+            if not (await db.execute(
+                select(Student).where(
+                    Student.student_id == appointment.student_id,
+                    Student.assigned_psychologist_id == appointment.psychologist_id,
+                )
+            )).scalar_one_or_none() is None:
+                pass  # assignment was just made — counselor_assigned notification via wrs_alert path
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(f"Approve notification failed: {exc}")
+
+        return result
 
     @classmethod
     async def reject_appointment(cls, db: AsyncSession, appointment_id: UUID) -> dict[str, Any]:
@@ -315,7 +377,27 @@ class AppointmentService:
             .values(status=AppointmentStatus.rejected)
         )
         await db.commit()
-        return await cls.get_by_id(db, appointment.id)
+        result = await cls.get_by_id(db, appointment.id)
+
+        # Notify student that their request was declined
+        try:
+            from app.services.notification_service import NotificationService
+            psych_user = (await db.execute(
+                select(User).where(User.id == appointment.psychologist_id)
+            )).scalar_one_or_none()
+            psych_name = psych_user.full_name if psych_user else "Your counselor"
+            await NotificationService.notify_appointment_rejected(
+                db,
+                appointment_id=appointment.id,
+                student_id=appointment.student_id,
+                psychologist_name=psych_name,
+                start_time=appointment.start_time,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(f"Reject notification failed: {exc}")
+
+        return result
 
     @classmethod
     async def create(

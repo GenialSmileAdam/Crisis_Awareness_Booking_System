@@ -19,6 +19,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function AppointmentBookingCalendar({ psychologistId, psychologistName }: AppointmentBookingCalendarProps) {
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
+  const [viewDate, setViewDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
   const { mutateAsync: requestAppointmentMutate, isPending: requesting } = useRequestAppointment();
 
@@ -55,20 +56,20 @@ export function AppointmentBookingCalendar({ psychologistId, psychologistName }:
 
   const { data: availableSlots = [] } = useAppointmentAvailability(
     psychologistId,
-    selectedDate || new Date().toISOString().split("T")[0]
+    viewDate,
   );
 
   const getAvailableSlots = (dateStr: string) => {
-    if (!availableSlots || availableSlots.length === 0) {
-      return HOURS.map(hour => ({
-        time: hour,
-        available: false,
-      }));
-    }
-    return HOURS.map(hour => ({
-      time: hour,
-      available: availableSlots.some(slot => slot.startsWith(hour)),
-    }));
+    return HOURS.map((hour, i) => {
+      const hourNum = 9 + i;
+      const available = availableSlots.some(slot => {
+        const [startISO] = slot.split(" / ");
+        if (!startISO.startsWith(dateStr)) return false;
+        const slotHour = parseInt(startISO.split("T")[1]?.split(":")[0] ?? "-1", 10);
+        return slotHour === hourNum;
+      });
+      return { time: hour, available };
+    });
   };
 
   return (
@@ -109,8 +110,12 @@ export function AppointmentBookingCalendar({ psychologistId, psychologistName }:
 
           return (
             <div key={day}>
-              <h4 className="font-semibold text-sm mb-2">
+              <h4
+                className="font-semibold text-sm mb-2 cursor-pointer hover:text-primary transition-colors"
+                onClick={() => setViewDate(dateStr)}
+              >
                 {day}, {date.toLocaleDateString()}
+                {viewDate === dateStr && <span className="ml-2 text-xs font-normal text-primary">(showing availability)</span>}
               </h4>
               <div className="grid grid-cols-5 gap-2">
                 {slots.map(({ time, available }) => (
