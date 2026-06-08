@@ -32,7 +32,7 @@ const TOKEN_KEY = "safespace_access_token";
  * @throws ApiError if refresh fails (e.g., cookie invalid, expired, or missing)
  */
 export async function refreshToken(): Promise<{ access_token: string }> {
-  return apiRequest<{ access_token: string }>("POST", "/auth/refresh");
+  return apiRequest<{ access_token: string }>("POST", "/api/auth/refresh");
 }
 
 /**
@@ -40,7 +40,7 @@ export async function refreshToken(): Promise<{ access_token: string }> {
  */
 export async function logout(): Promise<void> {
   try {
-    await apiRequest<void>("POST", "/auth/logout");
+    await apiRequest<void>("POST", "/api/auth/logout");
   } finally {
     localStorage.removeItem(TOKEN_KEY);
   }
