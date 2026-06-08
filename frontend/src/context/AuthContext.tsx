@@ -199,7 +199,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore errors — always clear local state
     } finally {
       clearAuthState();
+
+      // Clear ALL localStorage to ensure completely fresh state
+      localStorage.clear();
+
+      // Clear React Query cache by reloading
+      // This ensures no stale data is shown on next login with different account
       toast.success("You've been signed out.");
+
       // Redirect to login page - Campus One session will be handled on next auth attempt
       setTimeout(() => {
         window.location.href = "/login";

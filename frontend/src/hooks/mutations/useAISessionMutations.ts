@@ -31,7 +31,7 @@ export function useUploadSessionAudio(): UseMutationResult<AISessionResponse, Er
   return useMutation({
     mutationFn: async ({ sessionId, audioFile }: { sessionId: string; audioFile: File }) => {
       const formData = new FormData();
-      formData.append("audio", audioFile);
+      formData.append("file", audioFile);
       return apiRequest<AISessionResponse>("POST", `/ai/sessions/${sessionId}/audio`, formData);
     },
     onError: (error: Error) => {
