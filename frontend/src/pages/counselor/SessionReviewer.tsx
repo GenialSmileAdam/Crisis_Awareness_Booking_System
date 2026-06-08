@@ -40,6 +40,7 @@ export default function SessionReviewer() {
   const [saved, setSaved] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // React Query hooks
   const { data: appointment } = useAppointment(id || "");
@@ -69,16 +70,75 @@ export default function SessionReviewer() {
     }
   }, [appointment, id, step, aiSessionId, createAISessionMutate]);
 
-  // Audio playback progress simulation
+  // Create audio element when audioFile is selected
   useEffect(() => {
-    if (!playing) return;
-    const t = setInterval(() => setProgress((p) => (p >= 100 ? 0 : p + 0.5)), 50);
-    return () => clearInterval(t);
+    if (audioFile && audioRef.current) {
+      const url = URL.createObjectURL(audioFile);
+      audioRef.current.src = url;
+      return () => URL.revokeObjectURL(url);
+    }
+  }, [audioFile]);
+
+  // Real audio playback with actual audio element
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const updateProgress = () => {
+      if (audio.duration) {
+        setProgress((audio.currentTime / audio.duration) * 100);
+      }
+    };
+
+    const handleEnded = () => {
+      setPlaying(false);
+      setProgress(0);
+    };
+
+    if (playing) {
+      audio.play().catch(() => {
+        toast.error("Could not play audio");
+        setPlaying(false);
+      });
+    } else {
+      audio.pause();
+    }
+
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", updateProgress);
+      audio.removeEventListener("ended", handleEnded);
+    };
   }, [playing]);
 
+  // Update volume
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+  }, [volume]);
+
+  // Handle progress slider change
+  const handleProgressChange = (value: number) => {
+    setProgress(value);
+    if (audioRef.current && audioRef.current.duration) {
+      audioRef.current.currentTime = (value / 100) * audioRef.current.duration;
+    }
+  };
+
   const fmt = (p: number) => {
-    const total = 272; // 04:32
-    const s = Math.round((p / 100) * total);
+    const audio = audioRef.current;
+    if (!audio || !audio.duration) return "00:00";
+    const s = Math.round((p / 100) * audio.duration);
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  const formatDuration = () => {
+    const audio = audioRef.current;
+    if (!audio || !audio.duration) return "00:00";
+    const s = Math.round(audio.duration);
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
@@ -305,9 +365,10 @@ export default function SessionReviewer() {
 
                 <div className="surface-card p-6 space-y-4">
                   <div className="label-eyebrow">Audio Playback</div>
+                  <audio ref={audioRef} />
                   <div className="space-y-2">
-                    <Slider value={[progress]} max={100} step={0.5} onValueChange={(v) => setProgress(v[0])} />
-                    <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{fmt(progress)}</span><span>04:32</span></div>
+                    <Slider value={[progress]} max={100} step={0.5} onValueChange={handleProgressChange} />
+                    <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{fmt(progress)}</span><span>{formatDuration()}</span></div>
                   </div>
                   <div className="flex items-center justify-between">
                     <Button onClick={() => setPlaying((p) => !p)} className="rounded-full h-10 w-10 p-0 gradient-primary text-primary-foreground border-0">

@@ -176,15 +176,23 @@ async def summarize(db: AsyncSession, session_id: str) -> Optional[str]:
     if not session.transcript:
         raise Exception("Transcript not available")
 
+    # Truncate transcript to ~3000 chars to stay within token limits (6000 TPM)
+    # Keeps beginning and end of transcript for context
+    max_transcript_length = 3000
+    transcript = session.transcript
+    if len(transcript) > max_transcript_length:
+        # Keep first 1500 chars and last 1500 chars
+        transcript = transcript[:1500] + "\n...[middle section truncated]...\n" + transcript[-1500:]
+
     client = _get_groq_client()
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {
                 "role": "system",
-                "content": """You are a professional therapist assistant for SafeSpace, a mental health platform at Nile University of Nigeria. 
+                "content": """You are a professional therapist assistant for SafeSpace, a mental health platform at Nile University of Nigeria.
 
-    You are trained to write structured, objective, and concise clinical session notes while maintaining NDPR (Nigeria Data Protection Regulation) compliance. 
+    You are trained to write structured, objective, and concise clinical session notes while maintaining NDPR (Nigeria Data Protection Regulation) compliance.
 
     GUIDELINES:
     - Do not make assumptions beyond the transcript.
@@ -241,7 +249,7 @@ async def summarize(db: AsyncSession, session_id: str) -> Optional[str]:
     - Ensure the Risk Tier matches the identified archetype traits
 
     Transcript:
-    {session.transcript}"""
+    {transcript}"""
             }
         ],
     )
