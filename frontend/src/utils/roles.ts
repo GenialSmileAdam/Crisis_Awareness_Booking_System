@@ -3,52 +3,39 @@
  *
  * Campus One roles:
  * - "unit_head" → admin access
+ * - "unit_admin" → admin access (same as unit_head)
  * - "psychologist" → psychologist access
  * - "student" → student access
  */
 
 import { JWTPayload } from "@/api/auth";
 
-/**
- * Check if user has a specific Campus One role.
- */
 export function hasRole(user: JWTPayload | null, role: string): boolean {
   if (!user) return false;
   const userRoles = user.roles || [];
   return userRoles.includes(role);
 }
 
-/**
- * Check if user is a unit head (admin).
- */
 export function isUnitHead(user: JWTPayload | null): boolean {
-  return hasRole(user, "unit_head");
+  return hasRole(user, "unit_head") || hasRole(user, "unit_admin");
 }
 
-/**
- * Check if user is a psychologist.
- */
+export function isUnitAdmin(user: JWTPayload | null): boolean {
+  return hasRole(user, "unit_admin");
+}
+
 export function isPsychologist(user: JWTPayload | null): boolean {
   return hasRole(user, "psychologist");
 }
 
-/**
- * Check if user is a student.
- */
 export function isStudent(user: JWTPayload | null): boolean {
   return hasRole(user, "student");
 }
 
-/**
- * Check if user can access admin panel (unit_head role).
- */
 export function canAccessAdmin(user: JWTPayload | null): boolean {
   return isUnitHead(user);
 }
 
-/**
- * Check if user can access staff features (unit_head or psychologist).
- */
 export function canAccessStaff(user: JWTPayload | null): boolean {
   return isUnitHead(user) || isPsychologist(user);
 }

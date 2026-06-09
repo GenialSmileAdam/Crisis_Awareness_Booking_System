@@ -3,7 +3,7 @@ import { ReactNode, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
-type CampusOneRole = "unit_head" | "psychologist" | "student";
+type CampusOneRole = "unit_head" | "unit_admin" | "psychologist" | "student";
 
 export function ProtectedRoute({
   role,
@@ -27,14 +27,15 @@ export function ProtectedRoute({
 
   if (!user) return <Navigate to="/login" replace />;
 
-  // Authorization based on Campus One roles array from JWT
   const allowedRoles = Array.isArray(role) ? role : [role];
   const userRoles = user.roles || [];
 
-  // Check if user has any of the allowed Campus One roles
-  const hasAccess = allowedRoles.some(allowedRole =>
-    userRoles.includes(allowedRole)
-  );
+  // unit_admin is treated as equivalent to unit_head for all access checks
+  const effectiveRoles = userRoles.includes("unit_admin") && !userRoles.includes("unit_head")
+    ? [...userRoles, "unit_head"]
+    : userRoles;
+
+  const hasAccess = allowedRoles.some(allowedRole => effectiveRoles.includes(allowedRole));
 
   if (!hasAccess) return <Navigate to="/login" replace />;
   return <>{children}</>;

@@ -75,7 +75,7 @@ export default function AuthCallback() {
         let redirectUrl = "/";
         const userRoles = decoded.roles || [];
 
-        if (userRoles.includes("unit_head")) {
+        if (userRoles.includes("unit_head") || userRoles.includes("unit_admin")) {
           redirectUrl = "/admin";
         } else if (userRoles.includes("psychologist")) {
           redirectUrl = "/counselor";
