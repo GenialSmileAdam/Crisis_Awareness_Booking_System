@@ -1,4 +1,4 @@
-import { useQuery, UseQueryResult } from "@tanstack/react-query";
+import { useQuery, useQueries, UseQueryResult } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
 import type { Appointment } from "@/api/appointments";
 
@@ -144,4 +144,34 @@ export function useAppointmentAvailability(
     retry: 1,
     enabled: !!psychologistId && !!date,
   });
+}
+
+/**
+ * Fetch available time slots for a psychologist across an entire week (7 parallel requests).
+ * Returns a map of ISO date string → slot strings.
+ */
+export function useWeekAvailability(
+  psychologistId: string,
+  weekDates: string[]
+): Record<string, string[]> {
+  const results = useQueries({
+    queries: weekDates.map((date) => ({
+      queryKey: ["appointments", "availability", psychologistId, date],
+      queryFn: () =>
+        apiRequest<string[]>(
+          "GET",
+          `/appointments/availability/${psychologistId}?date=${date}`
+        ),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 30,
+      retry: 1,
+      enabled: !!psychologistId && !!date,
+    })),
+  });
+
+  const slotsByDate: Record<string, string[]> = {};
+  weekDates.forEach((date, i) => {
+    slotsByDate[date] = results[i].data ?? [];
+  });
+  return slotsByDate;
 }

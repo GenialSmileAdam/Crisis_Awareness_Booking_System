@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useRequestAppointment } from "@/hooks/mutations";
-import { useAppointmentAvailability } from "@/hooks/queries";
+import { useWeekAvailability } from "@/hooks/queries";
 
 interface AppointmentBookingCalendarProps {
   psychologistId: string;
@@ -19,7 +19,6 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function AppointmentBookingCalendar({ psychologistId, psychologistName }: AppointmentBookingCalendarProps) {
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
-  const [viewDate, setViewDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
   const { mutateAsync: requestAppointmentMutate, isPending: requesting } = useRequestAppointment();
 
@@ -54,17 +53,20 @@ export function AppointmentBookingCalendar({ psychologistId, psychologistName }:
     }
   };
 
-  const { data: availableSlots = [] } = useAppointmentAvailability(
-    psychologistId,
-    viewDate,
-  );
+  const weekDates = DAYS.map((_, dayIdx) => {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + dayIdx);
+    return date.toISOString().split("T")[0];
+  });
+
+  const slotsByDate = useWeekAvailability(psychologistId, weekDates);
 
   const getAvailableSlots = (dateStr: string) => {
+    const daySlots = slotsByDate[dateStr] ?? [];
     return HOURS.map((hour, i) => {
       const hourNum = 9 + i;
-      const available = availableSlots.some(slot => {
+      const available = daySlots.some(slot => {
         const [startISO] = slot.split(" / ");
-        if (!startISO.startsWith(dateStr)) return false;
         const slotHour = parseInt(startISO.split("T")[1]?.split(":")[0] ?? "-1", 10);
         return slotHour === hourNum;
       });
@@ -102,20 +104,15 @@ export function AppointmentBookingCalendar({ psychologistId, psychologistName }:
 
       {/* Availability Grid */}
       <div className="space-y-4">
-        {DAYS.map((day, dayIdx) => {
+        {weekDates.map((dateStr, dayIdx) => {
           const date = new Date(weekStart);
           date.setDate(date.getDate() + dayIdx);
-          const dateStr = date.toISOString().split("T")[0];
           const slots = getAvailableSlots(dateStr);
 
           return (
-            <div key={day}>
-              <h4
-                className="font-semibold text-sm mb-2 cursor-pointer hover:text-primary transition-colors"
-                onClick={() => setViewDate(dateStr)}
-              >
-                {day}, {date.toLocaleDateString()}
-                {viewDate === dateStr && <span className="ml-2 text-xs font-normal text-primary">(showing availability)</span>}
+            <div key={dateStr}>
+              <h4 className="font-semibold text-sm mb-2">
+                {DAYS[dayIdx]}, {date.toLocaleDateString()}
               </h4>
               <div className="grid grid-cols-5 gap-2">
                 {slots.map(({ time, available }) => (

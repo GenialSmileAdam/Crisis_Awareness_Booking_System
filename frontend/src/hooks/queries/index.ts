@@ -12,6 +12,7 @@ export {
   useNextAvailableSlot,
   useAppointment,
   useAppointmentAvailability,
+  useWeekAvailability,
   type Appointment,
   type AvailableSlot,
   type AppointmentsResponse,

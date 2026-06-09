@@ -21,6 +21,7 @@ from app.schemas.appointments import (
 from app.utils.notification_stub import send_crisis_alert
 from app.utils.pagination import paginate
 from app.models.users import User
+from app.core.config import settings
 
 
 def _paginate_payload(items: list[dict[str, Any]], total: int, limit: int, offset: int) -> dict[str, Any]:
@@ -295,6 +296,18 @@ class AppointmentService:
                     student_id=student.student_id,
                     appointment_id=appointment.id,
                 )
+                # Push calendar event for the auto-confirmed crisis appointment
+                if student_user and psychologist_user:
+                    await NotificationService._push_campus_one_event(
+                        student_user,
+                        title=f"Urgent Counselling Session — {psychologist_user.full_name or 'Counselor'}",
+                        starts_at=appointment_data.start_time,
+                        ends_at=appointment_data.end_time,
+                        description="An urgent SafeSpace counselling session has been arranged for you.",
+                        location="SafeSpace Counselling Centre",
+                        url=f"{settings.FRONTEND_URL}/student/appointments",
+                        idempotency_key=f"appt-event-{appointment.id}",
+                    )
             else:
                 if psychologist_user and student_user:
                     await NotificationService.notify_appointment_requested(

@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Campus One notification endpoint (per spec: https://auth.campusone.com.ng/api/apps/notifications)
 _CAMPUS_ONE_NOTIF_URL = "https://auth.campusone.com.ng/api/apps/notifications"
+# Campus One calendar events endpoint
+_CAMPUS_ONE_EVENTS_URL = "https://auth.campusone.com.ng/api/apps/events"
 
 _TIER_LABELS = {
     "green": "Green — low",
@@ -80,7 +82,7 @@ class NotificationService:
         idempotency_key: Optional[str] = None,
     ) -> bool:
         if not user.campus_one_access_token:
-            logger.debug(f"User {user.id} has no Campus One token — skipping push")
+            logger.info(f"Campus One push skipped for user {user.id} ({user.email}) — no token stored (user must log in via Campus One)")
             return False
 
         # Enforce field length limits per spec
@@ -108,6 +110,55 @@ class NotificationService:
             return False
         except Exception as exc:
             logger.error(f"Campus One push exception for user {user.id}: {exc}")
+            return False
+
+    @classmethod
+    async def _push_campus_one_event(
+        cls,
+        user: User,
+        title: str,
+        starts_at: datetime,
+        ends_at: Optional[datetime] = None,
+        description: Optional[str] = None,
+        location: Optional[str] = None,
+        url: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> bool:
+        """Push a calendar event to the user's Campus One dashboard."""
+        if not user.campus_one_access_token:
+            logger.info(f"Campus One event push skipped for user {user.id} ({user.email}) — no token stored")
+            return False
+
+        headers: Dict[str, str] = {
+            "Authorization": f"Bearer {user.campus_one_access_token}",
+            "Content-Type": "application/json",
+        }
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+
+        payload: Dict = {
+            "title": title[:200],
+            "startsAt": starts_at.isoformat(),
+        }
+        if ends_at:
+            payload["endsAt"] = ends_at.isoformat()
+        if description:
+            payload["description"] = description[:1000]
+        if location:
+            payload["location"] = location[:300]
+        if url:
+            payload["url"] = url
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(_CAMPUS_ONE_EVENTS_URL, json=payload, headers=headers)
+            if resp.status_code == 200:
+                logger.info(f"Campus One event pushed for user {user.id}: '{title}'")
+                return True
+            logger.warning(f"Campus One event push failed {resp.status_code} for user {user.id}: {resp.text[:200]}")
+            return False
+        except Exception as exc:
+            logger.error(f"Campus One event push exception for user {user.id}: {exc}")
             return False
 
     @classmethod
@@ -201,6 +252,21 @@ class NotificationService:
             campus_one_type="success",
             target_url=f"{settings.FRONTEND_URL}/student/appointments",
             idempotency_key=f"appt-confirmed-{appointment_id}",
+        )
+
+        # Push calendar event to student's Campus One dashboard
+        await cls._push_campus_one_event(
+            student_user,
+            title=f"Counselling Session — {psychologist_name}",
+            starts_at=start_time,
+            ends_at=end_time,
+            description=(
+                f"Your SafeSpace wellness counselling session with {psychologist_name} "
+                f"on {day}, {start_} – {end_}."
+            ),
+            location="SafeSpace Counselling Centre",
+            url=f"{settings.FRONTEND_URL}/student/appointments",
+            idempotency_key=f"appt-event-{appointment_id}",
         )
 
     @classmethod
