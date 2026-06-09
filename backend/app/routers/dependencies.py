@@ -11,9 +11,10 @@ def require_roles(*allowed_roles: str):
 
         # Map Campus One roles to required permission roles
         role_mapping = {
-            "unit_head": ["admin", "staff"],  # unit_head can access admin/staff routes
-            "psychologist": ["psychologist", "admin", "staff"],  # psychologist can access their routes + staff
-            "student": ["student"],  # students can only access student routes
+            "unit_head": ["admin", "staff"],
+            "unit_admin": ["admin", "staff"],  # same access as unit_head
+            "psychologist": ["psychologist", "admin", "staff"],
+            "student": ["student"],
         }
 
         # Check if user's Campus One roles satisfy any of the required roles

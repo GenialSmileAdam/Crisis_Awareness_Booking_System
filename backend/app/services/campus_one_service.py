@@ -34,38 +34,28 @@ class CampusOneService:
             logger.warning(f"External user detected - may have restricted access")
             return UserRole.student, False, None  # Treat as student with no special privileges
 
-        # NOTE: Admin status is NOW determined from DATABASE, not Campus One
-        # Campus One roles are only informational input signals
-        # is_admin is set during user creation and stored in database
-        # This allows admin management independent of Campus One configuration
-        is_admin = False  # Will be properly set from database
+        is_admin = False  # Determined from database, not Campus One
 
         # Determine user role and staff type
         if primary_role == "student":
             return UserRole.student, is_admin, None
 
         # Map Campus One staff roles to our staff_type
+        # Custom roles and the roles array take priority over primary_role
         staff_type = None
 
-        # Check for therapist/psychologist role
-        if primary_role == "therapist" or "therapist" in roles:
+        if "psychologist" in custom_roles or "psychologist" in roles:
             staff_type = StaffType.psychologist
-        # Check for custom counselor role
+        elif primary_role == "therapist" or "therapist" in roles:
+            staff_type = StaffType.psychologist
         elif "counselor" in custom_roles or "counselor" in roles:
             staff_type = StaffType.counselor
-        # Check for administrator
-        elif primary_role == "administrator" or "administrator" in roles or is_admin:
+        elif "unit_head" in roles or "unit_admin" in roles or "unit_head" in custom_roles or "unit_admin" in custom_roles:
             staff_type = StaffType.administrator
-        # Default other staff roles (staff, mentor, developer, employer, consultant, founder, alumni, auditor)
-        elif primary_role in ("staff", "mentor", "developer", "employer", "consultant", "founder", "alumni", "auditor"):
-            # Map specific roles to staff types if available
-            if "mentor" in roles or primary_role == "mentor":
-                staff_type = StaffType.support_staff
-            else:
-                staff_type = StaffType.support_staff
+        elif primary_role == "administrator" or "administrator" in roles:
+            staff_type = StaffType.administrator
         else:
-            logger.warning(f"Unknown Campus One role: {primary_role}, defaulting to support_staff")
-            staff_type = StaffType.support_staff  # Safe fallback
+            staff_type = StaffType.support_staff
 
         return UserRole.staff, is_admin, staff_type
 
@@ -129,6 +119,10 @@ class CampusOneService:
             )
             db.add(staff)
             logger.info(f"Created staff user {new_user.id} with staff_type: {staff_type}")
+            await db.flush()
+            if staff_type == StaffType.psychologist:
+                from app.services.staff_service import StaffService
+                await StaffService._seed_default_availability(db, new_user.id)
 
         # Create Student record for student users
         elif user_role == UserRole.student:

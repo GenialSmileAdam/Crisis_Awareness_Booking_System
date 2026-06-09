@@ -52,7 +52,7 @@ async def get_consent(
 ):
     user_roles = current_user.get("roles", [])
     # Check if user has permission to view this consent
-    has_permission = any(role in user_roles for role in ["student", "psychologist", "unit_head"])
+    has_permission = any(role in user_roles for role in ["student", "psychologist", "unit_head", "unit_admin"])
     if not has_permission:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     # Students can only view their own consent

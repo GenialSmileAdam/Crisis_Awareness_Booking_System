@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import insert, select, update, func
@@ -58,7 +58,42 @@ class StaffService:
         await db.execute(insert(Staff).values(**payload))
         await db.commit()
         cls._psychologists_cache = {"expires_at": None, "data": None}
+
+        if data.staff_type == StaffType.psychologist:
+            await cls._seed_default_availability(db, user.id)
+
         return await cls.get_by_id(db, data.staff_id)
+
+    @staticmethod
+    async def _seed_default_availability(db: AsyncSession, psychologist_id: any) -> None:
+        """Auto-generate Mon–Fri 09:00–17:00 weekly schedule + 26 weeks of date blocks."""
+        start = time(9, 0)
+        end = time(17, 0)
+        workdays = range(5)  # 0=Mon … 4=Fri
+
+        for dow in workdays:
+            db.add(PsychologistWeeklySchedule(
+                psychologist_id=psychologist_id,
+                day_of_week=dow,
+                start_time=start,
+                end_time=end,
+            ))
+
+        today = date.today()
+        for week in range(26):
+            for dow in workdays:
+                days_ahead = dow - today.weekday()
+                if days_ahead < 0:
+                    days_ahead += 7
+                target = today + timedelta(days=days_ahead + week * 7)
+                db.add(PsychologistAvailability(
+                    psychologist_id=psychologist_id,
+                    date=target,
+                    start_time=start,
+                    end_time=end,
+                ))
+
+        await db.commit()
 
     @staticmethod
     async def get_all(db: AsyncSession, filters: dict[str, Any], limit: int, offset: int) -> dict[str, Any]:

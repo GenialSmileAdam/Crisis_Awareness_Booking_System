@@ -30,25 +30,26 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_index(op.f('idx_appointments_psychologist_id'), table_name='appointments')
-    op.drop_index(op.f('idx_appointments_start_time'), table_name='appointments')
-    op.drop_index(op.f('idx_appointments_status'), table_name='appointments')
-    op.drop_index(op.f('idx_appointments_student_id'), table_name='appointments')
-    op.drop_index(op.f('idx_audit_logs_timestamp'), table_name='audit_logs')
-    op.drop_index(op.f('idx_audit_logs_user_id'), table_name='audit_logs')
-    op.drop_constraint(op.f('audit_logs_user_id_fkey'), 'audit_logs', type_='foreignkey')
+    # Drop legacy idx_* indexes only if they exist (absent on fresh databases)
+    op.execute('DROP INDEX IF EXISTS idx_appointments_psychologist_id')
+    op.execute('DROP INDEX IF EXISTS idx_appointments_start_time')
+    op.execute('DROP INDEX IF EXISTS idx_appointments_status')
+    op.execute('DROP INDEX IF EXISTS idx_appointments_student_id')
+    op.execute('DROP INDEX IF EXISTS idx_audit_logs_timestamp')
+    op.execute('DROP INDEX IF EXISTS idx_audit_logs_user_id')
+    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_user_id_fkey') THEN ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_user_id_fkey; END IF; END $$")
     op.create_foreign_key(None, 'audit_logs', 'users', ['user_id'], ['id'])
-    op.drop_constraint(op.f('consent_student_id_key'), 'consent', type_='unique')
-    op.create_index(op.f('ix_consent_student_id'), 'consent', ['student_id'], unique=True)
-    op.drop_index(op.f('idx_crisis_logs_severity'), table_name='crisis_logs')
-    op.drop_index(op.f('idx_crisis_logs_student_id'), table_name='crisis_logs')
-    op.drop_constraint(op.f('crisis_logs_appointment_id_fkey'), 'crisis_logs', type_='foreignkey')
+    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'consent_student_id_key') THEN ALTER TABLE consent DROP CONSTRAINT consent_student_id_key; END IF; END $$")
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_consent_student_id') THEN CREATE UNIQUE INDEX ix_consent_student_id ON consent (student_id); END IF; END $$")
+    op.execute('DROP INDEX IF EXISTS idx_crisis_logs_severity')
+    op.execute('DROP INDEX IF EXISTS idx_crisis_logs_student_id')
+    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crisis_logs_appointment_id_fkey') THEN ALTER TABLE crisis_logs DROP CONSTRAINT crisis_logs_appointment_id_fkey; END IF; END $$")
     op.create_foreign_key(None, 'crisis_logs', 'appointments', ['appointment_id'], ['id'])
-    op.drop_index(op.f('idx_notifications_status'), table_name='notifications')
-    op.drop_index(op.f('idx_notifications_user_id'), table_name='notifications')
-    op.drop_constraint(op.f('notifications_user_id_fkey'), 'notifications', type_='foreignkey')
+    op.execute('DROP INDEX IF EXISTS idx_notifications_status')
+    op.execute('DROP INDEX IF EXISTS idx_notifications_user_id')
+    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_user_id_fkey') THEN ALTER TABLE notifications DROP CONSTRAINT notifications_user_id_fkey; END IF; END $$")
     op.create_foreign_key(None, 'notifications', 'users', ['user_id'], ['id'])
-    op.drop_index(op.f('idx_refresh_tokens_user_id'), table_name='refresh_tokens')
+    op.execute('DROP INDEX IF EXISTS idx_refresh_tokens_user_id')
     op.alter_column('resources', 'type',
                existing_type=postgresql.ENUM('article', 'video', 'exercise', name='resourcetype'),
                type_=sa.Enum('article', 'video', 'exercise', name='resourcetype', native_enum=False),
@@ -61,29 +62,29 @@ def upgrade() -> None:
                existing_type=postgresql.ENUM('green', 'amber', 'red', 'critical', name='risktier'),
                type_=sa.Enum('green', 'amber', 'red', 'critical', name='risktier', native_enum=False),
                existing_nullable=False)
-    op.drop_index(op.f('idx_risk_scores_student_id'), table_name='risk_scores')
-    op.drop_index(op.f('idx_risk_scores_tier'), table_name='risk_scores')
-    op.create_index(op.f('ix_risk_scores_student_id'), 'risk_scores', ['student_id'], unique=False)
-    op.create_index(op.f('ix_risk_scores_tier'), 'risk_scores', ['tier'], unique=False)
-    op.drop_index(op.f('idx_staff_staff_id'), table_name='staff')
-    op.drop_index(op.f('idx_students_assigned_psychologist'), table_name='students')
-    op.drop_index(op.f('idx_students_user_id'), table_name='students')
+    op.execute('DROP INDEX IF EXISTS idx_risk_scores_student_id')
+    op.execute('DROP INDEX IF EXISTS idx_risk_scores_tier')
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_risk_scores_student_id') THEN CREATE INDEX ix_risk_scores_student_id ON risk_scores (student_id); END IF; END $$")
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_risk_scores_tier') THEN CREATE INDEX ix_risk_scores_tier ON risk_scores (tier); END IF; END $$")
+    op.execute('DROP INDEX IF EXISTS idx_staff_staff_id')
+    op.execute('DROP INDEX IF EXISTS idx_students_assigned_psychologist')
+    op.execute('DROP INDEX IF EXISTS idx_students_user_id')
     op.alter_column('users', 'role',
                existing_type=postgresql.ENUM('staff', 'student', name='userrole'),
                type_=sa.Enum('staff', 'student', name='userrole', native_enum=False),
                existing_nullable=False)
-    op.drop_index(op.f('idx_users_email'), table_name='users')
-    op.drop_index(op.f('idx_users_is_active'), table_name='users')
-    op.drop_index(op.f('idx_users_role'), table_name='users')
-    op.drop_constraint(op.f('users_email_key'), 'users', type_='unique')
-    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_index(op.f('ix_users_role'), 'users', ['role'], unique=False)
+    op.execute('DROP INDEX IF EXISTS idx_users_email')
+    op.execute('DROP INDEX IF EXISTS idx_users_is_active')
+    op.execute('DROP INDEX IF EXISTS idx_users_role')
+    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_email_key') THEN ALTER TABLE users DROP CONSTRAINT users_email_key; END IF; END $$")
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_users_email') THEN CREATE UNIQUE INDEX ix_users_email ON users (email); END IF; END $$")
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_users_role') THEN CREATE INDEX ix_users_role ON users (role); END IF; END $$")
     op.alter_column('wellness_checkins', 'type',
                existing_type=postgresql.ENUM('pulse', 'phq9', 'gad7', 'event_triggered', 'crisis', name='wellnesscheckintype'),
                type_=sa.Enum('pulse', 'phq9', 'gad7', 'event_triggered', 'crisis', name='wellnesscheckintype', native_enum=False),
                existing_nullable=False)
-    op.drop_index(op.f('idx_wellness_checkins_student_id'), table_name='wellness_checkins')
-    op.create_index(op.f('ix_wellness_checkins_student_id'), 'wellness_checkins', ['student_id'], unique=False)
+    op.execute('DROP INDEX IF EXISTS idx_wellness_checkins_student_id')
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_wellness_checkins_student_id') THEN CREATE INDEX ix_wellness_checkins_student_id ON wellness_checkins (student_id); END IF; END $$")
     # ### end Alembic commands ###
 
 

@@ -26,7 +26,7 @@ def _optional_user_type(request: Request) -> Optional[str]:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         roles = payload.get("roles", [])
-        if "unit_head" in roles:
+        if "unit_head" in roles or "unit_admin" in roles:
             return "admin"
         if "psychologist" in roles:
             return "psychologist"
