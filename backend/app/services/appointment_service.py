@@ -134,8 +134,9 @@ class AppointmentService:
                     PsychologistAvailability.start_time <= start_time.time(),
                     PsychologistAvailability.end_time >= end_time.time(),
                 )
+                .limit(1)
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if availability:
             return
 
@@ -150,8 +151,9 @@ class AppointmentService:
                     PsychologistWeeklySchedule.start_time <= start_time.time(),
                     PsychologistWeeklySchedule.end_time >= end_time.time(),
                 )
+                .limit(1)
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if not weekly:
             raise FileExistsError("Requested time is outside psychologist availability")
 
@@ -369,14 +371,13 @@ class AppointmentService:
                 start_time=appointment.start_time,
                 end_time=appointment.end_time,
             )
-            # Also notify if this is first time being assigned to a counselor
-            if not (await db.execute(
-                select(Student).where(
-                    Student.student_id == appointment.student_id,
-                    Student.assigned_psychologist_id == appointment.psychologist_id,
+            # Notify student of their newly assigned counselor
+            if psych_user:
+                await NotificationService.notify_counselor_assigned(
+                    db,
+                    student_id=appointment.student_id,
+                    psychologist_name=psych_name,
                 )
-            )).scalar_one_or_none() is None:
-                pass  # assignment was just made — counselor_assigned notification via wrs_alert path
         except Exception as exc:
             import logging
             logging.getLogger(__name__).error(f"Approve notification failed: {exc}")

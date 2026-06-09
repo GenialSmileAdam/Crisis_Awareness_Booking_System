@@ -383,7 +383,27 @@ async def save_weekly_schedule(
             end_time=end_time,
         ))
 
-    # Also materialise date-specific blocks for the next 26 weeks (convenience)
+    # Clear existing future availability blocks for the scheduled days so stale
+    # blocks don't persist after the psychologist updates their schedule.
+    dates_to_clear: set[date] = set()
+    for week in range(26):
+        for day_schedule in payload.schedule:
+            target_weekday = DAY_MAP[day_schedule.day]
+            days_ahead = target_weekday - today.weekday()
+            if days_ahead < 0:
+                days_ahead += 7
+            if week > 0:
+                days_ahead += week * 7
+            dates_to_clear.add(today + timedelta(days=days_ahead))
+    if dates_to_clear:
+        await db.execute(
+            PsychologistAvailability.__table__.delete().where(
+                PsychologistAvailability.psychologist_id == psych_id,
+                PsychologistAvailability.date.in_(dates_to_clear),
+            )
+        )
+
+    # Materialise date-specific blocks for the next 26 weeks (convenience)
     created_blocks = []
     for week in range(26):
         for day_schedule in payload.schedule:
@@ -466,15 +486,6 @@ async def add_busy_block(
     )
     if conflict:
         raise HTTPException(status_code=409, detail="Busy block overlaps an existing busy block")
-
-    availability_conflict = await check_availability_conflicts_busy_block(
-        db,
-        psych_id,
-        payload.block_start,
-        payload.block_end,
-    )
-    if availability_conflict:
-        raise HTTPException(status_code=409, detail="Busy block overlaps existing availability")
 
     block = PsychologistBusyBlock(
         psychologist_id=psych_id,

@@ -274,7 +274,7 @@ def calculate_wrs(data: Dict[str, Any]) -> Dict[str, Any]:
         'session_freq': 0.05
     }
 
-    wrs = sum(float(data.get(key, 0.0)) * weights[key] for key in weights)
+    wrs = min(100.0, max(0.0, sum(float(data.get(key, 0.0)) * weights[key] for key in weights)))
 
     if wrs >= 85:
         tier = "critical"

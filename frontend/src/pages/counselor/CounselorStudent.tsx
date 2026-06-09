@@ -851,7 +851,7 @@ export default function CounselorStudent() {
                   </div>
                   <div className="rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Highest concern: </span>
-                    {phq9QuestionAverages.sort((a, b) => b.avg - a.avg)[0]?.label} (avg {phq9QuestionAverages.sort((a, b) => b.avg - a.avg)[0]?.avg.toFixed(1)}/3)
+                    {(() => { const top = [...phq9QuestionAverages].sort((a, b) => b.avg - a.avg)[0]; return top ? `${top.label} (avg ${top.avg.toFixed(1)}/3)` : null; })()}
                   </div>
                 </>
               )}
@@ -891,7 +891,7 @@ export default function CounselorStudent() {
                   </div>
                   <div className="rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Highest concern: </span>
-                    {gad7QuestionAverages.sort((a, b) => b.avg - a.avg)[0]?.label} (avg {gad7QuestionAverages.sort((a, b) => b.avg - a.avg)[0]?.avg.toFixed(1)}/3)
+                    {(() => { const top = [...gad7QuestionAverages].sort((a, b) => b.avg - a.avg)[0]; return top ? `${top.label} (avg ${top.avg.toFixed(1)}/3)` : null; })()}
                   </div>
                 </>
               )}

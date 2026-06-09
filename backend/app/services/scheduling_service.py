@@ -97,7 +97,7 @@ async def check_confirmed_appointment_conflict(
     """Find a conflicting confirmed or booked appointment for the given psychologist."""
     conditions = [
         Appointment.psychologist_id == psychologist_id,
-        Appointment.status.in_({AppointmentStatus.confirmed, AppointmentStatus.booked}),
+        Appointment.status.in_({AppointmentStatus.confirmed, AppointmentStatus.booked, AppointmentStatus.pending}),
         Appointment.deleted_at.is_(None),
         func.tstzrange(Appointment.start_time, Appointment.end_time).op("&&")(
             func.tstzrange(start_time, end_time)

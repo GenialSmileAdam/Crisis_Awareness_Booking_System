@@ -131,10 +131,10 @@ async def analyze_session(
 
         # Calculate metrics
         avg_assessment = sum(phq9_gad7_scores) / len(phq9_gad7_scores) if phq9_gad7_scores else 13.5
-        assessment_norm = (avg_assessment / 27.0) * 100.0
+        assessment_norm = min(100.0, max(0.0, (avg_assessment / 27.0) * 100.0))
 
         avg_pulse = sum(pulse_scores) / len(pulse_scores) if pulse_scores else 5.0
-        pulse_norm = (avg_pulse / 10.0) * 100.0
+        pulse_norm = min(100.0, max(0.0, (avg_pulse / 10.0) * 100.0))
 
         # Query crisis logs
         crisis_count = (await db.execute(

@@ -69,7 +69,10 @@ export async function apiRequest<T>(
       let message = `Request failed with status ${res.status}`;
       try {
         const err = await res.json();
-        message = err.message || err.detail || message;
+        const raw = err.message || err.detail || message;
+        message = Array.isArray(raw)
+          ? raw.map((e: any) => e?.msg ?? String(e)).join("; ")
+          : String(raw);
       } catch {
         // body wasn't JSON — keep default message
       }

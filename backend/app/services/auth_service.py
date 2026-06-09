@@ -30,12 +30,25 @@ class AuthService:
             ).scalar_one_or_none()
 
         staff_type = staff.staff_type.value if staff else None
+
+        # Derive Campus One-compatible roles from DB fields for password-login users.
+        # OIDC users get roles from the JWT claims; this path ensures fallback parity.
+        if user.is_admin or staff_type == "administrator":
+            derived_roles = ["unit_head"]
+        elif staff_type == "psychologist":
+            derived_roles = ["psychologist"]
+        elif user.role.value == "student":
+            derived_roles = ["student"]
+        else:
+            derived_roles = []
+
         return {
             "user_type": user.role.value,
             "is_admin": bool(user.is_admin),
             "staff_type": staff_type,
             "staff_id": staff.staff_id if staff else None,
             "student_id": student.student_id if student else None,
+            "roles": derived_roles,
         }
 
     @classmethod
@@ -175,6 +188,7 @@ class AuthService:
             str(user.id),
             identity["user_type"],
             user.full_name,
+            roles=identity["roles"],
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],
@@ -243,6 +257,7 @@ class AuthService:
             str(user.id),
             identity["user_type"],
             user.full_name,
+            roles=identity["roles"],
             is_admin=identity["is_admin"],
             staff_type=identity["staff_type"],
             staff_id=identity["staff_id"],

@@ -330,7 +330,7 @@ class NotificationService:
         score_text = f" (Wellness Score: {round(wrs_score)}/100)" if wrs_score else ""
         target_url = f"{settings.FRONTEND_URL}/counselor"
 
-        if psychologist and settings.SAFESPACE_NOTIF:
+        if psychologist:
             await cls._notify(
                 db,
                 psychologist,
@@ -347,7 +347,7 @@ class NotificationService:
             )
 
         # Let the student know help is coming
-        if student_user and settings.SAFESPACE_NOTIF:
+        if student_user:
             await cls._notify(
                 db,
                 student_user,
