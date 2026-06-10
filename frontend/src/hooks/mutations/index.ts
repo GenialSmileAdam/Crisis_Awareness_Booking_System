@@ -10,6 +10,7 @@ export {
   useRequestAppointment,
   useApproveAppointment,
   useRejectAppointment,
+  useCancelAppointment,
   type BookAppointmentPayload,
   type UpdateAppointmentPayload,
   type AppointmentResponse,

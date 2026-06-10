@@ -32,6 +32,7 @@ import AdminForum from "./pages/admin/AdminForum";
 import AdminResources from "./pages/admin/AdminResources";
 import AdminFeedback from "./pages/admin/AdminFeedback";
 import NotFound from "./pages/NotFound";
+import AutoLogin from "./pages/AutoLogin";
 
 const queryClient = new QueryClient();
 
@@ -45,8 +46,9 @@ const App = () => (
             <Sonner position="top-right" />
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Routes>
-                <Route path="/" element={<Landing />} />
+                <Route path="/" element={<AutoLogin />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/auto-login" element={<AutoLogin />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/auth/error" element={<AuthError />} />
                 <Route path="/student" element={<StudentRoute><StudentPortal /></StudentRoute>} />

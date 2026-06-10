@@ -99,6 +99,25 @@ export function useApproveAppointment(): UseMutationResult<AppointmentResponse, 
 }
 
 /**
+ * Cancel an appointment (student cancels their own)
+ */
+export function useCancelAppointment(): UseMutationResult<AppointmentResponse, Error, string> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (appointmentId: string) => {
+      return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/cancel`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+    onError: (error: Error) => {
+      console.error("Failed to cancel appointment:", error);
+    },
+  });
+}
+
+/**
  * Reject an appointment request (psychologist/admin only)
  */
 export function useRejectAppointment(): UseMutationResult<AppointmentResponse, Error, string> {

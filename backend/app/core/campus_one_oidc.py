@@ -37,7 +37,7 @@ class CampusOneOIDC:
     TOKEN_URL = "https://auth.campusone.com.ng/api/auth/oauth2/token"
     JWKS_URL = "https://auth.campusone.com.ng/api/auth/jwks"
 
-    SCOPES = ["openid", "profile", "email", "academic", "roles"]
+    SCOPES = ["openid", "profile", "email", "academic", "roles", "notifications", "events", "offline_access"]
 
     def __init__(self):
         self.client_id = settings.CAMPUS_ONE_CLIENT_ID
@@ -66,7 +66,7 @@ class CampusOneOIDC:
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            "prompt": "select_account",  # Force account selection on every login
+            "prompt": "login",  # Force fresh Campus One authentication — prevents silent re-login after SafeSpace logout
         }
 
         url = f"{self.AUTHORIZE_URL}?{urlencode(params)}"
@@ -115,6 +115,23 @@ class CampusOneOIDC:
             logger.info(f"   Full response: {token_data}")
 
             return token_data
+
+    async def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
+        """Use a refresh token to obtain a new access token from Campus One."""
+        request_data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(self.TOKEN_URL, data=request_data)
+
+        if response.status_code != 200:
+            raise ValueError(f"Campus One token refresh failed: {response.status_code} {response.text[:200]}")
+
+        return response.json()
 
     def _jwk_to_pem(self, jwk: Dict[str, Any]) -> str:
         """Convert JWK to PEM format for python-jose to use."""

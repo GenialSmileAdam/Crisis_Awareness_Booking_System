@@ -72,8 +72,28 @@ class NotificationService:
     # -------------------------------------------------------------------------
 
     @classmethod
+    async def _refresh_campus_one_token(cls, db: AsyncSession, user: User) -> bool:
+        """Attempt to refresh the user's Campus One access token using their stored refresh token."""
+        if not user.campus_one_refresh_token:
+            logger.warning(f"Cannot refresh Campus One token for user {user.id} — no refresh token stored")
+            return False
+        try:
+            from app.core.campus_one_oidc import CampusOneOIDC
+            tokens = await CampusOneOIDC().refresh_access_token(user.campus_one_refresh_token)
+            user.campus_one_access_token = tokens["access_token"]
+            if "refresh_token" in tokens:
+                user.campus_one_refresh_token = tokens["refresh_token"]
+            await db.commit()
+            logger.info(f"Campus One token refreshed for user {user.id} ({user.email})")
+            return True
+        except Exception as exc:
+            logger.warning(f"Campus One token refresh failed for user {user.id}: {exc}")
+            return False
+
+    @classmethod
     async def _push_campus_one(
         cls,
+        db: AsyncSession,
         user: User,
         title: str,
         body: str,
@@ -89,23 +109,27 @@ class NotificationService:
         title = title[:128]
         body = body[:512]
 
-        headers: Dict[str, str] = {
-            "Authorization": f"Bearer {user.campus_one_access_token}",
-            "Content-Type": "application/json",
-        }
-        if idempotency_key:
-            headers["Idempotency-Key"] = idempotency_key
-
         payload: Dict = {"title": title, "body": body, "type": type_}
         if target_url:
             payload["targetUrl"] = target_url
 
-        try:
+        async def _do_post(token: str):
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            if idempotency_key:
+                headers["Idempotency-Key"] = idempotency_key
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(_CAMPUS_ONE_NOTIF_URL, json=payload, headers=headers)
+                return await client.post(_CAMPUS_ONE_NOTIF_URL, json=payload, headers=headers)
+
+        try:
+            resp = await _do_post(user.campus_one_access_token)
             if resp.status_code == 200:
                 logger.info(f"Campus One push sent to user {user.id}")
                 return True
+            if resp.status_code == 401 and await cls._refresh_campus_one_token(db, user):
+                resp = await _do_post(user.campus_one_access_token)
+                if resp.status_code == 200:
+                    logger.info(f"Campus One push sent to user {user.id} (after token refresh)")
+                    return True
             logger.warning(f"Campus One push failed {resp.status_code} for user {user.id}: {resp.text[:200]}")
             return False
         except Exception as exc:
@@ -115,6 +139,7 @@ class NotificationService:
     @classmethod
     async def _push_campus_one_event(
         cls,
+        db: AsyncSession,
         user: User,
         title: str,
         starts_at: datetime,
@@ -129,17 +154,7 @@ class NotificationService:
             logger.info(f"Campus One event push skipped for user {user.id} ({user.email}) — no token stored")
             return False
 
-        headers: Dict[str, str] = {
-            "Authorization": f"Bearer {user.campus_one_access_token}",
-            "Content-Type": "application/json",
-        }
-        if idempotency_key:
-            headers["Idempotency-Key"] = idempotency_key
-
-        payload: Dict = {
-            "title": title[:200],
-            "startsAt": starts_at.isoformat(),
-        }
+        payload: Dict = {"title": title[:200], "startsAt": starts_at.isoformat()}
         if ends_at:
             payload["endsAt"] = ends_at.isoformat()
         if description:
@@ -149,12 +164,23 @@ class NotificationService:
         if url:
             payload["url"] = url
 
-        try:
+        async def _do_post(token: str):
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            if idempotency_key:
+                headers["Idempotency-Key"] = idempotency_key
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(_CAMPUS_ONE_EVENTS_URL, json=payload, headers=headers)
+                return await client.post(_CAMPUS_ONE_EVENTS_URL, json=payload, headers=headers)
+
+        try:
+            resp = await _do_post(user.campus_one_access_token)
             if resp.status_code == 200:
                 logger.info(f"Campus One event pushed for user {user.id}: '{title}'")
                 return True
+            if resp.status_code == 401 and await cls._refresh_campus_one_token(db, user):
+                resp = await _do_post(user.campus_one_access_token)
+                if resp.status_code == 200:
+                    logger.info(f"Campus One event pushed for user {user.id}: '{title}' (after token refresh)")
+                    return True
             logger.warning(f"Campus One event push failed {resp.status_code} for user {user.id}: {resp.text[:200]}")
             return False
         except Exception as exc:
@@ -178,6 +204,7 @@ class NotificationService:
             await cls._store(db, user.id, title, body, category)
         if settings.SAFESPACE_CAMPUS_ONE_NOTIF:
             await cls._push_campus_one(
+                db,
                 user,
                 title=title,
                 body=body,
@@ -217,7 +244,7 @@ class NotificationService:
             ),
             category=NotificationCategory.appointment_requested,
             campus_one_type="action_required",
-            target_url=f"{settings.FRONTEND_URL}/counselor",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
             idempotency_key=f"appt-req-{appointment_id}",
         )
 
@@ -250,12 +277,13 @@ class NotificationService:
             ),
             category=NotificationCategory.booking_confirmation,
             campus_one_type="success",
-            target_url=f"{settings.FRONTEND_URL}/student/appointments",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
             idempotency_key=f"appt-confirmed-{appointment_id}",
         )
 
         # Push calendar event to student's Campus One dashboard
         await cls._push_campus_one_event(
+            db,
             student_user,
             title=f"Counselling Session — {psychologist_name}",
             starts_at=start_time,
@@ -265,8 +293,39 @@ class NotificationService:
                 f"on {day}, {start_} – {end_}."
             ),
             location="SafeSpace Counselling Centre",
-            url=f"{settings.FRONTEND_URL}/student/appointments",
+            url=f"{settings.FRONTEND_URL}/auto-login",
             idempotency_key=f"appt-event-{appointment_id}",
+        )
+
+    @classmethod
+    async def notify_appointment_cancelled_by_student(
+        cls,
+        db: AsyncSession,
+        appointment_id: UUID,
+        student_name: str,
+        psychologist_id: UUID,
+        start_time: datetime,
+    ) -> None:
+        """Notify psychologist that a student cancelled their session."""
+        psychologist = await cls._get_user(db, psychologist_id)
+        if not psychologist:
+            return
+
+        day = start_time.strftime("%A, %d %b %Y")
+        time_ = start_time.strftime("%I:%M %p")
+
+        await cls._notify(
+            db,
+            psychologist,
+            title="Session Cancelled by Student",
+            body=(
+                f"{student_name} has cancelled their session scheduled for {day} at {time_}. "
+                "The slot is now free — you may wish to update your availability."
+            ),
+            category=NotificationCategory.appointment_rejected,
+            campus_one_type="warning",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
+            idempotency_key=f"appt-cancelled-{appointment_id}",
         )
 
     @classmethod
@@ -297,7 +356,7 @@ class NotificationService:
             ),
             category=NotificationCategory.appointment_rejected,
             campus_one_type="warning",
-            target_url=f"{settings.FRONTEND_URL}/student/appointments",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
             idempotency_key=f"appt-rejected-{appointment_id}",
         )
 
@@ -353,7 +412,7 @@ class NotificationService:
                 body=student_body,
                 category=NotificationCategory.risk_alert,
                 campus_one_type=campus_one_type,
-                target_url=f"{settings.FRONTEND_URL}/student",
+                target_url=f"{settings.FRONTEND_URL}/auto-login",
                 idempotency_key=f"wrs-student-{student_id}-{wrs_int}",
             )
 
@@ -372,7 +431,7 @@ class NotificationService:
                     ),
                     category=NotificationCategory.risk_alert,
                     campus_one_type="action_required",
-                    target_url=f"{settings.FRONTEND_URL}/counselor",
+                    target_url=f"{settings.FRONTEND_URL}/auto-login",
                     idempotency_key=f"wrs-psych-{student_id}-{wrs_int}",
                 )
 
@@ -394,7 +453,7 @@ class NotificationService:
         student_user = await cls._get_student_user(db, student_id)
 
         score_text = f" (Wellness Score: {round(wrs_score)}/100)" if wrs_score else ""
-        target_url = f"{settings.FRONTEND_URL}/counselor"
+        target_url = f"{settings.FRONTEND_URL}/auto-login"
 
         if psychologist:
             await cls._notify(
@@ -425,7 +484,7 @@ class NotificationService:
                 ),
                 category=NotificationCategory.crisis_alert,
                 campus_one_type="action_required",
-                target_url=f"{settings.FRONTEND_URL}/student",
+                target_url=f"{settings.FRONTEND_URL}/auto-login",
                 idempotency_key=f"crisis-student-{appointment_id}",
             )
 
@@ -455,7 +514,7 @@ class NotificationService:
             ),
             category=NotificationCategory.counselor_assigned,
             campus_one_type="success",
-            target_url=f"{settings.FRONTEND_URL}/student/appointments",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
             idempotency_key=f"assigned-{student_id}",
         )
 

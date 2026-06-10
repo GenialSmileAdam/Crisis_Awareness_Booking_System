@@ -299,13 +299,14 @@ class AppointmentService:
                 # Push calendar event for the auto-confirmed crisis appointment
                 if student_user and psychologist_user:
                     await NotificationService._push_campus_one_event(
+                        db,
                         student_user,
                         title=f"Urgent Counselling Session — {psychologist_user.full_name or 'Counselor'}",
                         starts_at=appointment_data.start_time,
                         ends_at=appointment_data.end_time,
                         description="An urgent SafeSpace counselling session has been arranged for you.",
                         location="SafeSpace Counselling Centre",
-                        url=f"{settings.FRONTEND_URL}/student/appointments",
+                        url=f"{settings.FRONTEND_URL}/auto-login",
                         idempotency_key=f"appt-event-{appointment.id}",
                     )
             else:
@@ -427,6 +428,51 @@ class AppointmentService:
         except Exception as exc:
             import logging
             logging.getLogger(__name__).error(f"Reject notification failed: {exc}")
+
+        return result
+
+    @classmethod
+    async def cancel_by_student(
+        cls,
+        db: AsyncSession,
+        appointment_id: UUID,
+        student_id: str,
+    ) -> dict[str, Any]:
+        """Allow a student to cancel their own pending/confirmed/booked appointment."""
+        appointment = await cls._get_appointment_entity(db, appointment_id)
+
+        if appointment.student_id != student_id:
+            raise PermissionError("You can only cancel your own appointments")
+
+        cancellable = {AppointmentStatus.pending, AppointmentStatus.confirmed, AppointmentStatus.booked}
+        if appointment.status not in cancellable:
+            raise ValueError(f"Cannot cancel an appointment with status '{appointment.status.value}'")
+
+        await db.execute(
+            update(Appointment)
+            .where(Appointment.id == appointment.id)
+            .values(status=AppointmentStatus.cancelled)
+        )
+        await db.commit()
+        result = await cls.get_by_id(db, appointment.id)
+
+        try:
+            from app.services.notification_service import NotificationService
+            student_user = (await db.execute(
+                select(User).join(Student, Student.user_id == User.id)
+                .where(Student.student_id == student_id)
+            )).scalar_one_or_none()
+            student_name = student_user.full_name if student_user else "A student"
+            await NotificationService.notify_appointment_cancelled_by_student(
+                db,
+                appointment_id=appointment.id,
+                student_name=student_name,
+                psychologist_id=appointment.psychologist_id,
+                start_time=appointment.start_time,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(f"Cancel notification failed: {exc}")
 
         return result
 

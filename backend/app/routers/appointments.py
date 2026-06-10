@@ -264,6 +264,33 @@ async def reject_appointment(
     return cache_idempotent_response(cache_key, response)
 
 
+@router.patch("/{id}/cancel")
+async def cancel_appointment_by_student(
+    id: UUID,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("student"),
+):
+    """Student cancels their own appointment."""
+    cache_key, cached = await handle_idempotency(request, idempotency_key)
+    if cached:
+        return cached
+    student_id = current_user.get("student_id")
+    if not student_id:
+        raise HTTPException(status_code=403, detail="Student ID not found in token")
+    try:
+        result = await AppointmentService.cancel_by_student(db, id, student_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    response = success("Appointment cancelled successfully", result)
+    return cache_idempotent_response(cache_key, response)
+
+
 @router.patch("/{id}")
 async def update_appointment(
     id: UUID,

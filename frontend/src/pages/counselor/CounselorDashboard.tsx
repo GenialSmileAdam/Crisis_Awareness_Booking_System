@@ -600,10 +600,13 @@ export default function CounselorDashboard() {
                           <div className="flex flex-col gap-1">
                             <span className={cn(
                               "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit",
-                              a.status === "booked" ? "bg-primary/15 text-primary" :
-                              a.status === "completed" ? "bg-success/15 text-success-foreground" :
-                              a.status === "cancelled" ? "bg-muted text-muted-foreground" :
-                              "bg-warning/15 text-warning-foreground"
+                              a.status === "pending" ? "bg-amber-500/25 text-amber-300" :
+                              a.status === "confirmed" ? "bg-blue-500/25 text-blue-300" :
+                              a.status === "booked" ? "bg-violet-500/25 text-violet-300" :
+                              a.status === "completed" ? "bg-green-500/25 text-green-300" :
+                              a.status === "cancelled" ? "bg-red-500/20 text-red-400" :
+                              a.status === "rejected" ? "bg-rose-500/20 text-rose-400" :
+                              "bg-slate-500/20 text-slate-300"
                             )}>
                               {a.status.replace('_', ' ')}
                             </span>

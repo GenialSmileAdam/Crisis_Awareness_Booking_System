@@ -1,5 +1,5 @@
 import { useStudentAppointments, usePsychologists, useAppointmentAvailability } from "@/hooks/queries";
-import { useBookAppointment } from "@/hooks/mutations";
+import { useBookAppointment, useCancelAppointment } from "@/hooks/mutations";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock, MessageSquare, RotateCcw, Sparkles, Video, MapPin, LogOut, Pencil } from "lucide-react";
@@ -46,6 +46,7 @@ export default function StudentAppointments() {
     selectedDate
   );
   const bookMutation = useBookAppointment();
+  const cancelMutation = useCancelAppointment();
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
 
@@ -520,10 +521,21 @@ export default function StudentAppointments() {
                         </span>
                       </div>
                       <div className="flex gap-2 pt-1">
-                        <Button size="sm" variant="ghost" className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => {
-                          toast.success("Appointment cancelled");
-                        }}>
-                          Cancel
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          disabled={cancelMutation.isPending}
+                          onClick={async () => {
+                            try {
+                              await cancelMutation.mutateAsync(a.id);
+                              toast.success("Appointment cancelled");
+                            } catch {
+                              toast.error("Failed to cancel appointment");
+                            }
+                          }}
+                        >
+                          {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
                         </Button>
                       </div>
                     </div>

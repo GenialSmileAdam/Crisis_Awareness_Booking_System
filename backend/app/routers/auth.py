@@ -289,10 +289,20 @@ async def login(
 
 @router.post("/api/auth/logout")
 async def logout(
+    request: Request,
     response: Response,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Logout (frontend clears token from localStorage)."""
+    """
+    Logout: revoke the SafeSpace refresh token and clear the cookie.
+    Does NOT require a valid access token — logout must work even when the
+    access token has already expired.
+    """
+    refresh_token_val = request.cookies.get("refresh_token")
+    if refresh_token_val:
+        await AuthService.logout(db, refresh_token_val)
+
+    response.delete_cookie("refresh_token", path="/", httponly=True)
     return success("Logged out")
 
 
