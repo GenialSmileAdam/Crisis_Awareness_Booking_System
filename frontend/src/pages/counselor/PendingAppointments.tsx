@@ -139,11 +139,11 @@ export default function PendingAppointments() {
                     </div>
 
                     {/* Notes */}
-                    {appointment.notes && (
+                    {appointment.crisis_note && (
                       <div className="flex gap-3">
                         <MessageSquare className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                         <div className="text-sm p-2 bg-muted/50 rounded-lg flex-1">
-                          {appointment.notes}
+                          {appointment.crisis_note}
                         </div>
                       </div>
                     )}

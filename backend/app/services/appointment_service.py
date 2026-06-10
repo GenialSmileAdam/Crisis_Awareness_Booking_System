@@ -718,7 +718,8 @@ class AppointmentService:
                     slots.append(f"{current.isoformat()} / {candidate_end.isoformat()}")
                 current += duration
 
-        return slots[: staff.max_appointments_per_day]
+        remaining_capacity = max(0, staff.max_appointments_per_day - len(appt_ranges))
+        return slots[:remaining_capacity]
 
     @classmethod
     async def get_by_id(

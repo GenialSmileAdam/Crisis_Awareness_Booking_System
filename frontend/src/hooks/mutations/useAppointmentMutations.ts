@@ -5,12 +5,11 @@ export interface BookAppointmentPayload {
   psychologist_id: string;
   start_time: string;
   end_time: string;
-  notes?: string;
+  crisis_note?: string;
 }
 
 export interface UpdateAppointmentPayload {
   status?: string;
-  pending_approval?: boolean;
 }
 
 export interface AppointmentResponse {
@@ -42,7 +41,7 @@ export function useBookAppointment(): UseMutationResult<AppointmentResponse, Err
 }
 
 /**
- * Update an appointment (status, pending_approval, etc.)
+ * Update an appointment (status, times, crisis_note)
  */
 export function useUpdateAppointment(): UseMutationResult<AppointmentResponse, Error, { id: string; data: UpdateAppointmentPayload }> {
   const queryClient = useQueryClient();

@@ -20,6 +20,20 @@ function checkinWrs(c: { type: string; score?: number | null }): number | null {
   return null;
 }
 
+function statusBadge(status: string) {
+  const map: Record<string, { label: string; cls: string }> = {
+    completed:  { label: "Completed",  cls: "bg-green-500/15 text-green-600" },
+    cancelled:  { label: "Cancelled",  cls: "bg-muted text-muted-foreground" },
+    rejected:   { label: "Rejected",   cls: "bg-destructive/15 text-destructive" },
+    no_show:    { label: "No-show",    cls: "bg-orange-500/15 text-orange-600" },
+    confirmed:  { label: "Confirmed",  cls: "bg-violet-500/15 text-violet-600" },
+    pending:    { label: "Pending",    cls: "bg-amber-500/15 text-amber-600" },
+    booked:     { label: "Upcoming",   cls: "bg-blue-500/15 text-blue-600" },
+  };
+  const { label, cls } = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground" };
+  return <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>;
+}
+
 function typeLabel(t: string) {
   switch (t) {
     case "phq9": return "PHQ-9";
@@ -48,7 +62,10 @@ export default function StudentHistory() {
 
   const checkins = checkinsQuery.data?.data || [];
   const checkinsTotal = checkinsQuery.data?.pagination?.total || 0;
-  const appointments = (appointmentsQuery.data?.data || []).filter(a => a.status === "completed");
+  const TERMINAL_STATUSES = new Set(["completed", "cancelled", "rejected", "no_show"]);
+  const appointments = (appointmentsQuery.data?.data || []).filter(
+    (a) => TERMINAL_STATUSES.has(a.status) || new Date(a.start_time) < new Date()
+  );
   const sessionsTotal = appointmentsQuery.data?.pagination?.total || 0;
 
   const loading = checkinsQuery.isPending || (!!studentId && appointmentsQuery.isPending);
@@ -179,9 +196,7 @@ export default function StudentHistory() {
                                 </span>
                               </td>
                               <td className="p-4 text-muted-foreground text-xs">{a.psychologist_full_name || "—"}</td>
-                              <td className="p-4">
-                                <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-green-500/15 text-green-600">Completed</span>
-                              </td>
+                              <td className="p-4">{statusBadge(a.status)}</td>
                             </tr>
                           );
                         }
@@ -246,7 +261,7 @@ export default function StudentHistory() {
             {/* Sessions tab */}
             {tab === "sessions" && (
               appointments.length === 0 ? (
-                <EmptyState message="No completed sessions yet." />
+                <EmptyState message="No past sessions yet." />
               ) : (
                 <>
                   <div className="glass border border-border rounded-3xl overflow-x-auto">
@@ -271,9 +286,7 @@ export default function StudentHistory() {
                               </td>
                               <td className="p-4 text-muted-foreground">{a.psychologist_full_name || "—"}</td>
                               <td className="p-4 text-muted-foreground">{duration} min</td>
-                              <td className="p-4">
-                                <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-green-500/15 text-green-600">Completed</span>
-                              </td>
+                              <td className="p-4">{statusBadge(a.status)}</td>
                             </tr>
                           );
                         })}

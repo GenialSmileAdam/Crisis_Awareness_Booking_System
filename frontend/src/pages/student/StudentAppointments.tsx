@@ -47,6 +47,7 @@ export default function StudentAppointments() {
   );
   const bookMutation = useBookAppointment();
   const cancelMutation = useCancelAppointment();
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [step, setStep] = useState(1);
 
@@ -134,7 +135,7 @@ export default function StudentAppointments() {
         psychologist_id: selectedPsychologist.user_id,
         start_time: start,
         end_time: end,
-        notes: notes || undefined,
+        crisis_note: notes || undefined,
       },
       {
         onSuccess: (response) => {
@@ -513,11 +514,11 @@ export default function StudentAppointments() {
                       <div className="flex gap-2 flex-wrap">
                         <span className={cn(
                           "px-2 py-0.5 rounded-full text-xs font-medium",
-                          a.pending_approval
+                          a.status === "pending"
                             ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
                             : "bg-[#A8FF3E]/15 text-[#5a8c00]"
                         )}>
-                          {a.pending_approval ? "Awaiting confirmation" : "Confirmed"}
+                          {a.status === "pending" ? "Awaiting confirmation" : "Confirmed"}
                         </span>
                       </div>
                       <div className="flex gap-2 pt-1">
@@ -525,17 +526,20 @@ export default function StudentAppointments() {
                           size="sm"
                           variant="ghost"
                           className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          disabled={cancelMutation.isPending}
+                          disabled={cancellingId === a.id}
                           onClick={async () => {
+                            setCancellingId(a.id);
                             try {
                               await cancelMutation.mutateAsync(a.id);
                               toast.success("Appointment cancelled");
                             } catch {
                               toast.error("Failed to cancel appointment");
+                            } finally {
+                              setCancellingId(null);
                             }
                           }}
                         >
-                          {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+                          {cancellingId === a.id ? "Cancelling…" : "Cancel"}
                         </Button>
                       </div>
                     </div>
@@ -561,7 +565,12 @@ export default function StudentAppointments() {
                 <div className="flex justify-center py-6"><NeonSpinner size={24} /></div>
               ) : (() => {
                 const pastAppts = myAppointments.filter(
-                  (a) => a.status === "completed" || (a.status !== "booked") || new Date(a.start_time) < new Date()
+                  (a) =>
+                    a.status === "completed" ||
+                    a.status === "cancelled" ||
+                    a.status === "rejected" ||
+                    a.status === "no_show" ||
+                    new Date(a.start_time) < new Date()
                 );
                 if (pastAppts.length === 0) {
                   return <div className="py-8 text-center text-sm text-muted-foreground">No past sessions yet</div>;

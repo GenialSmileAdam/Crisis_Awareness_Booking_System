@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid, Bell } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -27,6 +27,7 @@ import {
 import {
   useUpdateAppointment,
   useRiskOverride,
+  useApproveAppointment,
 } from "@/hooks/mutations";
 import type { Appointment } from "@/api/appointments";
 import type { RiskTier as RiskTierType } from "@/api/riskScores";
@@ -68,6 +69,7 @@ export default function CounselorDashboard() {
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useRealAnalytics(7);
 
   const { mutateAsync: updateAppointmentMutate } = useUpdateAppointment();
+  const { mutateAsync: approveAppointmentMutate } = useApproveAppointment();
   const { mutateAsync: riskOverrideMutate } = useRiskOverride();
 
   // Auto-refresh appointments every 30 seconds on Sessions page
@@ -196,7 +198,7 @@ export default function CounselorDashboard() {
 
   const pendingConfirmation = useMemo(() => {
     return appointments.filter(
-      a => a.pending_approval === true && new Date(a.start_time) > new Date()
+      a => a.status === "pending" && new Date(a.start_time) > new Date()
     );
   }, [appointments]);
 
@@ -390,7 +392,7 @@ export default function CounselorDashboard() {
                           variant="outline"
                           onClick={async () => {
                             try {
-                              await updateAppointmentMutate({ id: a.id, data: { pending_approval: false } as any });
+                              await approveAppointmentMutate(a.id);
                               toast.success(`Session with ${a.student_full_name} confirmed`);
                             } catch { toast.error("Failed to confirm"); }
                           }}
@@ -525,10 +527,10 @@ export default function CounselorDashboard() {
                                 return (
                                   <div key={day.toDateString() + hour} className={cn("border-t border-r last:border-r-0 border-border p-1 min-h-[48px]", day.toDateString() === new Date().toDateString() && "bg-primary/5")}>
                                     {slotAppts.map(a => (
-                                      <Link key={a.id} to={`/counselor/student/${a.student_id}`} className={cn("block rounded px-1.5 py-1 mb-0.5 text-[10px] font-medium truncate", a.is_crisis ? "bg-destructive/15 text-destructive" : a.pending_approval ? "bg-amber-500/15 text-amber-600" : "bg-primary/15 text-primary")}>
+                                      <Link key={a.id} to={`/counselor/student/${a.student_id}`} className={cn("block rounded px-1.5 py-1 mb-0.5 text-[10px] font-medium truncate", a.is_crisis ? "bg-destructive/15 text-destructive" : a.status === "pending" ? "bg-amber-500/15 text-amber-600" : "bg-primary/15 text-primary")}>
                                         {a.student_full_name || a.student_id}
                                         {a.is_crisis && " 🔴"}
-                                        {a.pending_approval && " ⏳"}
+                                        {a.status === "pending" && " ⏳"}
                                       </Link>
                                     ))}
                                   </div>
@@ -610,7 +612,7 @@ export default function CounselorDashboard() {
                             )}>
                               {a.status.replace('_', ' ')}
                             </span>
-                            {a.pending_approval && (
+                            {a.status === "pending" && (
                               <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-medium w-fit">
                                 ⏳ Awaiting confirmation
                               </span>
@@ -799,7 +801,7 @@ export default function CounselorDashboard() {
                 <div className="space-y-4">
                   {[
                     { label: "Completed", value: appointmentStats.completed, color: "#A8FF3E", total: appointmentStats.total },
-                    { label: "Upcoming", value: appointmentStats.booked, color: "#6C3FE8", total: appointmentStats.total },
+                    { label: "Upcoming", value: appointmentStats.upcoming ?? appointmentStats.booked, color: "#6C3FE8", total: appointmentStats.total },
                     { label: "Cancelled", value: appointmentStats.cancelled, color: "#FF8C42", total: appointmentStats.total },
                     { label: "No-show", value: appointmentStats.no_show, color: "#FF4560", total: appointmentStats.total },
                   ].map(({ label, value, color, total }) => (

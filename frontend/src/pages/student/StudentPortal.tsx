@@ -165,7 +165,9 @@ export default function StudentPortal() {
 
   const allAppointments = appointmentsQuery.data?.data || [];
   const upcomingAppointments = allAppointments.filter(
-    (a) => a.status === "booked" && new Date(a.start_time) > new Date()
+    (a) =>
+      (a.status === "booked" || a.status === "confirmed" || a.status === "pending") &&
+      new Date(a.start_time) > new Date()
   );
   const completedSessions = allAppointments.filter((a) => a.status === "completed");
   // Assigned counselor = psychologist from most recent appointment (any status)

@@ -35,6 +35,7 @@ export function useSubmitCheckin(): UseMutationResult<CheckinSubmitResult, Error
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["checkins"] });
       queryClient.invalidateQueries({ queryKey: ["risk-scores", data.student_id] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     },
     onError: (error: Error) => {
       console.error("Failed to submit check-in:", error);

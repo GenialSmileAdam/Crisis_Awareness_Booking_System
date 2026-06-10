@@ -131,14 +131,19 @@ async def _compute_chart_data(db: AsyncSession, days: int, dept_id: Optional[str
     appt_query = appt_query.group_by(Appointment.status)
     appt_rows = (await db.execute(appt_query)).all()
     
-    appt_counts: dict[str, int] = {"booked": 0, "completed": 0, "cancelled": 0, "no_show": 0}
+    appt_counts: dict[str, int] = {
+        "pending": 0, "confirmed": 0, "booked": 0,
+        "completed": 0, "cancelled": 0, "no_show": 0, "rejected": 0,
+    }
     for row in appt_rows:
         key = row.status.value if hasattr(row.status, "value") else str(row.status)
         if key in appt_counts:
             appt_counts[key] = row.n
+    upcoming = appt_counts["pending"] + appt_counts["confirmed"] + appt_counts["booked"]
     concluded = appt_counts["completed"] + appt_counts["cancelled"] + appt_counts["no_show"]
     appointment_stats = {
         **appt_counts,
+        "upcoming": upcoming,
         "total": sum(appt_counts.values()),
         "completion_rate": round(appt_counts["completed"] / concluded, 2) if concluded else 0.0,
         "no_show_rate": round(appt_counts["no_show"] / concluded, 2) if concluded else 0.0,
