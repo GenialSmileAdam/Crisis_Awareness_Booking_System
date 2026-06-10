@@ -38,6 +38,7 @@ class StudentUpdate(BaseModel):
     guidance_counselor: Optional[str] = None
     emergency_contact: Optional[str] = None
     emergency_phone: Optional[str] = None
+    clinical_notes: Optional[str] = None
 
 
 class StudentResponse(StudentBase):

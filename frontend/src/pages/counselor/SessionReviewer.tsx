@@ -17,6 +17,7 @@ import {
   useTranscribeSession,
   useSummariseSession,
   useRiskOverride,
+  useUpdateSessionNotes,
 } from "@/hooks/mutations";
 
 const TIER_LEVELS = ["Green", "Amber", "Red", "Critical"] as const;
@@ -52,6 +53,7 @@ export default function SessionReviewer() {
   const { mutateAsync: transcribeMutate, isPending: transcribeLoading } = useTranscribeSession();
   const { mutateAsync: summariseMutate, isPending: summariseLoading } = useSummariseSession();
   const { mutateAsync: riskOverrideMutate, isPending: savingRisk } = useRiskOverride();
+  const { mutateAsync: updateSessionNotesMutate } = useUpdateSessionNotes();
 
   const loading = uploadLoading || transcribeLoading || summariseLoading;
 
@@ -61,7 +63,7 @@ export default function SessionReviewer() {
     return (match?.[1] as typeof TIER_LEVELS[number]) ?? "Green";
   };
 
-  // Initialize AI session on appointment load
+  // Initialize AI session on appointment load — backend deduplicates, returns existing if already created
   useEffect(() => {
     if (appointment && !aiSessionId && step === 1) {
       createAISessionMutate({
@@ -70,13 +72,27 @@ export default function SessionReviewer() {
         notes: ""
       }).then(session => {
         setAiSessionId(session.id);
-        toast.success("AI Session created successfully");
+        // If session already has summary/transcript, pre-populate and jump to step 4
+        if (session.summary) {
+          setSummary(session.summary);
+          setTier(extractTierFromSummary(session.summary));
+          setStep(4);
+          toast.success("Existing session loaded — review summary below");
+        } else if (session.transcript) {
+          setTranscript(session.transcript);
+          setStep(4);
+          toast.success("Session ready — generate summary below");
+        } else {
+          toast.success("AI session initialized");
+        }
       }).catch(err => {
         toast.error("Failed to initialize session");
         console.error("Initialization error:", err);
       });
     }
-  }, [appointment, id, step, aiSessionId, createAISessionMutate]);
+  // extractTierFromSummary is stable (defined outside component), safe to omit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointment, id]);
 
   // Load audio src whenever the file changes (audio element is always mounted)
   useEffect(() => {
@@ -206,7 +222,11 @@ export default function SessionReviewer() {
   const handleSaveAndRedirect = async () => {
     if (!summary || !appointment) return;
     try {
-      // Save risk tier override based on the summary's detected tier
+      // 1. Persist edited notes/summary to the session record
+      if (aiSessionId) {
+        await updateSessionNotesMutate({ sessionId: aiSessionId, notes: summary });
+      }
+      // 2. Save risk tier override based on the detected tier
       await riskOverrideMutate({
         studentId: appointment.student_id,
         payload: {
@@ -214,20 +234,14 @@ export default function SessionReviewer() {
           justification: `Session summary (appointment ${id}): tier determined by AI analysis.`,
         },
       });
-      setSaved(true);
-      toast.success(`Session notes saved for ${appointment.student_full_name}.`);
-      // Redirect to student profile after a short delay
-      setTimeout(() => {
-        navigate(`/counselor/student/${appointment.student_id}`);
-      }, 1200);
     } catch {
-      // Even if risk override fails, mark as saved and redirect
-      setSaved(true);
-      toast.success(`Session notes saved for ${appointment.student_full_name}.`);
-      setTimeout(() => {
-        navigate(`/counselor/student/${appointment.student_id}`);
-      }, 1200);
+      // Continue even if either fails — at least one might succeed
     }
+    setSaved(true);
+    toast.success(`Session notes saved for ${appointment.student_full_name}.`);
+    setTimeout(() => {
+      navigate(`/counselor/student/${appointment.student_id}`);
+    }, 1200);
   };
 
   const tierColor = tier === "Critical" ? "destructive" : tier === "Red" ? "destructive" : tier === "Amber" ? "warning" : "success";

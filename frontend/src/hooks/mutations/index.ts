@@ -61,3 +61,8 @@ export {
   useRequestPasswordReset,
   useResetPassword,
 } from "./useAuthMutations";
+
+export {
+  useUpdateSessionNotes,
+  useSaveStudentClinicalNotes,
+} from "./useSessionMutations";

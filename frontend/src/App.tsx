@@ -25,6 +25,7 @@ import CounselorAvailability from "./pages/counselor/CounselorAvailability";
 import PendingAppointments from "./pages/counselor/PendingAppointments";
 import MyStudents from "./pages/counselor/MyStudents";
 import SessionReviewer from "./pages/counselor/SessionReviewer";
+import SessionDetail from "./pages/counselor/SessionDetail";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
@@ -67,6 +68,8 @@ const App = () => (
                 <Route path="/counselor/student/:student_id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorStudent /></ProtectedRoute>} />
                 <Route path="/admin/student/:student_id" element={<ProtectedRoute role={["unit_head", "psychologist"]}><CounselorStudent /></ProtectedRoute>} />
                 <Route path="/counselor/session/:id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><SessionReviewer /></ProtectedRoute>} />
+                <Route path="/counselor/session/detail/:appointment_id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><SessionDetail /></ProtectedRoute>} />
+                <Route path="/admin/session/detail/:appointment_id" element={<ProtectedRoute role={["unit_head"]}><SessionDetail /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="unit_head"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="unit_head"><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/forum" element={<ProtectedRoute role="unit_head"><AdminForum /></ProtectedRoute>} />

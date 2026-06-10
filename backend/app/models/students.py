@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +42,7 @@ class Student(Base):
     guidance_counselor: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     emergency_contact: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     emergency_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    clinical_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     crisis_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

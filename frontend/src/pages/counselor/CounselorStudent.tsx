@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ChevronLeft, LogOut, AlertTriangle, Phone, Mail, User,
   GraduationCap, Activity, Calendar, ClipboardList, ShieldAlert,
   CheckCircle2, Clock, XCircle, TrendingUp, TrendingDown, Minus,
-  Edit3, X, Save, Brain, BarChart2, FileText,
+  Edit3, X, Save, Brain, BarChart2, FileText, ExternalLink,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -25,11 +25,12 @@ import {
   useStudentRiskScore,
   useStudentWrsHistory,
   useStudentCheckins,
-  useStudentAppointments,
+  useStudentSessions,
   useStudentCrisisLogs,
+  type RiskScore,
 } from "@/hooks/queries";
-import { useRiskOverride } from "@/hooks/mutations";
-import type { Student, CheckinRecord, Appointment } from "@/api";
+import { useRiskOverride, useSaveStudentClinicalNotes } from "@/hooks/mutations";
+import type { CheckinRecord } from "@/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ function TierBadge({ tier, pulse }: { tier: string; pulse?: boolean }) {
   );
 }
 
-function WrsTrendIcon({ history }: { history: RiskScoreEntry[] }) {
+function WrsTrendIcon({ history }: { history: RiskScore[] }) {
   if (history.length < 2) return <Minus className="h-4 w-4 text-muted-foreground" />;
   const last = history[history.length - 1].wrs_score;
   const prev = history[history.length - 2].wrs_score;
@@ -139,16 +140,26 @@ export default function CounselorStudent() {
   const { data: student, isLoading: studentLoading } = useStudent(student_id || "");
   const { data: riskScore } = useStudentRiskScore(student_id || "");
   const { data: wrsHistory } = useStudentWrsHistory(student_id || "");
-  const { data: checkinsData, isLoading: checkinsLoading } = useStudentCheckins(student_id || "", 10, checkinOffset);
-  const { data: appointmentsData } = useStudentAppointments(student_id || "", 50);
+  const { data: checkinsData } = useStudentCheckins(student_id || "", 10, checkinOffset);
+  const { data: sessionsData } = useStudentSessions(student_id || "", 50);
   const { data: crisisLogs } = useStudentCrisisLogs(student_id || "");
 
   const { mutateAsync: riskOverrideMutate, isPending: overriding } = useRiskOverride();
+  const { mutateAsync: saveClinicalNotesMutate, isPending: savingNotes } = useSaveStudentClinicalNotes();
 
   const checkins = checkinsData?.data || [];
   const checkinTotal = checkinsData?.pagination?.total || 0;
-  const appointments = appointmentsData?.data || [];
+  const sessions = sessionsData?.data || [];
+  // For session stats we still need appointment-level counts from sessions
+  const appointments = sessions;
   const crisisLogsData = crisisLogs || [];
+
+  // Seed clinical notes textarea once student data loads
+  useEffect(() => {
+    if (student) {
+      setClinicalNotes((student as any).clinical_notes || "");
+    }
+  }, [student_id]);  // eslint-disable-line react-hooks/exhaustive-deps
   const loading = studentLoading;
   const error = null;
 
@@ -224,10 +235,16 @@ export default function CounselorStudent() {
     return parseFloat(perWeek.toFixed(1));
   }, [allCheckins]);
 
-  const handleSaveNotes = () => {
-    setNotesSaved(true);
-    toast.success("Clinical notes saved locally");
-    setTimeout(() => setNotesSaved(false), 2000);
+  const handleSaveNotes = async () => {
+    if (!student_id) return;
+    try {
+      await saveClinicalNotesMutate({ studentId: student_id, clinical_notes: clinicalNotes });
+      setNotesSaved(true);
+      toast.success("Clinical notes saved");
+      setTimeout(() => setNotesSaved(false), 3000);
+    } catch {
+      toast.error("Failed to save clinical notes");
+    }
   };
 
   const handleOverride = async () => {
@@ -237,9 +254,11 @@ export default function CounselorStudent() {
     }
     try {
       await riskOverrideMutate({
-        student_id,
-        override_tier: overrideTier as any,
-        justification: overrideJustification.trim(),
+        studentId: student_id,
+        payload: {
+          override_tier: overrideTier,
+          justification: overrideJustification.trim(),
+        },
       });
       toast.success("Risk tier overridden");
       setShowOverride(false);
@@ -588,38 +607,51 @@ export default function CounselorStudent() {
         {/* ── Appointments + Crisis Logs ────────────────────────────────────── */}
         <div className="grid md:grid-cols-2 gap-6">
 
-          {/* Appointments */}
+          {/* Sessions */}
           <div className="glass border border-border rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-bold">Sessions</h2>
               <Calendar className="h-5 w-5 text-muted-foreground" />
             </div>
-            {appointments.length === 0 ? (
+            {sessions.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">No sessions recorded.</p>
             ) : (
               <div className="space-y-2">
-                {appointments.map((a) => {
-                  const dt = new Date(a.start_time);
+                {sessions.map((s) => {
+                  const dt = new Date(s.start_time);
                   return (
-                    <div key={a.id} className={cn(
-                      "flex items-center gap-3 p-3 rounded-xl border",
-                      a.is_crisis ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/20"
-                    )}>
-                      <StatusIcon status={a.status} />
+                    <Link
+                      key={s.appointment_id}
+                      to={`/counselor/session/detail/${s.appointment_id}`}
+                      className={cn(
+                        "flex items-start gap-3 p-3 rounded-xl border transition-colors hover:bg-muted/40 cursor-pointer block",
+                        s.is_crisis ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/20"
+                      )}
+                    >
+                      <StatusIcon status={s.status} />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium">
                           {dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                           {" · "}
                           {dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground capitalize">{a.status.replace("_", " ")}</span>
-                          {a.is_crisis && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-xs text-muted-foreground capitalize">{s.status.replace("_", " ")}</span>
+                          {s.is_crisis && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive font-semibold">CRISIS</span>
                           )}
+                          {s.session_summary && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">AI summary</span>
+                          )}
                         </div>
+                        {s.session_summary && (
+                          <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-snug">
+                            {s.session_summary.slice(0, 120)}{s.session_summary.length > 120 ? "…" : ""}
+                          </p>
+                        )}
                       </div>
-                    </div>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                    </Link>
                   );
                 })}
               </div>
@@ -916,16 +948,20 @@ export default function CounselorStudent() {
             className="resize-none text-sm leading-relaxed"
           />
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Notes are stored locally in this session.</p>
+            <p className="text-xs text-muted-foreground">Notes persist to the student's profile record.</p>
             <Button
               onClick={handleSaveNotes}
               size="sm"
               variant="outline"
               className={cn("gap-1.5", notesSaved && "border-emerald-500 text-emerald-500")}
-              disabled={!clinicalNotes.trim()}
+              disabled={!clinicalNotes.trim() || savingNotes}
             >
-              {notesSaved ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-              {notesSaved ? "Saved" : "Save Notes"}
+              {savingNotes
+                ? <><Clock className="h-3.5 w-3.5 animate-spin" /> Saving…</>
+                : notesSaved
+                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Saved</>
+                : <><Save className="h-3.5 w-3.5" /> Save Notes</>
+              }
             </Button>
           </div>
         </div>

@@ -213,6 +213,7 @@ class StudentService:
             "emergency_contact": row.Student.emergency_contact,
             "emergency_phone": row.Student.emergency_phone,
             "crisis_flag": row.Student.crisis_flag,
+            "clinical_notes": row.Student.clinical_notes,
             "created_at": row.Student.created_at,
             "updated_at": row.Student.updated_at,
             "full_name": row.full_name,
@@ -303,7 +304,11 @@ class StudentService:
                 Appointment.status,
                 Appointment.is_crisis,
                 Appointment.booking_source,
+                Appointment.crisis_note,
+                sessions_table.c.id.label("session_id"),
                 sessions_table.c.summary.label("session_summary"),
+                sessions_table.c.notes.label("session_notes"),
+                sessions_table.c.transcript.label("session_transcript"),
             )
             .outerjoin(sessions_table, sessions_table.c.appointment_id == Appointment.id)
             .where(Appointment.student_id == student_id, Appointment.deleted_at.is_(None))
@@ -321,13 +326,17 @@ class StudentService:
         rows = (await db.execute(query.limit(limit).offset(offset))).all()
         data = [
             {
-                "appointment_id": row.id,
+                "appointment_id": str(row.id),
                 "start_time": row.start_time,
                 "end_time": row.end_time,
                 "status": row.status,
                 "is_crisis": row.is_crisis,
                 "booking_source": row.booking_source,
+                "crisis_note": row.crisis_note,
+                "session_id": str(row.session_id) if row.session_id else None,
                 "session_summary": row.session_summary,
+                "session_notes": row.session_notes,
+                "session_transcript": row.session_transcript,
             }
             for row in rows
         ]

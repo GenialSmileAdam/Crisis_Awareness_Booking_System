@@ -75,3 +75,11 @@ export {
   useNotifications,
   type Notification,
 } from "./useNotifications";
+
+export {
+  useStudentSessions,
+  useSessionByAppointment,
+  type StudentSession,
+  type SessionDetail,
+  type StudentSessionsResponse,
+} from "./useStudentSessions";
