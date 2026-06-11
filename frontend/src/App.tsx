@@ -29,13 +29,26 @@ import SessionDetail from "./pages/counselor/SessionDetail";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminInsights from "./pages/admin/AdminInsights";
 import AdminForum from "./pages/admin/AdminForum";
 import AdminResources from "./pages/admin/AdminResources";
 import AdminFeedback from "./pages/admin/AdminFeedback";
 import NotFound from "./pages/NotFound";
 import AutoLogin from "./pages/AutoLogin";
+import { ConfigSync } from "@/components/ConfigSync";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Live-by-default: data is considered fresh for 30s, then refetched on the
+      // next use or window focus. Hooks that hold static data (staff, resources)
+      // can still opt into a longer staleTime locally.
+      staleTime: 30_000,
+      refetchOnWindowFocus: true,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -43,6 +56,7 @@ const App = () => (
       <AuthProvider>
         <WrsProvider>
           <TooltipProvider>
+            <ConfigSync />
             <Toaster />
             <Sonner position="top-right" />
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -71,6 +85,7 @@ const App = () => (
                 <Route path="/counselor/session/detail/:appointment_id" element={<ProtectedRoute role={["psychologist", "unit_head"]}><SessionDetail /></ProtectedRoute>} />
                 <Route path="/admin/session/detail/:appointment_id" element={<ProtectedRoute role={["unit_head"]}><SessionDetail /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute role="unit_head"><AdminDashboard /></ProtectedRoute>} />
+                <Route path="/admin/insights" element={<ProtectedRoute role="unit_head"><AdminInsights /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute role="unit_head"><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/forum" element={<ProtectedRoute role="unit_head"><AdminForum /></ProtectedRoute>} />
                 <Route path="/admin/resources" element={<ProtectedRoute role="unit_head"><AdminResources /></ProtectedRoute>} />

@@ -6,10 +6,11 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.appointments import Appointment
+from app.models.appointments import Appointment, AppointmentStatus
 from app.models.crisis_logs import CrisisLog
 from app.models.risk_scores import RiskScore
 from app.models.students import Student
+from app.models.tables import users_table
 from app.models.wellness_checkins import WellnessCheckin
 
 # ── 5-minute in-process TTL cache — avoids re-running 10+ queries per page load ──
@@ -343,6 +344,116 @@ async def _compute_chart_data(db: AsyncSession, days: int, dept_id: Optional[str
         "checkins_7d": checkins_7d,
         "wrs_by_faculty": wrs_by_faculty,
         "faculty_list": faculty_list,
+    }
+
+
+async def get_org_insights(db: AsyncSession, days: int = 30) -> dict[str, Any]:
+    """Org-level operational insights for admins (TTL-cached)."""
+    cache_key = f"org_insights:{days}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+    result = await _compute_org_insights(db, days)
+    _set_cache(cache_key, result)
+    return result
+
+
+async def _compute_org_insights(db: AsyncSession, days: int) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=days)
+
+    # ── 1. Caseload per counsellor ────────────────────────────────────────────
+    caseload_rows = (
+        await db.execute(
+            select(users_table.c.full_name, func.count(Student.student_id).label("load"))
+            .join(Student, Student.assigned_psychologist_id == users_table.c.id)
+            .group_by(users_table.c.id, users_table.c.full_name)
+            .order_by(func.count(Student.student_id).desc())
+        )
+    ).all()
+    caseload = [{"counselor": r.full_name or "Unknown", "students": r.load} for r in caseload_rows]
+
+    # ── 2. Counsellor throughput (completed sessions in window) ────────────────
+    throughput_rows = (
+        await db.execute(
+            select(users_table.c.full_name, func.count(Appointment.id).label("n"))
+            .join(Appointment, Appointment.psychologist_id == users_table.c.id)
+            .where(
+                Appointment.status == AppointmentStatus.completed,
+                Appointment.start_time >= window_start,
+                Appointment.deleted_at.is_(None),
+            )
+            .group_by(users_table.c.id, users_table.c.full_name)
+            .order_by(func.count(Appointment.id).desc())
+        )
+    ).all()
+    throughput = [{"counselor": r.full_name or "Unknown", "completed": r.n} for r in throughput_rows]
+
+    # ── 3. Tier movement — each student's latest vs previous WRS ───────────────
+    rn = func.row_number().over(
+        partition_by=RiskScore.student_id, order_by=RiskScore.computed_at.desc()
+    ).label("rn")
+    ranked = select(RiskScore.student_id, RiskScore.wrs_score, rn).subquery()
+    pair_rows = (
+        await db.execute(select(ranked.c.student_id, ranked.c.wrs_score, ranked.c.rn).where(ranked.c.rn <= 2))
+    ).all()
+    by_student: dict[str, dict[int, float]] = defaultdict(dict)
+    for r in pair_rows:
+        by_student[r.student_id][int(r.rn)] = float(r.wrs_score)
+    improving = worsening = stable = 0
+    for scores in by_student.values():
+        if 1 in scores and 2 in scores:
+            delta = scores[1] - scores[2]
+            if delta < -2:
+                improving += 1
+            elif delta > 2:
+                worsening += 1
+            else:
+                stable += 1
+    tier_movement = {"improving": improving, "worsening": worsening, "stable": stable}
+
+    # ── 4. Weekly attendance trend ────────────────────────────────────────────
+    week = func.date_trunc("week", Appointment.start_time).label("week")
+    att_rows = (
+        await db.execute(
+            select(week, Appointment.status, func.count(Appointment.id).label("n"))
+            .where(Appointment.start_time >= window_start, Appointment.deleted_at.is_(None))
+            .group_by(week, Appointment.status)
+            .order_by(week)
+        )
+    ).all()
+    att_map: dict[str, dict] = defaultdict(lambda: {"week": "", "completed": 0, "no_show": 0, "cancelled": 0})
+    for r in att_rows:
+        wk = str(r.week.date()) if hasattr(r.week, "date") else str(r.week)
+        key = r.status.value if hasattr(r.status, "value") else str(r.status)
+        att_map[wk]["week"] = wk
+        if key in att_map[wk]:
+            att_map[wk][key] += r.n
+    attendance_trend = sorted(att_map.values(), key=lambda x: x["week"])
+
+    # ── 5. Crisis resolution ──────────────────────────────────────────────────
+    crisis_rows = (await db.execute(select(CrisisLog.resolved, CrisisLog.created_at, CrisisLog.resolved_at))).all()
+    total_crises = len(crisis_rows)
+    resolved = sum(1 for r in crisis_rows if r.resolved)
+    resolution_hours: list[float] = []
+    for r in crisis_rows:
+        if r.resolved and r.resolved_at and r.created_at:
+            resolution_hours.append((r.resolved_at - r.created_at).total_seconds() / 3600.0)
+    avg_resolution_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else None
+    crisis_resolution = {
+        "total": total_crises,
+        "resolved": resolved,
+        "unresolved": total_crises - resolved,
+        "avg_resolution_hours": avg_resolution_hours,
+    }
+
+    return {
+        "caseload": caseload,
+        "throughput": throughput,
+        "tier_movement": tier_movement,
+        "attendance_trend": attendance_trend,
+        "crisis_resolution": crisis_resolution,
+        "window_days": days,
     }
 
 

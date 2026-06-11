@@ -66,3 +66,21 @@ export {
   useUpdateSessionNotes,
   useSaveStudentClinicalNotes,
 } from "./useSessionMutations";
+
+export {
+  useUpdateConfig,
+  type ConfigPatch,
+} from "./useConfigMutations";
+
+export {
+  useCreateCarePlan,
+  useUpdateCarePlan,
+  useUpsertSafetyPlan,
+  useCreateActionItem,
+  useUpdateActionItem,
+  useSuggestActionItems,
+  useCreateReferral,
+  useUpdateReferral,
+  useShareResource,
+  useScheduleFollowUp,
+} from "./useClinicalMutations";

@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 /**
  * Update session psychologist notes (saved to Session.notes in DB)
@@ -19,8 +20,7 @@ export function useUpdateSessionNotes(): UseMutationResult<
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["session"] });
-      queryClient.invalidateQueries({ queryKey: ["student-sessions"] });
+      invalidateOn(queryClient, "session");
     },
     onError: (error: Error) => {
       console.error("Failed to save session notes:", error);
@@ -41,8 +41,8 @@ export function useSaveStudentClinicalNotes(): UseMutationResult<
     mutationFn: async ({ studentId, clinical_notes }: { studentId: string; clinical_notes: string }) => {
       await apiRequest("PATCH", `/students/${studentId}`, { clinical_notes });
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["students", variables.studentId] });
+    onSuccess: () => {
+      invalidateOn(queryClient, "student");
     },
     onError: (error: Error) => {
       console.error("Failed to save clinical notes:", error);

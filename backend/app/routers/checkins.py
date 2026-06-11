@@ -9,6 +9,7 @@ from app.models.risk_scores import RiskTier
 from app.schemas.wellness_checkins import TestSubmission, TestResultResponse
 from app.services.risk_simple import calculate_wrs_and_tier
 from app.services.notification_service import NotificationService
+from app.services import config_service
 
 router = APIRouter()
 
@@ -50,11 +51,15 @@ async def submit_test(
     )
     db.add(checkin)
     
-    # 2. Calculate WRS and tier for all check-in types
+    # 2. Calculate WRS and tier for all check-in types, using admin-configured
+    #    tier thresholds so the stored tier reflects current system config.
+    thresholds = await config_service.get_tier_thresholds(db)
+    alert_settings = await config_service.get_alert_settings(db)
     wrs_score, tier_str = calculate_wrs_and_tier(
         data.test_type.value if hasattr(data.test_type, "value") else str(data.test_type),
         data.score,
         data.responses,
+        thresholds=thresholds,
     )
     risk_tier = RiskTier(tier_str)
 
@@ -68,8 +73,9 @@ async def submit_test(
 
     await db.commit()
 
-    # Check if crisis escalation is needed (red or critical)
-    crisis_escalation_required = risk_tier in (RiskTier.red, RiskTier.critical)
+    # Check if escalation is needed per the admin-configured notify tiers.
+    notify_tiers = alert_settings.get("notify_tiers", ["red", "critical"])
+    crisis_escalation_required = risk_tier.value in notify_tiers
 
     # Send WRS notification for Red or Critical scores
     if crisis_escalation_required:

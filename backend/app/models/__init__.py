@@ -17,9 +17,16 @@ from app.models.tables import sessions_table, users_table
 from app.models.feedback import Feedback
 from app.models.psychologist_availability import PsychologistAvailability, PsychologistBusyBlock, PsychologistWeeklySchedule
 from app.models.password_reset import PasswordResetToken
+from app.models.app_config import AppConfig
+from app.models.clinical import CarePlan, SafetyPlan, SessionActionItem, Referral
 
 __all__ = [
     "User",
+    "AppConfig",
+    "CarePlan",
+    "SafetyPlan",
+    "SessionActionItem",
+    "Referral",
     "Session",
     "Student",
     "Staff",

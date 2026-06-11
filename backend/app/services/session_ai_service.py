@@ -263,24 +263,82 @@ async def summarize(db: AsyncSession, session_id: str) -> Optional[str]:
     return summary
 
 
-def calculate_wrs(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculate the Wellness Risk Score safely with fallbacks and lowercase tiers."""
-    weights = {
-        'assessment': 0.35,
-        'pulse_trend': 0.25,
-        'attendance': 0.15,
-        'completion_rate': 0.10,
-        'crisis_history': 0.10,
-        'session_freq': 0.05
-    }
+async def suggest_action_items(db: AsyncSession, session_id: str) -> list[str]:
+    """
+    Use the session summary (or transcript) to suggest concrete follow-up action
+    items for the counsellor. Best-effort: returns [] if no source text or on any
+    AI error, so callers never fail because of this.
+    """
+    session = await db.get(Session, uuid.UUID(session_id))
+    if not session:
+        return []
+    source = session.summary or session.transcript
+    if not source:
+        return []
+    source = source[:3000]
 
-    wrs = min(100.0, max(0.0, sum(float(data.get(key, 0.0)) * weights[key] for key in weights)))
+    try:
+        client = _get_groq_client()
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a clinical assistant. From the session notes, extract 3–6 concrete, "
+                        "actionable follow-up items for the counsellor (e.g. 'Schedule follow-up in 2 weeks', "
+                        "'Share grounding-exercise resource', 'Refer to academic advisor'). "
+                        "Return ONLY a plain list, one action per line, no numbering, no extra text."
+                    ),
+                },
+                {"role": "user", "content": source},
+            ],
+            temperature=0.3,
+            max_tokens=300,
+        )
+        text = response.choices[0].message.content or ""
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(f"Action-item suggestion failed: {exc}")
+        return []
 
-    if wrs >= 85:
+    items: list[str] = []
+    for line in text.splitlines():
+        cleaned = line.strip().lstrip("-•*0123456789. ").strip()
+        if cleaned and len(cleaned) > 3:
+            items.append(cleaned)
+    return items[:6]
+
+
+_DEFAULT_WRS_WEIGHTS = {
+    'assessment': 0.35,
+    'pulse_trend': 0.25,
+    'attendance': 0.15,
+    'completion_rate': 0.10,
+    'crisis_history': 0.10,
+    'session_freq': 0.05,
+}
+
+
+def calculate_wrs(
+    data: Dict[str, Any],
+    weights: Optional[Dict[str, float]] = None,
+    thresholds: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
+    """Calculate the Wellness Risk Score safely with fallbacks and lowercase tiers.
+
+    `weights` and `thresholds` (from config_service) override the defaults so the
+    multi-factor session score honours admin configuration.
+    """
+    weights = weights or _DEFAULT_WRS_WEIGHTS
+    wrs = min(100.0, max(0.0, sum(float(data.get(key, 0.0)) * float(w) for key, w in weights.items())))
+
+    t = thresholds or {"amber": 40.0, "red": 65.0, "critical": 85.0}
+    if wrs >= t["critical"]:
         tier = "critical"
-    elif wrs >= 65:
+    elif wrs >= t["red"]:
         tier = "red"
-    elif wrs >= 40:
+    elif wrs >= t["amber"]:
         tier = "amber"
     else:
         tier = "green"

@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.appointments import Appointment
 from app.models.crisis_logs import CrisisLog
+from app.models.staff import Staff, StaffType
 from app.models.students import Student
 from app.models.users import UserRole
 from app.models.tables import sessions_table, users_table
 from app.schemas.students import StudentUpdate
+from app.services import config_service
 from app.utils.pagination import paginate
 
 
@@ -74,6 +76,56 @@ class StudentService:
                 updated_at=now,
             )
         )
+
+    @staticmethod
+    async def resolve_assigned_psychologist(
+        db: AsyncSession,
+        faculty: str | None,
+    ) -> uuid.UUID | None:
+        """
+        Pick a psychologist for a new/flagged student per the admin-configured
+        assignment strategy. Returns the psychologist's user_id, or None when the
+        strategy is "manual" (default) or no eligible psychologist exists.
+        """
+        cfg = await config_service.get_assignment_settings(db)
+        strategy = (cfg.get("strategy") or "manual").lower()
+        if strategy == "manual":
+            return None
+        cap = int(cfg.get("caseload_cap", 50) or 50)
+
+        # Candidate psychologists with their current caseload.
+        load_sq = (
+            select(
+                Student.assigned_psychologist_id.label("pid"),
+                func.count(Student.student_id).label("load"),
+            )
+            .where(Student.assigned_psychologist_id.is_not(None))
+            .group_by(Student.assigned_psychologist_id)
+            .subquery()
+        )
+        rows = (
+            await db.execute(
+                select(
+                    Staff.user_id,
+                    Staff.department,
+                    func.coalesce(load_sq.c.load, 0).label("load"),
+                )
+                .outerjoin(load_sq, load_sq.c.pid == Staff.user_id)
+                .where(Staff.staff_type == StaffType.psychologist)
+            )
+        ).all()
+        # Respect the caseload cap.
+        candidates = [r for r in rows if r.load < cap]
+        if not candidates:
+            return None
+
+        if strategy == "by_faculty" and faculty:
+            faculty_matches = [r for r in candidates if r.department and r.department == faculty]
+            if faculty_matches:
+                return min(faculty_matches, key=lambda r: r.load).user_id
+
+        # round_robin / least_loaded / by_faculty-fallback → fewest current students.
+        return min(candidates, key=lambda r: r.load).user_id
 
     @staticmethod
     async def search_by_student_id(
@@ -470,12 +522,16 @@ class StudentService:
                 gender=(row.get("gender") or "").strip() or None,
                 now=now,
             )
+            faculty_value = (row.get("faculty") or "").strip() or None
+            assigned_pid = await StudentService.resolve_assigned_psychologist(db, faculty_value)
             await db.execute(
                 insert(Student).values(
                     student_id=student_id_value,
                     user_id=user_id,
                     class_level=(row.get("class_level") or "").strip() or None,
+                    faculty=faculty_value,
                     guidance_counselor=None,
+                    assigned_psychologist_id=assigned_pid,
                     emergency_contact=(row.get("emergency_contact") or "").strip() or None,
                     emergency_phone=(row.get("emergency_phone") or "").strip() or None,
                     crisis_flag=False,

@@ -19,7 +19,7 @@ import { CrisisBanner } from "@/components/CrisisBanner";
 import { cn, formatWRS } from "@/lib/utils";
 import { toast } from "sonner";
 import { counselorSidebarItems, adminSidebarItems } from "@/data/sidebar";
-import { colorFromWrs } from "@/lib/wrs";
+import { colorFromWrs, tierFromWrs } from "@/lib/wrs";
 import {
   useStudent,
   useStudentRiskScore,
@@ -85,7 +85,7 @@ function WrsTrendIcon({ history }: { history: RiskScore[] }) {
 function WrsTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const wrs = payload[0]?.value as number;
-  const tier = wrs >= 85 ? "critical" : wrs >= 65 ? "red" : wrs >= 40 ? "amber" : "green";
+  const tier = tierFromWrs(wrs).toLowerCase();
   const color = TIER_COLOR[tier];
   return (
     <div className="bg-card border border-border rounded-xl px-3 py-2 text-xs shadow-lg">
@@ -565,9 +565,7 @@ export default function CounselorStudent() {
                     {checkins.map((c) => {
                       const wrs = checkinWrs(c);
                       const color = wrs !== null ? colorFromWrs(wrs) : "#6B7280";
-                      const tier = wrs !== null
-                        ? wrs >= 85 ? "critical" : wrs >= 65 ? "red" : wrs >= 40 ? "amber" : "green"
-                        : null;
+                      const tier = wrs !== null ? tierFromWrs(wrs).toLowerCase() : null;
                       return (
                         <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                           <td className="py-2.5 pr-4 text-muted-foreground">

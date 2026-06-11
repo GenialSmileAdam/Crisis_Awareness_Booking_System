@@ -17,6 +17,8 @@ from app.routers import (
     students,
     users,
     feedback,
+    config,
+    clinical,
 )
 from app import models
 
@@ -69,6 +71,8 @@ app.include_router(availability.router)
 app.include_router(forum.router)
 app.include_router(feedback.router)
 app.include_router(notifications.router)
+app.include_router(config.router)
+app.include_router(clinical.router)
 
 @app.get("/")
 async def root():

@@ -231,7 +231,13 @@ async def analyze_session(
             "session_freq": session_freq_score,
         }
 
-        wrs_result = service.calculate_wrs(dynamic_metrics)
+        from app.services import config_service
+        cfg = await config_service.get_config(db)
+        wrs_result = service.calculate_wrs(
+            dynamic_metrics,
+            weights=cfg["wrs"]["weights"],
+            thresholds={k: float(v) for k, v in cfg["wrs"]["thresholds"].items()},
+        )
 
         from app.models.risk_scores import RiskScore, RiskTier
         risk = RiskScore(

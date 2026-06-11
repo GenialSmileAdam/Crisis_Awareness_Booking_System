@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface StudentStatusResponse {
   student_id: string;
@@ -18,7 +19,7 @@ export function useDeactivateStudent(): UseMutationResult<StudentStatusResponse,
       return apiRequest<StudentStatusResponse>("POST", `/students/${studentId}/deactivate`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["students"] });
+      invalidateOn(queryClient, "student");
     },
     onError: (error: Error) => {
       console.error("Failed to deactivate student:", error);
@@ -37,7 +38,7 @@ export function useActivateStudent(): UseMutationResult<StudentStatusResponse, E
       return apiRequest<StudentStatusResponse>("POST", `/students/${studentId}/activate`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["students"] });
+      invalidateOn(queryClient, "student");
     },
     onError: (error: Error) => {
       console.error("Failed to activate student:", error);

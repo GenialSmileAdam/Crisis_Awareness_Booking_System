@@ -18,7 +18,7 @@ export default function PendingAppointments() {
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
 
-  const { data: appointmentsData, isLoading } = useAppointments(limit, offset);
+  const { data: appointmentsData, isLoading } = useAppointments({ status: "pending" }, limit, offset);
   const { mutate: approveAppointment, isPending: approving } = useApproveAppointment();
   const { mutate: rejectAppointment, isPending: rejecting } = useRejectAppointment();
 

@@ -66,8 +66,8 @@ export function useRiskScoreCohort(
         `/risk-scores/cohort?group_by=${groupBy}`
       );
     },
-    staleTime: 1000 * 60 * 30, // 30 minutes
-    gcTime: 1000 * 60 * 60, // 60 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    gcTime: 1000 * 60 * 30,
     retry: 1,
   });
 }
@@ -95,8 +95,10 @@ export function useRiskAlerts(
         `/risk-scores/alerts?${params.toString()}`
       );
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 30, // 30 minutes
+    // Live triage surface — poll so new alerts surface without a manual reload.
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: 1000 * 60,
     retry: 1,
   });
 }
@@ -116,8 +118,10 @@ export function useCriticalRiskAlerts(
         `/risk-scores/alerts?limit=${limit}&offset=${offset}&tier=critical`
       );
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 30, // 30 minutes
+    // Crisis surface — poll aggressively so red/critical alerts appear fast.
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 30,
+    refetchInterval: 1000 * 45,
     retry: 1,
   });
 }

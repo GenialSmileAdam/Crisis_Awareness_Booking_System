@@ -1,5 +1,6 @@
-import { useMutation, UseMutationResult } from "@tanstack/react-query";
+import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface AISessionResponse {
   id: string;
@@ -58,9 +59,14 @@ export function useTranscribeSession(): UseMutationResult<AISessionResponse, Err
  * Generate or regenerate summary for an AI session
  */
 export function useSummariseSession(): UseMutationResult<AISessionResponse, Error, string> {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (sessionId: string) => {
       return apiRequest<AISessionResponse>("POST", `/ai/summarise/${sessionId}`, {});
+    },
+    onSuccess: () => {
+      // New summary can drive a risk tier change and shows up in session views.
+      invalidateOn(queryClient, "session");
     },
     onError: (error: Error) => {
       console.error("Failed to summarise session:", error);

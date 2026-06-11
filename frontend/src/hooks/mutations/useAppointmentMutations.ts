@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface BookAppointmentPayload {
   psychologist_id: string;
@@ -32,7 +33,7 @@ export function useBookAppointment(): UseMutationResult<AppointmentResponse, Err
       return apiRequest<AppointmentResponse>("POST", "/appointments/book", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to book appointment:", error);
@@ -51,7 +52,7 @@ export function useUpdateAppointment(): UseMutationResult<AppointmentResponse, E
       return apiRequest<AppointmentResponse>("PATCH", `/appointments/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to update appointment:", error);
@@ -70,7 +71,7 @@ export function useRequestAppointment(): UseMutationResult<AppointmentResponse, 
       return apiRequest<AppointmentResponse>("POST", "/appointments/request", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to request appointment:", error);
@@ -89,7 +90,7 @@ export function useApproveAppointment(): UseMutationResult<AppointmentResponse, 
       return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/approve`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to approve appointment:", error);
@@ -108,7 +109,7 @@ export function useCancelAppointment(): UseMutationResult<AppointmentResponse, E
       return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/cancel`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to cancel appointment:", error);
@@ -127,7 +128,7 @@ export function useRejectAppointment(): UseMutationResult<AppointmentResponse, E
       return apiRequest<AppointmentResponse>("PATCH", `/appointments/${appointmentId}/reject`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateOn(queryClient, "appointment");
     },
     onError: (error: Error) => {
       console.error("Failed to reject appointment:", error);

@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface CreateStaffPayload {
   full_name: string;
@@ -30,7 +31,7 @@ export function useCreateStaff(): UseMutationResult<StaffResponse, Error, Create
       return apiRequest<StaffResponse>("POST", "/staff", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
+      invalidateOn(queryClient, "staff");
     },
     onError: (error: Error) => {
       console.error("Failed to create staff:", error);

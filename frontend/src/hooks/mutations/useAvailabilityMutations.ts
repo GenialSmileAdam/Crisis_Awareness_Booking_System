@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface DaySchedule {
   day: string;
@@ -32,7 +33,7 @@ export function useSaveSchedule(): UseMutationResult<{ success: boolean }, Error
       return apiRequest<{ success: boolean }>("POST", "/availability/schedule", { schedule });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["availability", "schedule"] });
+      invalidateOn(queryClient, "availability");
     },
     onError: (error: Error) => {
       console.error("Failed to save schedule:", error);
@@ -51,7 +52,7 @@ export function useAddBusyBlock(): UseMutationResult<BusyBlockResponse, Error, B
       return apiRequest<BusyBlockResponse>("POST", "/availability/busy-blocks", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["availability", "busyBlocks"] });
+      invalidateOn(queryClient, "availability");
     },
     onError: (error: Error) => {
       console.error("Failed to add busy block:", error);
@@ -70,7 +71,7 @@ export function useDeleteBusyBlock(): UseMutationResult<{ success: boolean }, Er
       return apiRequest<{ success: boolean }>("DELETE", `/availability/busy-blocks/${blockId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["availability", "busyBlocks"] });
+      invalidateOn(queryClient, "availability");
     },
     onError: (error: Error) => {
       console.error("Failed to delete busy block:", error);

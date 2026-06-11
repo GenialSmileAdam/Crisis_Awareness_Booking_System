@@ -518,6 +518,73 @@ class NotificationService:
             idempotency_key=f"assigned-{student_id}",
         )
 
+    @classmethod
+    async def notify_followup(
+        cls,
+        db: AsyncSession,
+        student_id: str,
+        title: str,
+        starts_at: datetime,
+        ends_at: Optional[datetime] = None,
+        note: Optional[str] = None,
+    ) -> None:
+        """Notify a student of a follow-up and push a Campus One calendar event."""
+        student_user = await cls._get_student_user(db, student_id)
+        if not student_user:
+            raise ValueError("Student user not found")
+
+        day = starts_at.strftime("%A, %d %b %Y")
+        time_ = starts_at.strftime("%I:%M %p")
+        body = note or f"Your counsellor scheduled a follow-up: {title} on {day} at {time_}."
+
+        await cls._notify(
+            db,
+            student_user,
+            title="Follow-up Scheduled",
+            body=body,
+            category=NotificationCategory.booking_confirmation,
+            campus_one_type="info",
+            target_url=f"{settings.FRONTEND_URL}/auto-login",
+            idempotency_key=f"followup-{student_id}-{int(starts_at.timestamp())}",
+        )
+        if settings.SAFESPACE_CAMPUS_ONE_NOTIF:
+            await cls._push_campus_one_event(
+                db,
+                student_user,
+                title=title,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                description=note,
+                idempotency_key=f"followup-evt-{student_id}-{int(starts_at.timestamp())}",
+            )
+
+    @classmethod
+    async def notify_student_resource(
+        cls,
+        db: AsyncSession,
+        student_id: str,
+        title: str,
+        message: str,
+        url: Optional[str] = None,
+    ) -> None:
+        """Notify a student that their counsellor has shared a resource."""
+        student_user = await cls._get_student_user(db, student_id)
+        if not student_user:
+            raise ValueError("Student user not found")
+
+        # Dedupe accidental re-sends of the same resource within the 24h key window.
+        slug = "".join(c for c in title.lower() if c.isalnum())[:24]
+        await cls._notify(
+            db,
+            student_user,
+            title=f"Resource shared: {title}",
+            body=message,
+            category=NotificationCategory.general,
+            campus_one_type="info",
+            target_url=url or f"{settings.FRONTEND_URL}/student/resources",
+            idempotency_key=f"resource-{student_id}-{slug}",
+        )
+
     # -------------------------------------------------------------------------
     # Query
     # -------------------------------------------------------------------------

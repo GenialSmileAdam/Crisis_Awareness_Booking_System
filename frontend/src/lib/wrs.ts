@@ -1,10 +1,37 @@
 export type RiskTier = "Green" | "Amber" | "Red" | "Critical";
 
-export const tierFromWrs = (wrs: number): RiskTier =>
-  wrs < 40 ? "Green" : wrs <= 65 ? "Amber" : wrs <= 85 ? "Red" : "Critical";
+export interface TierThresholds {
+  amber: number;
+  red: number;
+  critical: number;
+}
 
-export const colorFromWrs = (wrs: number): string =>
-  wrs < 40 ? "#A8FF3E" : wrs <= 65 ? "#FF8C42" : wrs <= 85 ? "#FF4560" : "#B00020";
+// Runtime tier boundaries. Defaults match the backend; overridden at runtime
+// from system config via setTierThresholds() (see useConfig / ConfigSync).
+let _thresholds: TierThresholds = { amber: 40, red: 65, critical: 85 };
+
+export function setTierThresholds(t: Partial<TierThresholds> | undefined): void {
+  if (!t) return;
+  _thresholds = {
+    amber: t.amber ?? _thresholds.amber,
+    red: t.red ?? _thresholds.red,
+    critical: t.critical ?? _thresholds.critical,
+  };
+}
+
+export function getTierThresholds(): TierThresholds {
+  return { ..._thresholds };
+}
+
+// Uses lower-bound (>=) semantics to match the backend's get_tier().
+export const tierFromWrs = (wrs: number): RiskTier =>
+  wrs >= _thresholds.critical
+    ? "Critical"
+    : wrs >= _thresholds.red
+    ? "Red"
+    : wrs >= _thresholds.amber
+    ? "Amber"
+    : "Green";
 
 export const TIER_COLORS: Record<string, string> = {
   green: "#A8FF3E",
@@ -19,3 +46,6 @@ export const TIER_LABELS: Record<string, string> = {
   red: "Red",
   critical: "Critical",
 };
+
+export const colorFromWrs = (wrs: number): string =>
+  TIER_COLORS[tierFromWrs(wrs).toLowerCase()];

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SessionClinicalTools } from "@/components/SessionClinicalTools";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { NeonSpinner } from "@/components/NeonSpinner";
@@ -429,6 +430,15 @@ export default function SessionDetail() {
             </Button>
           </div>
         </div>
+
+        {/* ── Clinical Toolkit ── */}
+        {studentId && (
+          <SessionClinicalTools
+            studentId={studentId}
+            sessionId={sessionData?.id ?? null}
+            studentName={appointment.student_full_name}
+          />
+        )}
 
         {/* ── Transcript (collapsible) ── */}
         {sessionData?.transcript && (

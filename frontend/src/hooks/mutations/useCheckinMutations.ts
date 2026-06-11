@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface CheckinSubmission {
   student_id: string;
@@ -32,10 +33,9 @@ export function useSubmitCheckin(): UseMutationResult<CheckinSubmitResult, Error
         score: data.score ?? null,
       });
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["checkins"] });
-      queryClient.invalidateQueries({ queryKey: ["risk-scores", data.student_id] });
-      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    onSuccess: () => {
+      // A check-in recomputes WRS → tier → cohort → analytics.
+      invalidateOn(queryClient, "checkin");
     },
     onError: (error: Error) => {
       console.error("Failed to submit check-in:", error);

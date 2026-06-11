@@ -34,8 +34,10 @@ export function useRealAnalytics(
         `/analytics/real-data?days=${days}`
       );
     },
-    staleTime: 1000 * 60 * 30, // 30 minutes
-    gcTime: 1000 * 60 * 60, // 60 minutes
+    // Backend caches for 5 min; keep the dashboard live with light polling.
+    staleTime: 1000 * 60, // 1 minute
+    gcTime: 1000 * 60 * 10,
+    refetchInterval: 1000 * 60, // poll the KPI dashboard every minute
     retry: 1,
   });
 }
@@ -49,8 +51,8 @@ export function useUniversityAnalytics(): UseQueryResult<AnalyticsResponse> {
     queryFn: async () => {
       return apiRequest<AnalyticsResponse>("GET", "/analytics/university");
     },
-    staleTime: 1000 * 60 * 60, // 60 minutes
-    gcTime: 1000 * 60 * 120, // 120 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    gcTime: 1000 * 60 * 30,
     retry: 1,
   });
 }
@@ -69,8 +71,8 @@ export function useDepartmentAnalytics(
         `/analytics/department/${departmentId}`
       );
     },
-    staleTime: 1000 * 60 * 60, // 60 minutes
-    gcTime: 1000 * 60 * 120, // 120 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    gcTime: 1000 * 60 * 30,
     retry: 1,
     enabled: !!departmentId,
   });
@@ -85,8 +87,8 @@ export function useSummaryReport(): UseQueryResult<AnalyticsResponse> {
     queryFn: async () => {
       return apiRequest<AnalyticsResponse>("GET", "/analytics/summary-report");
     },
-    staleTime: 1000 * 60 * 120, // 120 minutes
-    gcTime: 1000 * 60 * 240, // 240 minutes
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    gcTime: 1000 * 60 * 30,
     retry: 1,
   });
 }

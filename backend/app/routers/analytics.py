@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.routers.dependencies import require_roles
-from app.services.analytics_service import generate_ai_insights, get_real_chart_data
+from app.services.analytics_service import generate_ai_insights, get_real_chart_data, get_org_insights
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -45,3 +45,15 @@ async def get_summary_report(
 ):
     charts = await get_real_chart_data(db)
     return {"success": True, "data": {"charts": charts, "insights": {}}}
+
+
+@router.get("/org-insights")
+async def org_insights(
+    days: int = Query(default=30, ge=7, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = require_roles("admin", "staff"),
+):
+    """Operational insights for admins: caseload, throughput, tier movement,
+    attendance trend, and crisis resolution."""
+    data = await get_org_insights(db, days=days)
+    return {"success": True, "data": data}

@@ -22,7 +22,7 @@ export function useNotifications(limit = 10) {
   return useQuery({
     queryKey: ["notifications", limit],
     queryFn: () => apiRequest<NotificationsResponse>("GET", `/notifications?limit=${limit}&offset=0`),
-    staleTime: 1000 * 60 * 2,
-    refetchInterval: 1000 * 60 * 5,
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60, // keep the bell live
   });
 }

@@ -1,5 +1,6 @@
 import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/api/client";
+import { invalidateOn } from "@/lib/invalidation";
 
 export interface RiskOverridePayload {
   override_tier: string;
@@ -29,9 +30,9 @@ export function useRiskOverride(): UseMutationResult<RiskOverrideResponse, Error
         payload
       );
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["risk-scores", "alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["risk-scores", variables.studentId] });
+    onSuccess: () => {
+      // A tier override moves the cohort distribution, alerts, and analytics.
+      invalidateOn(queryClient, "risk");
     },
     onError: (error: Error) => {
       console.error("Failed to override risk score:", error);

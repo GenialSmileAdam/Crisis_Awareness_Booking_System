@@ -13,12 +13,19 @@ def normalize_score(raw_score: int, max_score: int) -> float:
     return round(min(100.0, max(0.0, (raw_score / max_score) * 100)), 2)
 
 
-def get_tier(wrs: float) -> str:
-    if wrs >= 85:
+# Fallback tier boundaries when no admin config is supplied. The authoritative
+# values live in `config_service` (admin-tunable); these keep the pure function
+# usable in contexts without a DB session.
+_DEFAULT_THRESHOLDS = {"amber": 40.0, "red": 65.0, "critical": 85.0}
+
+
+def get_tier(wrs: float, thresholds: Optional[Dict[str, float]] = None) -> str:
+    t = thresholds or _DEFAULT_THRESHOLDS
+    if wrs >= t["critical"]:
         return "critical"
-    elif wrs >= 65:
+    elif wrs >= t["red"]:
         return "red"
-    elif wrs >= 40:
+    elif wrs >= t["amber"]:
         return "amber"
     else:
         return "green"
@@ -43,12 +50,16 @@ def calculate_wrs_and_tier(
     test_type: str,
     score: Optional[int],
     responses: Optional[Dict[str, Any]] = None,
+    thresholds: Optional[Dict[str, float]] = None,
 ) -> tuple[float, str]:
     """
     Calculate WRS and risk tier from a check-in submission.
     - PHQ-9: normalized from 0–27
     - GAD-7: normalized from 0–21
     - Pulse: derived from 1–5 slider averages (higher average = lower risk)
+
+    `thresholds` (from config_service) override the default tier boundaries so the
+    stored tier reflects the admin-configured cut points.
     """
     if test_type == "pulse":
         wrs = calculate_pulse_wrs(responses)
@@ -56,5 +67,5 @@ def calculate_wrs_and_tier(
         wrs = normalize_score(score, MAX_SCORES[test_type])
     else:
         wrs = 50.0
-    tier = get_tier(wrs)
+    tier = get_tier(wrs, thresholds)
     return wrs, tier
