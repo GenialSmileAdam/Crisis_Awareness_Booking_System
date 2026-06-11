@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2, LogOut, FileAudio, FileText, BrainCircuit } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, ChevronLeft, Play, Pause, Upload, Loader2, Check, RefreshCw, Volume2, LogOut, FileAudio, FileText, BrainCircuit, Stethoscope } from "lucide-react";
 import { AppShell, SidebarItem } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -268,6 +268,9 @@ export default function SessionReviewer() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => navigate(`/counselor/session/detail/${id}`)} className="h-8 text-xs gap-1.5 hidden sm:flex">
+            <Stethoscope className="h-3.5 w-3.5" /> Clinical Tools
+          </Button>
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => { logout(); navigate("/login"); }} className="md:hidden rounded-full h-9 w-9">
             <LogOut className="h-4 w-4" />

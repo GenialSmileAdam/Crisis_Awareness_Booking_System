@@ -43,7 +43,8 @@ async def create_session(db: AsyncSession, data: Any) -> dict:
         transcript=None,
         notes=data.notes,
         status="scheduled",
-        audio_files=[]
+        audio_files=[],
+        created_at=datetime.now(timezone.utc),
     )
     db.add(session)
     await db.commit()

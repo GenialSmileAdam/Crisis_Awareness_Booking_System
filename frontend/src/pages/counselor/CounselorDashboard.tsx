@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Calendar, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid, Bell } from "lucide-react";
+import { LayoutDashboard, Users, Calendar, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CalendarCheck, Activity, MoreHorizontal, Video, XCircle, Clock, FileText, LogOut, CheckCircle, ChevronLeft, ChevronRight, RefreshCw, LayoutGrid, Bell, BrainCircuit, Stethoscope } from "lucide-react";
 import { AppShell } from "@/components/AppSidebar";
 import { counselorSidebarItems } from "@/data/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -631,8 +631,11 @@ export default function CounselorDashboard() {
                                 </Button>
                               </>
                             )}
-                            <Button size="sm" variant="secondary" onClick={() => navigate(`/counselor/session/${a.id}`)} className="h-8 text-xs">
-                              View Session
+                            <Button size="sm" variant="secondary" onClick={() => navigate(`/counselor/session/detail/${a.id}`)} className="h-8 text-xs gap-1.5">
+                              <Stethoscope className="h-3.5 w-3.5" /> Clinical Tools
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => navigate(`/counselor/session/${a.id}`)} className="h-8 text-xs gap-1.5" title="AI Session Workflow">
+                              <BrainCircuit className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </td>
