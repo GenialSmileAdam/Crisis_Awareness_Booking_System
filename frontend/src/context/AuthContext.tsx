@@ -106,38 +106,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("checkin_gate_passed");
   };
 
-  // On app mount: restore session and attempt refresh if both token and user exist
+  // On app mount: restore session, and ALWAYS attempt a silent cookie-refresh so
+  // a user who already holds a valid SafeSpace session (the HTTP-only refresh
+  // cookie) is logged in immediately — even when localStorage is empty, e.g. they
+  // arrived from the Campus One app or opened a fresh tab. Only when the cookie
+  // refresh fails do we treat them as logged out (AutoLogin then bounces them to
+  // Campus One). This is the "are you already authenticated?" check on entry.
   useEffect(() => {
     const initializeAuth = async () => {
-      // ── Restore from localStorage (already done in initial state) ──
-      // ── But verify both exist for a valid session ──
       const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-      const storedUser = safeParseJSON(localStorage.getItem(USER_KEY), null);
+      const storedUser = safeParseJSON<JWTPayload | null>(localStorage.getItem(USER_KEY), null);
 
-      // ── Validate: require BOTH token AND user to consider session valid ──
-      if (!hasValidSession(storedToken, storedUser)) {
-        // No valid cached session, clear any partial state
-        setAccessToken(null);
-        setUser(null);
-        localStorage.removeItem(ACCESS_TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        setIsLoading(false);
-        return;
-      }
-
-      // ── If we have a token and user from localStorage, update state immediately ──
-      if (storedToken && storedUser) {
+      // ── Fast path: a cached session whose JWT is still fresh — no round-trip ──
+      if (
+        hasValidSession(storedToken, storedUser) &&
+        storedToken &&
+        !isTokenExpiredOrExpiring(storedToken)
+      ) {
         setAccessToken(storedToken);
         setUser(storedUser);
-      }
-
-      // ── If JWT is still valid for 2+ minutes, skip the refresh round-trip ──
-      if (storedToken && !isTokenExpiredOrExpiring(storedToken)) {
         setIsLoading(false);
         return;
       }
 
-      // ── Token expired or expiring soon — refresh via cookie ──
+      // ── Otherwise (empty localStorage OR an expired/expiring token) attempt a
+      //    silent refresh via the HTTP-only cookie. A 401 here is expected for a
+      //    genuinely logged-out visitor and does NOT fire the session-expired
+      //    toast (the client suppresses it for /api/auth/refresh). ──
       try {
         const response = await refreshToken();
         const decoded = decodeJWT(response.access_token);
@@ -151,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthState();
         }
       } catch {
+        // No valid refresh cookie → genuinely logged out.
         clearAuthState();
       } finally {
         setIsLoading(false);

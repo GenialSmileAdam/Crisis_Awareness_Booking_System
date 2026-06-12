@@ -328,6 +328,24 @@ async def refresh(
         )
 
     tokens = await AuthService.refresh(db, refresh_token)
+
+    # AuthService.refresh ROTATES the refresh token (old one is revoked). We must
+    # write the new token back to the cookie, otherwise the browser keeps sending
+    # the revoked token and the next refresh trips reuse-detection — forcing the
+    # user back through Campus One. (The entry-check on app mount relies on this.)
+    new_refresh = tokens.get("refresh_token")
+    if new_refresh:
+        is_production = "localhost" not in settings.FRONTEND_URL and "127.0.0.1" not in settings.FRONTEND_URL
+        response.set_cookie(
+            "refresh_token",
+            new_refresh,
+            httponly=True,
+            secure=is_production,
+            samesite="lax",
+            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+            path="/",
+        )
+
     return {
         "access_token": tokens["access_token"],
         "token_type": "bearer",
