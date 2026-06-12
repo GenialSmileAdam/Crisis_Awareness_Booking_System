@@ -46,8 +46,18 @@ class CampusOneOIDC:
         self._jwks_cache: Optional[Dict] = None
         self._jwks_time: Optional[datetime] = None
 
-    async def generate_authorize_url(self) -> tuple[str, str, str]:
+    async def generate_authorize_url(self, prompt: str = "login") -> tuple[str, str, str]:
         """Generate PKCE-protected authorize URL.
+
+        Args:
+            prompt: OIDC ``prompt`` value.
+                - ``"login"`` (default): force a fresh Campus One login screen.
+                  Used by the explicit "Sign in" page.
+                - ``"none"``: silent authentication. If the user already has an
+                  active Campus One session, Campus One returns an authorization
+                  code WITHOUT showing any UI; otherwise it returns a
+                  ``login_required`` error. Used for seamless SSO when a user
+                  lands on the home route already signed in to Campus One.
 
         Returns:
             (auth_url, state, code_verifier)
@@ -66,11 +76,11 @@ class CampusOneOIDC:
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            "prompt": "login",  # Force fresh Campus One authentication — prevents silent re-login after SafeSpace logout
+            "prompt": prompt,
         }
 
         url = f"{self.AUTHORIZE_URL}?{urlencode(params)}"
-        logger.info(f"Generated authorize URL")
+        logger.info(f"Generated authorize URL (prompt={prompt})")
         return url, state, code_verifier
 
     async def exchange_code_for_tokens(self, code: str, code_verifier: str) -> Dict[str, Any]:

@@ -42,13 +42,21 @@ router = APIRouter(tags=["auth"])
 # ============================================================================
 
 @router.get("/api/auth/authorize")
-async def authorize(request: Request):
+async def authorize(request: Request, silent: bool = False):
     """Initiate Campus One OIDC login.
 
     Generates PKCE parameters and redirects to Campus One.
+
+    When ``silent=true`` the request uses ``prompt=none`` so that a user who
+    already has an active Campus One session is signed in WITHOUT seeing a login
+    screen (seamless SSO). If there is no active Campus One session, Campus One
+    returns a ``login_required`` error which the callback turns into a redirect
+    to the interactive sign-in page.
     """
     oidc = CampusOneOIDC()
-    auth_url, state, code_verifier = await oidc.generate_authorize_url()
+    auth_url, state, code_verifier = await oidc.generate_authorize_url(
+        prompt="none" if silent else "login"
+    )
 
     # Store PKCE params in secure cookies
     is_dev = request.url.hostname in ("localhost", "127.0.0.1")
@@ -98,6 +106,22 @@ async def callback(
 
     # Handle errors
     if error:
+        # Silent authentication (prompt=none) returns one of these when the user
+        # has no active Campus One session. That's not a real failure — it just
+        # means we need an interactive sign-in. Send them to the Login page rather
+        # than the scary error screen, and avoid a silent-retry loop.
+        SILENT_NEEDS_INTERACTION = {
+            "login_required",
+            "interaction_required",
+            "consent_required",
+            "account_selection_required",
+        }
+        if error in SILENT_NEEDS_INTERACTION:
+            logger.info(f"Silent auth returned '{error}' → redirecting to interactive login")
+            return RedirectResponse(
+                url=f"{frontend_url.rstrip('/')}/login",
+                status_code=302,
+            )
         return RedirectResponse(
             url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': error})}",
             status_code=302,

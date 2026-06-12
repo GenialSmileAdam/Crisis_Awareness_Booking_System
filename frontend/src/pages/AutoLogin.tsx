@@ -7,12 +7,18 @@ import { hasRole } from "@/utils/roles";
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 /**
- * Auto-login landing page used for Campus One notification/event deep-links.
+ * Smart entry / auto-login landing page — the home route ("/") and the target
+ * of Campus One notification/event deep-links.
  *
- * - Already logged in → redirect to the user's dashboard immediately.
- * - Not logged in → redirect to the Campus One OIDC authorize endpoint so
- *   the user is logged in automatically (Campus One session is still active
- *   when they click from the Campus One app).
+ * Order of checks when a user lands here:
+ *   1. Already have a SafeSpace session (restored by AuthProvider from the
+ *      HTTP-only refresh cookie) → go straight to the dashboard.
+ *   2. No SafeSpace session → attempt SILENT Campus One SSO (`prompt=none`).
+ *      If the user already has an active Campus One session (very likely when
+ *      they arrived from the Campus One app), they are signed in seamlessly with
+ *      no login screen — as if Campus One had redirected them in directly.
+ *   3. If there is no active Campus One session, the backend callback redirects
+ *      to /login for an explicit, interactive sign-in (no silent-retry loop).
  */
 export default function AutoLogin() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -31,7 +37,8 @@ export default function AutoLogin() {
         navigate("/student", { replace: true });
       }
     } else {
-      window.location.href = `${API_URL}/api/auth/authorize`;
+      // Silent SSO: treat the visitor as if Campus One may already know them.
+      window.location.href = `${API_URL}/api/auth/authorize?silent=true`;
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
