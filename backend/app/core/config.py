@@ -51,6 +51,55 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"
 
+    # Extra CORS origins (comma-separated) beyond the built-in defaults, e.g.
+    # a custom domain. Vercel preview URLs are matched by regex automatically.
+    CORS_ORIGINS: str = ""
+
+    # Cookie behaviour. Leave blank for auto: in a non-localhost (production)
+    # deployment the frontend and API are cross-site, which REQUIRES
+    # SameSite=None; Secure so the refresh cookie is sent on credentialed XHR.
+    # Override only if you know your frontend and API share a registrable domain.
+    COOKIE_SAMESITE: str = ""   # "" => auto ("none" in prod, "lax" in dev)
+    COOKIE_SECURE: str = ""     # "" => auto (True in prod, False in dev)
+
+    @property
+    def is_production(self) -> bool:
+        fu = self.FRONTEND_URL or ""
+        return "localhost" not in fu and "127.0.0.1" not in fu
+
+    @property
+    def cookie_samesite(self) -> str:
+        if self.COOKIE_SAMESITE:
+            return self.COOKIE_SAMESITE.lower()
+        return "none" if self.is_production else "lax"
+
+    @property
+    def cookie_secure(self) -> bool:
+        # SameSite=None is invalid without Secure, so force it on.
+        if self.cookie_samesite == "none":
+            return True
+        if self.COOKIE_SECURE:
+            return self.COOKIE_SECURE.lower() == "true"
+        return self.is_production
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        defaults = [
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "https://crisis-awareness-booking-system.vercel.app",
+            "https://www.crisis-awareness-booking-system.vercel.app",
+        ]
+        extra = [o.strip() for o in (self.CORS_ORIGINS or "").split(",") if o.strip()]
+        if self.FRONTEND_URL and self.FRONTEND_URL not in defaults:
+            extra.append(self.FRONTEND_URL.rstrip("/"))
+        # de-dupe, preserve order
+        seen, out = set(), []
+        for o in defaults + extra:
+            if o not in seen:
+                seen.add(o); out.append(o)
+        return out
+
     class Config:
         env_file = (str(_repo_env_path), str(_backend_env_path))
         env_file_encoding = "utf-8"

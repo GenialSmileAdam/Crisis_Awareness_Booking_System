@@ -3,6 +3,8 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
+
 from app.routers import (
     analytics,
     appointments,
@@ -46,12 +48,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "https://crisis-awareness-booking-system.vercel.app",
-    "https://www.crisis-awareness-booking-system.vercel.app",
-],
+    allow_origins=settings.cors_origins_list,
+    # Match Vercel preview deployments (e.g. project-git-branch-team.vercel.app)
+    # so previews don't hit CORS errors. Credentialed CORS still echoes the
+    # specific matched origin, never "*".
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

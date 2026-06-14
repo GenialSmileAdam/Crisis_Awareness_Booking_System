@@ -132,9 +132,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ── Otherwise (empty localStorage OR an expired/expiring token) attempt a
       //    silent refresh via the HTTP-only cookie. A 401 here is expected for a
       //    genuinely logged-out visitor and does NOT fire the session-expired
-      //    toast (the client suppresses it for /api/auth/refresh). ──
+      //    toast (the client suppresses it for /api/auth/refresh).
+      //    The call is time-boxed: if the API is cold/unreachable we stop the
+      //    boot spinner instead of hanging forever, and let the user proceed to
+      //    sign-in rather than staring at an infinite load screen. ──
       try {
-        const response = await refreshToken();
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("refresh-timeout")), 8000)
+        );
+        const response = await Promise.race([refreshToken(), timeout]);
         const decoded = decodeJWT(response.access_token);
 
         if (decoded) {

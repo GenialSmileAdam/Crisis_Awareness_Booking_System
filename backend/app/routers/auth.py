@@ -37,6 +37,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["auth"])
 
 
+def _cookie_kwargs(max_age: int) -> dict:
+    """Shared auth-cookie attributes.
+
+    In production the frontend (e.g. Vercel) and the API are on different
+    domains — a cross-site context. Browsers only send cookies on the
+    credentialed XHR used by /api/auth/refresh when they are
+    ``SameSite=None; Secure``. Using ``lax`` there silently drops the cookie,
+    which is what caused login to never persist in the deployed app.
+    """
+    return {
+        "httponly": True,
+        "secure": settings.cookie_secure,
+        "samesite": settings.cookie_samesite,
+        "max_age": max_age,
+        "path": "/",
+    }
+
+
 # ============================================================================
 # CAMPUS ONE OIDC FLOW
 # ============================================================================
@@ -58,27 +76,12 @@ async def authorize(request: Request, silent: bool = False):
         prompt="none" if silent else "login"
     )
 
-    # Store PKCE params in secure cookies
-    is_dev = request.url.hostname in ("localhost", "127.0.0.1")
+    # Store PKCE params in secure cookies. These must survive the cross-site
+    # top-level redirect back from Campus One, so use the shared cookie policy
+    # (SameSite=None; Secure in production).
     response = Response()
-    response.set_cookie(
-        key="oidc_state",
-        value=state,
-        httponly=True,
-        secure=not is_dev,
-        samesite="lax",
-        max_age=600,
-        path="/",
-    )
-    response.set_cookie(
-        key="oidc_code_verifier",
-        value=code_verifier,
-        httponly=True,
-        secure=not is_dev,
-        samesite="lax",
-        max_age=600,
-        path="/",
-    )
+    response.set_cookie(key="oidc_state", value=state, **_cookie_kwargs(max_age=600))
+    response.set_cookie(key="oidc_code_verifier", value=code_verifier, **_cookie_kwargs(max_age=600))
     response.status_code = 302
     response.headers["location"] = auth_url
     return response
@@ -249,15 +252,10 @@ async def callback(
         )
 
         # Set refresh token as HTTP-only cookie (30 days)
-        is_production = "localhost" not in settings.FRONTEND_URL and "127.0.0.1" not in settings.FRONTEND_URL
         response.set_cookie(
             "refresh_token",
             ss_refresh_token,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-            path="/",
+            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
         )
 
         # Clean up OIDC cookies
@@ -326,7 +324,15 @@ async def logout(
     if refresh_token_val:
         await AuthService.logout(db, refresh_token_val)
 
-    response.delete_cookie("refresh_token", path="/", httponly=True)
+    # Match the attributes the cookie was set with, otherwise browsers won't
+    # clear a SameSite=None; Secure cookie in a cross-site context.
+    response.delete_cookie(
+        "refresh_token",
+        path="/",
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+    )
     return success("Logged out")
 
 
@@ -359,15 +365,10 @@ async def refresh(
     # user back through Campus One. (The entry-check on app mount relies on this.)
     new_refresh = tokens.get("refresh_token")
     if new_refresh:
-        is_production = "localhost" not in settings.FRONTEND_URL and "127.0.0.1" not in settings.FRONTEND_URL
         response.set_cookie(
             "refresh_token",
             new_refresh,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-            path="/",
+            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
         )
 
     return {

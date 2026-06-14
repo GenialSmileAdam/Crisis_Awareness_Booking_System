@@ -431,8 +431,13 @@ async def _compute_org_insights(db: AsyncSession, days: int) -> dict[str, Any]:
             att_map[wk][key] += r.n
     attendance_trend = sorted(att_map.values(), key=lambda x: x["week"])
 
-    # ── 5. Crisis resolution ──────────────────────────────────────────────────
-    crisis_rows = (await db.execute(select(CrisisLog.resolved, CrisisLog.created_at, CrisisLog.resolved_at))).all()
+    # ── 5. Crisis resolution (within the selected window) ─────────────────────
+    crisis_rows = (
+        await db.execute(
+            select(CrisisLog.resolved, CrisisLog.created_at, CrisisLog.resolved_at)
+            .where(CrisisLog.created_at >= window_start)
+        )
+    ).all()
     total_crises = len(crisis_rows)
     resolved = sum(1 for r in crisis_rows if r.resolved)
     resolution_hours: list[float] = []
