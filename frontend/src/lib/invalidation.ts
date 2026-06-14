@@ -11,8 +11,14 @@ import { QK, type QueryDomain } from "./queryKeys";
  * "risk" event invalidates all of them at once.
  */
 const INVALIDATION_MAP: Record<string, QueryDomain[]> = {
-  // A new check-in recomputes WRS → tier → cohort → analytics.
-  checkin: [QK.checkins, QK.risk, QK.students, QK.analytics],
+  // A new check-in recomputes WRS → tier → cohort → analytics, and advances
+  // the student's check-in streak.
+  checkin: [QK.checkins, QK.risk, QK.students, QK.analytics, QK.streak],
+
+  // Student self-service portal.
+  preferences: [QK.preferences],
+  goals: [QK.goals],
+  safetyPlan: [QK.safetyPlan, QK.clinical],
 
   // Manual risk override / recompute ripples into cohort, alerts, analytics.
   risk: [QK.risk, QK.students, QK.analytics],

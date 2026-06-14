@@ -192,10 +192,18 @@ async def callback(
         await db.commit()
         logger.info(f"   ✅ Tokens stored")
 
-        # Step 7: Create our access token with roles from Campus One claims
+        # Step 7: Create our access token. Roles must combine the Campus One claims
+        # with SafeSpace's OWN role model from the database, because "psychologist"
+        # and "unit_head" are SafeSpace concepts that Campus One does not send in
+        # its roles claim. The token-refresh path (AuthService._get_identity_claims)
+        # already derives roles from the DB this way — so if login used only the
+        # Campus One claims, a psychologist would have NO access right after login
+        # and only gain it after the first token refresh (and our app refreshes on
+        # mount). Deriving here makes login and refresh agree. This is what locked
+        # new psychologists out.
         logger.info(f"STEP 7️⃣: Generate JWT access token")
-        roles = claims.get("roles", [])
-        logger.info(f"   Roles from Campus One: {roles}")
+        campus_roles = claims.get("roles", []) or []
+        logger.info(f"   Roles from Campus One: {campus_roles}")
 
         # Fetch staff_type from Staff record so JWT has correct role string
         from app.models.staff import Staff as StaffModel
@@ -211,6 +219,23 @@ async def callback(
             select(StudentModel).where(StudentModel.user_id == user.id)
         )).scalar_one_or_none()
         student_id_val = student_record.student_id if student_record else None
+
+        # SafeSpace authorization roles, derived from our own DB (source of truth),
+        # unioned with the Campus One roles. Mirrors _get_identity_claims so the
+        # role set is stable across login and every subsequent refresh.
+        if user.is_admin or staff_type_val == "administrator":
+            db_roles = ["unit_head"]
+        elif staff_type_val in ("psychologist", "counselor"):
+            # Counselors are clinical staff and share the counselor workspace
+            # (gated to "psychologist"/"unit_head"); without this they'd derive to
+            # no roles and be locked out — the same bug that hit psychologists.
+            db_roles = ["psychologist"]
+        elif user.role.value == "student":
+            db_roles = ["student"]
+        else:
+            db_roles = []
+        roles = list(dict.fromkeys([*campus_roles, *db_roles]))
+        logger.info(f"   Final roles (Campus One ∪ DB): {roles}")
 
         jwt_token = create_access_token(
             user_id=str(user.id),

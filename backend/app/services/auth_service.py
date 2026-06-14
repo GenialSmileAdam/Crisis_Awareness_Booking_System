@@ -35,7 +35,9 @@ class AuthService:
         # OIDC users get roles from the JWT claims; this path ensures fallback parity.
         if user.is_admin or staff_type == "administrator":
             derived_roles = ["unit_head"]
-        elif staff_type == "psychologist":
+        elif staff_type in ("psychologist", "counselor"):
+            # Counselors share the clinical (counselor) workspace with psychologists;
+            # mirrors the OIDC callback so login and refresh derive the same roles.
             derived_roles = ["psychologist"]
         elif user.role.value == "student":
             derived_roles = ["student"]

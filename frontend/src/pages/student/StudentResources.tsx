@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Home, ClipboardList, History, BookOpen, Calendar, ExternalLink, MessageSquare, LogOut } from "lucide-react";
+import { ExternalLink, LogOut, Bookmark, BookmarkCheck, Wind } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { AppShell, SidebarItem } from "@/components/AppSidebar";
+import { AppShell } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CrisisBanner } from "@/components/CrisisBanner";
+import { CopingToolkit } from "@/components/CopingToolkit";
 import { cn } from "@/lib/utils";
+import { usePreferences } from "@/hooks/queries";
+import { useToggleSavedResource } from "@/hooks/mutations";
 
 import { studentSidebarItems } from "@/data/sidebar";
 
@@ -66,7 +69,7 @@ const RESOURCES: Resource[] = [
   },
 ];
 
-const FILTERS = ["All", "Articles", "Videos", "Exercises"] as const;
+const FILTERS = ["All", "Saved", "Articles", "Videos", "Exercises"] as const;
 
 const typeColors: Record<ResourceType, string> = {
   Article: "bg-primary/15 text-primary",
@@ -86,8 +89,14 @@ export default function StudentResources() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<typeof FILTERS[number]>("All");
 
+  const { data: prefs } = usePreferences();
+  const toggleSaved = useToggleSavedResource();
+  const savedIds = prefs?.saved_resource_ids ?? [];
+  const isSaved = (r: Resource) => savedIds.includes(r.url);
+
   const filtered = RESOURCES.filter((r) => {
     if (filter === "All") return true;
+    if (filter === "Saved") return isSaved(r);
     if (filter === "Articles") return r.type === "Article";
     if (filter === "Videos") return r.type === "Video";
     if (filter === "Exercises") return r.type === "Exercise";
@@ -112,6 +121,15 @@ export default function StudentResources() {
       <CrisisBanner />
 
       <div className="p-4 md:p-8 pt-4 md:pt-6 space-y-8">
+        {/* Coping toolkit */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="font-display text-xl font-bold flex items-center gap-2"><Wind className="h-5 w-5 text-primary" /> Coping Toolkit</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Quick exercises you can use any time you feel overwhelmed.</p>
+          </div>
+          <CopingToolkit />
+        </section>
+
         {/* Recommended Section */}
         <section className="space-y-4">
           <div>
@@ -197,13 +215,22 @@ export default function StudentResources() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map((r, i) => (
             <div key={i} className="surface-card surface-card-hover p-6 bg-card flex flex-col">
-              <div className="flex items-center gap-2 mb-3">
-                <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold", typeColors[r.type])}>
-                  {r.type}
-                </span>
-                <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold", topicColors[r.topic])}>
-                  {r.topic}
-                </span>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold", typeColors[r.type])}>
+                    {r.type}
+                  </span>
+                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold", topicColors[r.topic])}>
+                    {r.topic}
+                  </span>
+                </div>
+                <button
+                  onClick={() => toggleSaved.mutate(r.url)}
+                  title={isSaved(r) ? "Remove bookmark" : "Save for later"}
+                  className={cn("shrink-0 transition", isSaved(r) ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+                >
+                  {isSaved(r) ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                </button>
               </div>
               <h3 className="font-display font-bold text-base mb-2">{r.title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed flex-1">{r.description}</p>

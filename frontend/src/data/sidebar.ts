@@ -8,6 +8,7 @@ export const studentSidebarItems: SidebarItem[] = [
   { icon: History, label: "My History", to: "/student/history" },
   { icon: MessageSquare, label: "Forum", to: "/student/forum" },
   { icon: BookOpen, label: "Resources", to: "/student/resources" },
+  { icon: Settings, label: "Settings", to: "/student/settings" },
 ];
 
 export const counselorSidebarItems: SidebarItem[] = [

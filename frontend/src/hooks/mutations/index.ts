@@ -5,6 +5,16 @@ export {
 } from "./useCheckinMutations";
 
 export {
+  useUpdatePreferences,
+  useToggleSavedResource,
+  useCreateGoal,
+  useUpdateGoal,
+  useDeleteGoal,
+  useSaveSafetyPlan,
+  type PreferencesPatch,
+} from "./useStudentPortalMutations";
+
+export {
   useBookAppointment,
   useUpdateAppointment,
   useRequestAppointment,

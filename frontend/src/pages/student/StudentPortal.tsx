@@ -21,6 +21,7 @@ import { useSubmitCheckin } from "@/hooks/mutations";
 import { studentSidebarItems } from "@/data/sidebar";
 import { OnboardingSlides } from "@/components/OnboardingSlides";
 import { NotificationBell } from "@/components/NotificationBell";
+import { WellnessGoalsCard } from "@/components/WellnessGoalsCard";
 
 function SubmitButton({ onClick, isSubmitting }: { onClick: () => void; isSubmitting: boolean }) {
   return (
@@ -348,6 +349,7 @@ export default function StudentPortal() {
         )}
 
         {!isCheckinView && (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Book appointment */}
           <div className="surface-card surface-card-hover p-5 bg-card flex flex-col">
@@ -563,6 +565,8 @@ export default function StudentPortal() {
             </div>
           </div>
         </div>
+          <div className="mt-6"><WellnessGoalsCard /></div>
+          </>
         )}
       </div>
 

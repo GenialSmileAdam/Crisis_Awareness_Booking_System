@@ -21,6 +21,7 @@ from app.routers import (
     feedback,
     config,
     clinical,
+    student_portal,
 )
 from app import models
 
@@ -74,6 +75,7 @@ app.include_router(feedback.router)
 app.include_router(notifications.router)
 app.include_router(config.router)
 app.include_router(clinical.router)
+app.include_router(student_portal.router)
 
 @app.get("/")
 async def root():

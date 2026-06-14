@@ -19,8 +19,11 @@ from app.models.psychologist_availability import PsychologistAvailability, Psych
 from app.models.password_reset import PasswordResetToken
 from app.models.app_config import AppConfig
 from app.models.clinical import CarePlan, SafetyPlan, SessionActionItem, Referral
+from app.models.student_portal import StudentPreferences, WellnessGoal
 
 __all__ = [
+    "StudentPreferences",
+    "WellnessGoal",
     "User",
     "AppConfig",
     "CarePlan",

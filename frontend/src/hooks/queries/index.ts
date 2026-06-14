@@ -114,3 +114,14 @@ export {
   useOrgInsights,
   type OrgInsights,
 } from "./useOrgInsights";
+
+export {
+  usePreferences,
+  useWellnessGoals,
+  useCheckinStreak,
+  useMySafetyPlan,
+  type StudentPreferences,
+  type WellnessGoal,
+  type CheckinStreak,
+  type MySafetyPlan,
+} from "./useStudentPortal";

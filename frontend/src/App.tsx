@@ -18,6 +18,7 @@ import StudentAppointments from "./pages/student/StudentAppointments";
 import StudentResources from "./pages/student/StudentResources";
 import StudentConsent from "./pages/student/StudentConsent";
 import StudentForum from "./pages/student/StudentForum";
+import StudentSettings from "./pages/student/StudentSettings";
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import CounselorForum from "./pages/counselor/CounselorForum";
 import CounselorStudent from "./pages/counselor/CounselorStudent";
@@ -36,6 +37,7 @@ import AdminFeedback from "./pages/admin/AdminFeedback";
 import NotFound from "./pages/NotFound";
 import AutoLogin from "./pages/AutoLogin";
 import { ConfigSync } from "@/components/ConfigSync";
+import { AppearanceSync } from "@/components/AppearanceSync";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +59,7 @@ const App = () => (
         <WrsProvider>
           <TooltipProvider>
             <ConfigSync />
+            <AppearanceSync />
             <Toaster />
             <Sonner position="top-right" />
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -73,6 +76,7 @@ const App = () => (
                 <Route path="/student/appointments" element={<StudentRoute><StudentAppointments /></StudentRoute>} />
                 <Route path="/student/resources" element={<StudentRoute><StudentResources /></StudentRoute>} />
                 <Route path="/student/forum" element={<StudentRoute><StudentForum /></StudentRoute>} />
+                <Route path="/student/settings" element={<StudentRoute><StudentSettings /></StudentRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorDashboard /></ProtectedRoute>} />
                 <Route path="/counselor/students" element={<ProtectedRoute role={["psychologist", "unit_head"]}><MyStudents /></ProtectedRoute>} />
                 <Route path="/counselor/sessions" element={<ProtectedRoute role={["psychologist", "unit_head"]}><CounselorDashboard /></ProtectedRoute>} />

@@ -21,6 +21,11 @@ export const QK = {
   students: "students",
   config: "config",
   clinical: "clinical",
+  // Student self-service portal
+  preferences: "me-preferences",
+  goals: "me-goals",
+  streak: "me-streak",
+  safetyPlan: "me-safety-plan",
 } as const;
 
 export type QueryDomain = (typeof QK)[keyof typeof QK];
