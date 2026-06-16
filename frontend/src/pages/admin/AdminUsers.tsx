@@ -16,9 +16,8 @@ import type { PaginationInfo } from "@/api/types";
 import { useStudents, useStaff } from "@/hooks/queries";
 import { useCreateStaff, useDeactivateStudent, useActivateStudent, useAdminResetPassword } from "@/hooks/mutations";
 
-const INVITE_LINK = "https://crisis-awareness-booking-system.vercel.app/login";
-
 export default function AdminUsers() {
+  const INVITE_LINK = `${window.location.origin}/login`;
   const { logout } = useAuth();
   const navigate = useNavigate();
 

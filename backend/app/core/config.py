@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = (str(_repo_env_path), str(_backend_env_path))
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()
