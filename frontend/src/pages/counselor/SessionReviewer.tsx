@@ -336,7 +336,7 @@ export default function SessionReviewer() {
                 Upload the recording from your session. Supported formats: .mp3, .wav (up to 50MB)
               </p>
               
-              <input ref={fileRef} type="file" accept=".wav,.mp3" hidden onChange={(e) => handleFileUpload(e.target.files?.[0]!)} />
+              <input ref={fileRef} type="file" accept=".wav,.mp3" hidden onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
               
               {!audioFile ? (
                 <Button onClick={() => fileRef.current?.click()} variant="outline" className="px-8">

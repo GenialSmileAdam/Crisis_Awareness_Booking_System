@@ -15,7 +15,7 @@ from app.core.database import get_db
 
 bearer_scheme = HTTPBearer()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def determine_effective_role(user_type: str, is_admin: bool, staff_type: str | None = None) -> str:

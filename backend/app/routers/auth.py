@@ -328,6 +328,11 @@ async def login(
 ):
     """Password-based login (fallback)."""
     tokens = await AuthService.login(db, form_data.username, form_data.password)
+    response.set_cookie(
+        "refresh_token",
+        tokens["refresh_token"],
+        **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
+    )
     return {
         "access_token": tokens["access_token"],
         "token_type": "bearer",

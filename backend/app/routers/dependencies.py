@@ -13,7 +13,7 @@ def require_roles(*allowed_roles: str):
         role_mapping = {
             "unit_head": ["admin", "staff"],
             "unit_admin": ["admin", "staff"],  # same access as unit_head
-            "psychologist": ["psychologist", "admin", "staff"],
+            "psychologist": ["psychologist", "staff"],
             "student": ["student"],
         }
 

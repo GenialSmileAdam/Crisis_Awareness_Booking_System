@@ -152,9 +152,9 @@ class CampusOneService:
         user.email = claims.get("email", user.email)
 
         # Update role information if changed
-        user_role, is_admin, staff_type = CampusOneService._determine_user_role_and_type(claims)
+        user_role, _, staff_type = CampusOneService._determine_user_role_and_type(claims)
         user.role = user_role
-        user.is_admin = is_admin
+        # user.is_admin is preserved (determined from database)
 
         # If student, update student record
         if user.role == UserRole.student:

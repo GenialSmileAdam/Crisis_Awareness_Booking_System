@@ -92,7 +92,7 @@ export default function StudentSettings() {
       reasons_to_live: serverPlan?.reasons_to_live ?? "",
       support_contacts: serverPlan?.support_contacts ?? [],
     });
-  }, [serverPlan?.id, serverPlan?.updated_at]);
+  }, [serverPlan]);
 
   const setNotif = (k: keyof StudentPreferences["notifications"], v: boolean) =>
     setPrefs((p) => (p ? { ...p, notifications: { ...p.notifications, [k]: v } } : p));

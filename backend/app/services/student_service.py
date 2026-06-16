@@ -314,6 +314,13 @@ class StudentService:
             raise LookupError("Student not found")
         student.is_active = False
         student.updated_at = datetime.utcnow()
+        
+        # Sync to User model to prevent login
+        from app.models.users import User
+        user = await db.get(User, student.user_id)
+        if user:
+            user.is_active = False
+
         await db.commit()
         await db.refresh(student)
         return {
@@ -331,6 +338,13 @@ class StudentService:
             raise LookupError("Student not found")
         student.is_active = True
         student.updated_at = datetime.utcnow()
+        
+        # Sync to User model to allow login
+        from app.models.users import User
+        user = await db.get(User, student.user_id)
+        if user:
+            user.is_active = True
+
         await db.commit()
         await db.refresh(student)
         return {

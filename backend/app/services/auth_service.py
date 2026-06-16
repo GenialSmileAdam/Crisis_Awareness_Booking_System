@@ -355,7 +355,7 @@ class AuthService:
         if not user:
             return False
 
-        user.hashed_password = security.hash_password(new_password)
+        user.password_hash = security.hash_password(new_password)
         user.updated_at = datetime.now(timezone.utc)
 
         # Mark token as used
