@@ -1,5 +1,16 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/api/:path*",
+      "destination": "https://crisis-awareness-booking-system.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://crisis-awareness-booking-system.onrender.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
