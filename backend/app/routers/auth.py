@@ -506,3 +506,126 @@ async def admin_reset_staff_password(
         f"Password reset link sent to {user.email}",
         None
     )
+
+
+import hmac
+import hashlib
+import json
+
+@router.post("/api/webhooks/campus-one")
+@router.post("/webhooks/campus-one")
+async def campus_one_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_campus_one_signature: str = Header(None, alias="X-Campus-One-Signature")
+):
+    """Receive real-time user and session lifecycle events from Campus One."""
+    raw_body = await request.body()
+    secret = settings.CAMPUS_ONE_WEBHOOK_SECRET
+
+    if secret:
+        # Verify webhook signature using HMAC-SHA256
+        expected_sig = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        if not x_campus_one_signature or not hmac.compare_digest(x_campus_one_signature, expected_sig):
+            logger.warning("Webhook signature verification failed.")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    else:
+        logger.warning("CAMPUS_ONE_WEBHOOK_SECRET not set, signature validation bypassed.")
+
+    try:
+        payload = json.loads(raw_body.decode())
+    except Exception as e:
+        logger.error(f"Failed to parse webhook JSON body: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    event_type = payload.get("event")
+    data = payload.get("data", {})
+    occurred_at = payload.get("occurredAt")
+
+    logger.info(f"Received webhook event '{event_type}' (id: {payload.get('id')}, occurredAt: {occurred_at})")
+
+    # Map Campus One webhook events
+    if event_type in ("user.created", "user.updated", "user.role_changed"):
+        # Map webhook fields to OIDC claims format
+        campus_one_id = data.get("user_id") or data.get("id")
+        email = data.get("email")
+        if not campus_one_id or not email:
+            logger.error(f"Missing required fields user_id/email in webhook data: {data}")
+            raise HTTPException(status_code=400, detail="Missing user_id or email in data")
+
+        # Map webhook data to OIDC claims schema
+        claims = {
+            "sub": campus_one_id,
+            "email": email,
+            "name": data.get("name") or data.get("full_name") or data.get("name", ""),
+            "role": data.get("role") or data.get("new_role") or "student",
+            "roles": data.get("roles") or ([data.get("new_role")] if data.get("new_role") else []),
+            "custom_roles": data.get("custom_roles", []),
+            "student_id": data.get("student_id"),
+            "staff_id": data.get("staff_id"),
+            "faculty_id": data.get("faculty_id"),
+            "department_id": data.get("department_id"),
+            "level": data.get("level"),
+            "year_of_study": data.get("year_of_study"),
+            "programme": data.get("programme") or data.get("program"),
+            "study_level": data.get("study_level")
+        }
+
+        # Safe defaults if roles are empty
+        if not claims["roles"] and claims["role"]:
+            claims["roles"] = [claims["role"]]
+
+        try:
+            # Re-use our robust OIDC provisioning/update logic
+            user, is_new = await CampusOneService.get_or_create_user_from_oidc_claims(db, claims)
+            logger.info(f"Webhook successfully processed '{event_type}' for user {user.email} (is_new={is_new})")
+        except Exception as exc:
+            logger.error(f"Error provisioning user in webhook: {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Database synchronization failed: {exc}")
+
+    elif event_type == "user.deleted":
+        campus_one_id = data.get("user_id") or data.get("id")
+        if not campus_one_id:
+            raise HTTPException(status_code=400, detail="Missing user_id in data")
+
+        user = (await db.execute(
+            select(User).where(User.campus_one_id == campus_one_id)
+        )).scalar_one_or_none()
+
+        if user:
+            user.is_active = False
+            # Revoke all refresh tokens for this user (Single Logout)
+            from sqlalchemy import update as sa_update
+            await db.execute(
+                sa_update(RefreshToken)
+                .where(RefreshToken.user_id == user.id, RefreshToken.revoked == False)
+                .values(revoked=True)
+            )
+            await db.commit()
+            logger.info(f"Webhook deactivated user {user.email} and revoked all sessions.")
+        else:
+            logger.warning(f"User with campus_one_id {campus_one_id} not found to delete.")
+
+    elif event_type == "session.signed_out":
+        campus_one_id = data.get("user_id")
+        if not campus_one_id:
+            raise HTTPException(status_code=400, detail="Missing user_id in data")
+
+        user = (await db.execute(
+            select(User).where(User.campus_one_id == campus_one_id)
+        )).scalar_one_or_none()
+
+        if user:
+            # Revoke all active refresh tokens for Single Logout (SLO)
+            from sqlalchemy import update as sa_update
+            await db.execute(
+                sa_update(RefreshToken)
+                .where(RefreshToken.user_id == user.id, RefreshToken.revoked == False)
+                .values(revoked=True)
+            )
+            await db.commit()
+            logger.info(f"Webhook logged out user {user.email} (Single Logout).")
+        else:
+            logger.warning(f"User with campus_one_id {campus_one_id} not found to logout.")
+
+    return success("Webhook processed successfully", None)
