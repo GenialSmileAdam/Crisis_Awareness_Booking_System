@@ -34,11 +34,14 @@ class CampusOneService:
             logger.warning(f"External user detected - may have restricted access")
             return UserRole.student, False, None  # Treat as student with no special privileges
 
-        is_admin = False  # Determined from database, not Campus One
+        is_admin = bool(claims.get("is_admin", False))
+        if "unit_head" in roles or "unit_admin" in roles or "admin" in roles or primary_role == "admin":
+            is_admin = True
 
         # Determine user role and staff type
         if primary_role == "student":
-            return UserRole.student, is_admin, None
+            return UserRole.student, False, None  # Students cannot be admins
+
 
         # Map Campus One staff roles to our staff_type
         # Custom roles and the roles array take priority over primary_role
@@ -81,7 +84,12 @@ class CampusOneService:
             (User.campus_one_id == campus_one_id) | (User.email == email)
         )
         result = await db.execute(query)
-        existing_user = result.scalar_one_or_none()
+        matching_users = result.scalars().all()
+
+        existing_user = None
+        if matching_users:
+            # Prioritize matching by campus_one_id first, then email
+            existing_user = next((u for u in matching_users if u.campus_one_id == campus_one_id), matching_users[0])
 
         if existing_user:
             # Update with latest Campus One data
@@ -95,7 +103,7 @@ class CampusOneService:
         user_role, is_admin, staff_type = CampusOneService._determine_user_role_and_type(claims)
 
         new_user = User(
-            id=uuid.uuid4(),
+            id=claims.get("user_id_override") or uuid.uuid4(),
             campus_one_id=campus_one_id,
             email=email,
             full_name=full_name,
@@ -110,15 +118,26 @@ class CampusOneService:
 
         # Create Staff record for staff users
         if user_role == UserRole.staff and staff_type:
+            base_staff_id = claims.get("staff_id") or f"st_{campus_one_id[:12]}"
+            staff_id = base_staff_id
+            
+            # De-duplicate staff_id if it exists to avoid unique constraint violations
+            collision_check = await db.execute(select(Staff).where(Staff.staff_id == staff_id))
+            suffix = 1
+            while collision_check.scalar_one_or_none() is not None:
+                staff_id = f"{base_staff_id}_{suffix}"
+                collision_check = await db.execute(select(Staff).where(Staff.staff_id == staff_id))
+                suffix += 1
+
             staff = Staff(
                 user_id=new_user.id,
-                staff_id=claims.get("staff_id", f"st_{campus_one_id[:12]}"),
+                staff_id=staff_id,
                 staff_type=staff_type,
                 department=claims.get("department") or claims.get("department_id"),
                 specialization=claims.get("specialization"),
             )
             db.add(staff)
-            logger.info(f"Created staff user {new_user.id} with staff_type: {staff_type}")
+            logger.info(f"Created staff user {new_user.id} with staff_type: {staff_type} and staff_id: {staff_id}")
             await db.flush()
             if staff_type == StaffType.psychologist:
                 from app.services.staff_service import StaffService
@@ -126,7 +145,17 @@ class CampusOneService:
 
         # Create Student record for student users
         elif user_role == UserRole.student:
-            student_id = claims.get("student_id", f"c1_{campus_one_id[:12]}")
+            base_student_id = claims.get("student_id") or f"c1_{campus_one_id[:12]}"
+            student_id = base_student_id
+            
+            # De-duplicate student_id if it exists to avoid unique/primary key violations
+            collision_check = await db.execute(select(Student).where(Student.student_id == student_id))
+            suffix = 1
+            while collision_check.scalar_one_or_none() is not None:
+                student_id = f"{base_student_id}_{suffix}"
+                collision_check = await db.execute(select(Student).where(Student.student_id == student_id))
+                suffix += 1
+
             # Map Campus One field names to our schema
             student = Student(
                 student_id=student_id,
@@ -142,6 +171,7 @@ class CampusOneService:
 
         await db.commit()
         return new_user, True
+
 
     @staticmethod
     async def update_user_from_claims(

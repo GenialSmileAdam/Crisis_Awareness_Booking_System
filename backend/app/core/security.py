@@ -56,6 +56,7 @@ def create_access_token(
     staff_type: str | None = None,
     staff_id: str | None = None,
     student_id: str | None = None,
+    email: str | None = None,
 ) -> str:
     """Create short-lived JWT access token (15 min by default).
 
@@ -88,6 +89,7 @@ def create_access_token(
         "staff_type": staff_type,
         "staff_id": staff_id,
         "student_id": student_id,
+        "email": email,
         "exp": expire,
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
@@ -185,6 +187,7 @@ async def get_current_user_from_refresh_token(
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
     Verify JWT access token. Return {"id": UUID, "role": str}.
@@ -216,6 +219,44 @@ async def get_current_user(
             detail="Invalid or expired token",
         )
 
+    # ── Verify / provision user in the database ──
+    from app.models.users import User
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user_record = result.scalar_one_or_none()
+
+    if not user_record:
+        # User not found in database! Let's dynamically create them.
+        from app.services.campus_one_service import CampusOneService
+        
+        student_id = payload.get("student_id")
+        staff_id = payload.get("staff_id")
+        email = payload.get("email") or f"{student_id or staff_id or subject}@placeholder.local"
+        
+        claims = {
+            "sub": subject,
+            "email": email,
+            "name": payload.get("name") or "OIDC User",
+            "role": user_type,
+            "roles": payload.get("roles") or ([role] if role else []),
+            "custom_roles": [],
+            "student_id": student_id,
+            "staff_id": staff_id,
+            "faculty_id": payload.get("faculty_id"),
+            "department_id": payload.get("department_id"),
+            "level": payload.get("level"),
+            "year_of_study": payload.get("year_of_study"),
+            "programme": payload.get("programme") or payload.get("program"),
+            "study_level": payload.get("study_level"),
+            "staff_type": payload.get("staff_type"),
+            "user_id_override": user_id,
+        }
+        try:
+            await CampusOneService.get_or_create_user_from_oidc_claims(db, claims)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to auto-create user from JWT in get_current_user: {e}", exc_info=True)
+
     return {
         "id": user_id,
         "name": payload.get("name"),
@@ -227,3 +268,7 @@ async def get_current_user(
         "staff_id": payload.get("staff_id"),
         "student_id": payload.get("student_id"),
     }
+
+
+
+

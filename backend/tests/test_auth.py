@@ -159,3 +159,183 @@ async def test_password_reset_flow(client, db_session):
     )
     assert new_login_resp.status_code == 200
     assert "access_token" in new_login_resp.json()
+
+
+@pytest.mark.anyio
+async def test_jwt_auto_provisioning(client, db_session):
+    import uuid
+    from app.core.security import create_access_token
+    from app.models.users import User
+    from sqlalchemy import select
+
+    # Generate a random UUID for a user that does not exist in the database
+    new_user_id = str(uuid.uuid4())
+    token = create_access_token(
+        user_id=new_user_id,
+        user_type="student",
+        full_name="Auto Provisioned JWT User",
+        roles=["student"],
+        student_id="STUD_AUTO_99",
+        email="autoprovision@nileuniversity.edu.ng",
+    )
+
+    # Make request to an authenticated endpoint (/auth/me) with this JWT
+    headers = {"Authorization": f"Bearer {token}"}
+    response = await client.get("/auth/me", headers=headers)
+    assert response.status_code == 200
+    res_data = response.json()
+    assert res_data["success"] is True
+    assert res_data["data"]["name"] == "Auto Provisioned JWT User"
+
+    # Verify that the user was auto-created in the database
+    user_stmt = select(User).where(User.id == uuid.UUID(new_user_id))
+    user_res = await db_session.execute(user_stmt)
+    db_user = user_res.scalar_one_or_none()
+    assert db_user is not None
+    assert db_user.email == "autoprovision@nileuniversity.edu.ng"
+    assert db_user.full_name == "Auto Provisioned JWT User"
+    assert db_user.role == UserRole.student
+
+
+@pytest.mark.anyio
+async def test_jwt_auto_provisioning_staff(client, db_session):
+    import uuid
+    from app.core.security import create_access_token
+    from app.models.users import User
+    from app.models.staff import Staff
+    from sqlalchemy import select
+
+    # Generate a random UUID for a staff user that does not exist in the database
+    new_user_id = str(uuid.uuid4())
+    token = create_access_token(
+        user_id=new_user_id,
+        user_type="staff",
+        full_name="Auto Provisioned JWT Staff",
+        roles=["staff", "psychologist"],
+        staff_type="psychologist",
+        staff_id="STAFF_AUTO_99",
+        email="autoprovisionstaff@nileuniversity.edu.ng",
+    )
+
+    # Make request to an authenticated endpoint (/auth/me) with this JWT
+    headers = {"Authorization": f"Bearer {token}"}
+    response = await client.get("/auth/me", headers=headers)
+    assert response.status_code == 200
+    res_data = response.json()
+    assert res_data["success"] is True
+    assert res_data["data"]["name"] == "Auto Provisioned JWT Staff"
+
+    # Verify that the user was auto-created in the database
+    user_stmt = select(User).where(User.id == uuid.UUID(new_user_id))
+    user_res = await db_session.execute(user_stmt)
+    db_user = user_res.scalar_one_or_none()
+    assert db_user is not None
+    assert db_user.email == "autoprovisionstaff@nileuniversity.edu.ng"
+    assert db_user.role == UserRole.staff
+
+    # Verify that the staff record was auto-created in the database
+    staff_stmt = select(Staff).where(Staff.user_id == uuid.UUID(new_user_id))
+    staff_res = await db_session.execute(staff_stmt)
+    db_staff = staff_res.scalar_one_or_none()
+    assert db_staff is not None
+    assert db_staff.staff_id == "STAFF_AUTO_99"
+    assert db_staff.staff_type.value == "psychologist"
+
+
+@pytest.mark.anyio
+async def test_jwt_auto_provisioning_admin(client, db_session):
+    import uuid
+    from app.core.security import create_access_token
+    from app.models.users import User
+    from app.models.staff import Staff
+    from sqlalchemy import select
+
+    # Generate a random UUID for an admin user that does not exist in the database
+    new_user_id = str(uuid.uuid4())
+    token = create_access_token(
+        user_id=new_user_id,
+        user_type="staff",
+        full_name="Auto Provisioned JWT Admin",
+        roles=["staff", "unit_head"],
+        is_admin=True,
+        staff_type="administrator",
+        staff_id="ADMIN_AUTO_99",
+        email="autoprovisionadmin@nileuniversity.edu.ng",
+    )
+
+    # Make request to an authenticated endpoint (/auth/me) with this JWT
+    headers = {"Authorization": f"Bearer {token}"}
+    response = await client.get("/auth/me", headers=headers)
+    assert response.status_code == 200
+    res_data = response.json()
+    assert res_data["success"] is True
+    assert res_data["data"]["name"] == "Auto Provisioned JWT Admin"
+
+    # Verify that the user was auto-created in the database
+    user_stmt = select(User).where(User.id == uuid.UUID(new_user_id))
+    user_res = await db_session.execute(user_stmt)
+    db_user = user_res.scalar_one_or_none()
+    assert db_user is not None
+    assert db_user.email == "autoprovisionadmin@nileuniversity.edu.ng"
+    assert db_user.role == UserRole.staff
+    assert db_user.is_admin is True
+
+    # Verify that the staff record was auto-created in the database
+    staff_stmt = select(Staff).where(Staff.user_id == uuid.UUID(new_user_id))
+    staff_res = await db_session.execute(staff_stmt)
+    db_staff = staff_res.scalar_one_or_none()
+    assert db_staff is not None
+    assert db_staff.staff_id == "ADMIN_AUTO_99"
+    assert db_staff.staff_type.value == "administrator"
+
+
+@pytest.mark.anyio
+async def test_jwt_auto_provisioning_collisions(client, db_session):
+    import uuid
+    from app.core.security import create_access_token
+    from app.models.users import User
+    from app.models.students import Student
+    from sqlalchemy import select
+
+    # 1. Create a user with student_id = STUD_COLLIDE
+    new_user_id_1 = str(uuid.uuid4())
+    token_1 = create_access_token(
+        user_id=new_user_id_1,
+        user_type="student",
+        full_name="User One",
+        roles=["student"],
+        student_id="STUD_COLLIDE",
+        email="userone@nileuniversity.edu.ng",
+    )
+    headers_1 = {"Authorization": f"Bearer {token_1}"}
+    response_1 = await client.get("/auth/me", headers=headers_1)
+    assert response_1.status_code == 200
+
+    # 2. Create another user with the SAME student_id = STUD_COLLIDE
+    new_user_id_2 = str(uuid.uuid4())
+    token_2 = create_access_token(
+        user_id=new_user_id_2,
+        user_type="student",
+        full_name="User Two",
+        roles=["student"],
+        student_id="STUD_COLLIDE",
+        email="usertwo@nileuniversity.edu.ng",
+    )
+    headers_2 = {"Authorization": f"Bearer {token_2}"}
+    response_2 = await client.get("/auth/me", headers=headers_2)
+    assert response_2.status_code == 200
+
+    # Verify student records: first should have STUD_COLLIDE, second should have STUD_COLLIDE_1
+    student_1_stmt = select(Student).where(Student.user_id == uuid.UUID(new_user_id_1))
+    student_1_res = await db_session.execute(student_1_stmt)
+    student_1 = student_1_res.scalar_one()
+    assert student_1.student_id == "STUD_COLLIDE"
+
+    student_2_stmt = select(Student).where(Student.user_id == uuid.UUID(new_user_id_2))
+    student_2_res = await db_session.execute(student_2_stmt)
+    student_2 = student_2_res.scalar_one()
+    assert student_2.student_id == "STUD_COLLIDE_1"
+
+
+
+
