@@ -43,14 +43,14 @@ export default function AdminUsers() {
   const staff = staffData?.data || [];
   const error = null;
 
-  const filteredStudents = students.filter(s => 
-    s.full_name.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredStudents = students.filter(s =>
+    s.full_name.toLowerCase().includes(search.toLowerCase()) ||
     s.email.toLowerCase().includes(search.toLowerCase()) ||
     s.student_id.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredStaff = staff.filter(s => 
-    s.full_name.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredStaff = staff.filter(s =>
+    s.full_name.toLowerCase().includes(search.toLowerCase()) ||
     s.email.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -221,8 +221,8 @@ export default function AdminUsers() {
                         (u as any).is_active === false
                           ? "bg-muted/50 text-muted-foreground"
                           : (u as any).crisis_flag
-                          ? "bg-destructive/15 text-destructive"
-                          : "bg-success/15 text-success-foreground"
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-success/15 text-success-foreground"
                       )}>
                         {(u as any).is_active === false ? "Deactivated" : (u as any).crisis_flag ? "At Risk" : "Active"}
                       </span>
@@ -257,7 +257,7 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
-          
+
           <div className="flex items-center justify-between mt-6">
             <div className="text-xs text-muted-foreground">
               Showing {studentsOffset + 1} to {Math.min(studentsOffset + 10, studentsPagination?.total || 0)} of {studentsPagination?.total || 0} students
@@ -386,7 +386,7 @@ function AddStaffModal({ open, onOpenChange, onSuccess, createStaffMutate }: { o
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
-        
+
         {error && (
           <div className="p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20 flex items-center gap-2">
             <AlertCircle className="h-4 w-4" /> {error}

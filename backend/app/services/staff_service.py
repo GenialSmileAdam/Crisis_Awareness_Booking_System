@@ -53,8 +53,8 @@ class StaffService:
 
         payload = data.model_dump(exclude={"email", "password", "full_name", "is_admin"})
         payload["user_id"] = user.id
-        payload["created_at"] = datetime.utcnow()
-        payload["updated_at"] = datetime.utcnow()
+        payload["created_at"] = datetime.now(timezone.utc)
+        payload["updated_at"] = datetime.now(timezone.utc)
         await db.execute(insert(Staff).values(**payload))
         await db.commit()
         cls._psychologists_cache = {"expires_at": None, "data": None}
@@ -131,7 +131,7 @@ class StaffService:
 
     @classmethod
     async def get_psychologists(cls, db: AsyncSession) -> list[dict[str, Any]]:
-        if cls._psychologists_cache["expires_at"] and cls._psychologists_cache["expires_at"] > datetime.utcnow():
+        if cls._psychologists_cache["expires_at"] and cls._psychologists_cache["expires_at"] > datetime.now(timezone.utc):
             return cls._psychologists_cache["data"]
 
         rows = (
@@ -148,7 +148,7 @@ class StaffService:
         ).all()
 
         # Compute real-time availability for each psychologist
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         now_time = now.time()
         today_dow = now.weekday()  # 0=Mon…6=Sun
         psych_ids = [row.Staff.user_id for row in rows]
@@ -215,7 +215,7 @@ class StaffService:
             })
 
         cls._psychologists_cache = {
-            "expires_at": datetime.utcnow() + timedelta(minutes=1),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=1),
             "data": data,
         }
         return data
@@ -255,7 +255,7 @@ class StaffService:
         if not payload:
             if admin_flag is None:
                 return await cls.get_by_id(db, staff_id)
-        payload["updated_at"] = datetime.utcnow()
+        payload["updated_at"] = datetime.now(timezone.utc)
         if payload:
             await db.execute(update(Staff).where(Staff.staff_id == staff_id).values(**payload))
         if admin_flag is not None:
@@ -265,7 +265,7 @@ class StaffService:
             await db.execute(
                 update(users_table).where(users_table.c.id == staff_user_id).values(
                     is_admin=admin_flag,
-                    updated_at=datetime.utcnow(),
+                    updated_at=datetime.now(timezone.utc),
                 )
             )
         await db.commit()
@@ -282,7 +282,7 @@ class StaffService:
         result = await db.execute(
             update(users_table)
             .where(users_table.c.id == staff_user_id, users_table.c.deleted_at.is_(None))
-            .values(deleted_at=datetime.utcnow(), updated_at=datetime.utcnow())
+            .values(deleted_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
         )
         if result.rowcount == 0:
             raise LookupError("Staff member not found")

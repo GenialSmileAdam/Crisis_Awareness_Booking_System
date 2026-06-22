@@ -1,7 +1,7 @@
 import csv
 import io
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from email.utils import parseaddr
 from typing import Any
 
@@ -284,7 +284,7 @@ class StudentService:
         payload = data.model_dump(exclude_unset=True)
         if not payload:
             return await StudentService.get_by_id(db, student_id, current_user=current_user)
-        payload["updated_at"] = datetime.utcnow()
+        payload["updated_at"] = datetime.now(timezone.utc)
         await db.execute(update(Student).where(Student.student_id == student_id).values(**payload))
         await db.commit()
         return await StudentService.get_by_id(db, student_id, current_user=current_user)
@@ -299,7 +299,7 @@ class StudentService:
         result = await db.execute(
             update(users_table)
             .where(users_table.c.id == student_user_id, users_table.c.deleted_at.is_(None))
-            .values(deleted_at=datetime.utcnow(), updated_at=datetime.utcnow())
+            .values(deleted_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
         )
         if result.rowcount == 0:
             raise LookupError("Student not found")
@@ -313,7 +313,7 @@ class StudentService:
         if student is None:
             raise LookupError("Student not found")
         student.is_active = False
-        student.updated_at = datetime.utcnow()
+        student.updated_at = datetime.now(timezone.utc)
         
         # Sync to User model to prevent login
         from app.models.users import User
@@ -337,7 +337,7 @@ class StudentService:
         if student is None:
             raise LookupError("Student not found")
         student.is_active = True
-        student.updated_at = datetime.utcnow()
+        student.updated_at = datetime.now(timezone.utc)
         
         # Sync to User model to allow login
         from app.models.users import User
@@ -524,7 +524,7 @@ class StudentService:
                     continue
 
             user_id = uuid.uuid4()
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             await StudentService._create_user_for_student(
                 db,
                 user_id=user_id,

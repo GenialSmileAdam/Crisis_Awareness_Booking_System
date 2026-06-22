@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -262,7 +262,7 @@ class AppointmentService:
                     student_id=student.student_id,
                     severity_level=SeverityLevel.high,
                     action_taken=appointment_data.crisis_note or "Student crisis booking created",
-                    alert_sent_at=datetime.utcnow(),
+                    alert_sent_at=datetime.now(timezone.utc),
                 )
             )
             # Crisis bookings are auto-confirmed — assign psychologist immediately
@@ -513,7 +513,7 @@ class AppointmentService:
                     student_id=data.student_id,
                     severity_level=SeverityLevel.high,
                     action_taken=data.crisis_note or "Emergency booking created",
-                    alert_sent_at=datetime.utcnow(),
+                    alert_sent_at=datetime.now(timezone.utc),
                 )
             )
             background_tasks.add_task(
@@ -813,5 +813,5 @@ class AppointmentService:
             raise ValueError("Only booked or cancelled appointments can be deleted")
         if appointment.session_id is not None:
             raise ValueError("Cannot delete appointment with linked session")
-        await db.execute(update(Appointment).where(Appointment.id == appointment_id).values(deleted_at=datetime.utcnow()))
+        await db.execute(update(Appointment).where(Appointment.id == appointment_id).values(deleted_at=datetime.now(timezone.utc)))
         await db.commit()
