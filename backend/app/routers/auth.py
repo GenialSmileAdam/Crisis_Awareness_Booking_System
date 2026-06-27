@@ -87,6 +87,7 @@ async def authorize(request: Request, silent: bool = False):
     return response
 
 
+@router.get("/api/api/auth/callback")
 @router.get("/api/auth/callback")
 async def callback(
     code: str = None,
