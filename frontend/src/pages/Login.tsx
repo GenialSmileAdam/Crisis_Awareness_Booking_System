@@ -23,9 +23,26 @@ export default function Login() {
     );
   }
 
-  const handleSignIn = () => {
-    // Redirect to backend OIDC authorize endpoint
-    window.location.href = `${API_URL}/api/auth/authorize`;
+  const handleSignIn = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/pkce`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch PKCE parameters");
+      }
+      const json = await response.json();
+      if (!json.success || !json.data) {
+        throw new Error(json.message || "Invalid PKCE response");
+      }
+      
+      const { auth_url, state, code_verifier } = json.data;
+      
+      localStorage.setItem("oidc_state", state);
+      localStorage.setItem("oidc_code_verifier", code_verifier);
+      
+      window.location.href = auth_url;
+    } catch (error) {
+      console.error("Failed to initiate login:", error);
+    }
   };
 
   return (
