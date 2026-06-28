@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/api/:path*",
-      "destination": "https://crisis-awareness-booking-system.onrender.com/api/:path*"
+      "destination": "https://safespace-api.duckdns.org/api/:path*"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://crisis-awareness-booking-system.onrender.com/:path*"
+      "destination": "https://safespace-api.duckdns.org/:path*"
     },
     {
       "source": "/(.*)",
