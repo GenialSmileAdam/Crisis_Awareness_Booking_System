@@ -66,7 +66,12 @@ class StaffService:
 
     @staticmethod
     async def _seed_default_availability(db: AsyncSession, psychologist_id: any) -> None:
-        """Auto-generate Mon–Fri 09:00–17:00 weekly schedule + 26 weeks of date blocks."""
+        """Auto-generate Mon–Fri 09:00–17:00 weekly schedule + 26 weeks of date blocks.
+
+        NOTE: Uses flush() instead of commit() so the caller owns the transaction
+        boundary. Committing inside this helper caused nested-commit issues when
+        called from campus_one_service.get_or_create_user_from_oidc_claims.
+        """
         start = time(9, 0)
         end = time(17, 0)
         workdays = range(5)  # 0=Mon … 4=Fri
@@ -93,7 +98,8 @@ class StaffService:
                     end_time=end,
                 ))
 
-        await db.commit()
+        # Flush to the DB within the current transaction — let the caller commit.
+        await db.flush()
 
     @staticmethod
     async def get_all(db: AsyncSession, filters: dict[str, Any], limit: int, offset: int) -> dict[str, Any]:
