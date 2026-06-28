@@ -211,7 +211,7 @@ async def exchange(
 async def generate_pkce():
     """Return PKCE parameters as JSON."""
     oidc = CampusOneOIDC()
-    auth_url, state, code_verifier = await oidc.generate_authorize_url(prompt="login")
+    auth_url, state, code_verifier = await oidc.generate_authorize_url()
     return success("PKCE parameters generated", {
         "auth_url": auth_url,
         "state": state,
