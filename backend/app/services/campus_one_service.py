@@ -92,11 +92,14 @@ class CampusOneService:
             existing_user = next((u for u in matching_users if u.campus_one_id == campus_one_id), matching_users[0])
 
         if existing_user:
-            # Update with latest Campus One data
+            # Update with latest Campus One data (name, email, campus_one_id)
             existing_user.campus_one_id = campus_one_id
             existing_user.full_name = full_name or existing_user.full_name
             existing_user.email = email
-            await db.commit()
+            # Bug fix: also sync role, admin flag, and child records (Student/Staff)
+            # so that Campus One role changes (e.g. user.role_changed webhook) take
+            # effect immediately rather than being silently ignored.
+            await CampusOneService.update_user_from_claims(db, existing_user, claims)
             return existing_user, False
 
         # Determine role, admin status, and staff type

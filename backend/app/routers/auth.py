@@ -132,7 +132,7 @@ async def exchange(
 
         jwt_token = create_access_token(
             user_id=str(user.id),
-            user_type=user.role,
+            user_type=user.role.value,  # Bug fix: pass string, not Enum
             full_name=user.full_name,
             roles=roles,
             is_admin=user.is_admin,
@@ -161,10 +161,22 @@ async def exchange(
         await db.commit()
 
         logger.info(f"✓ Exchange successful for {user.email}")
-        return success("Exchange successful", {
+        # Return tokens in the JSON body AND set the refresh token as an
+        # HttpOnly cookie so that /api/auth/refresh (cookie-only reader) works
+        # regardless of whether the frontend stored the token in localStorage.
+        from fastapi.responses import JSONResponse
+        from app.utils.response import success as _success
+        resp_data = _success("Exchange successful", {
             "token": jwt_token,
-            "refresh_token": ss_refresh_token
+            "refresh_token": ss_refresh_token,
         })
+        json_resp = JSONResponse(content=resp_data)
+        json_resp.set_cookie(
+            "refresh_token",
+            ss_refresh_token,
+            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
+        )
+        return json_resp
 
     except Exception as e:
         error_msg = str(e)
@@ -212,7 +224,6 @@ async def authorize(request: Request, silent: bool = False):
     return response
 
 
-@router.get("/api/api/auth/callback")
 @router.get("/api/auth/callback")
 async def callback(
     code: str = None,
@@ -284,12 +295,17 @@ async def callback(
             raise ValueError("Missing code verifier")
         logger.info(f"   ✅ Code verifier found")
 
-        # Redirect back to frontend callback with code and state
+        # Redirect back to frontend callback with code and state.
+        # Delete the OIDC cookies now — they are no longer needed and lingering
+        # cookies confuse future silent-auth attempts.
         logger.info(f"   ✅ Redirecting to frontend callback")
-        return RedirectResponse(
+        redirect = RedirectResponse(
             url=f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'code': code, 'state': state})}",
             status_code=302,
         )
+        redirect.delete_cookie("oidc_state", path="/")
+        redirect.delete_cookie("oidc_code_verifier", path="/")
+        return redirect
 
     except Exception as e:
         error_msg = str(e)
@@ -305,7 +321,7 @@ async def callback(
 # ============================================================================
 
 @router.get("/auth/me")
-async def get_current_user(current_user: dict = Depends(get_current_user)):
+async def get_me(current_user: dict = Depends(get_current_user)):
     """Return current user info from JWT."""
     return success(
         "User authenticated",

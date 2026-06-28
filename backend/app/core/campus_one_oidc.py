@@ -39,12 +39,17 @@ class CampusOneOIDC:
 
     SCOPES = ["openid", "profile", "email", "academic", "roles", "notifications", "events", "offline_access"]
 
+    # Class-level JWKS cache shared across all instances.
+    # Bug fix: the old per-instance cache was always empty because a new
+    # CampusOneOIDC() is constructed on every request, so every login triggered
+    # a live JWKS fetch (100–300 ms extra latency, hammers Campus One's endpoint).
+    _jwks_cache: Optional[Dict] = None
+    _jwks_time: Optional[datetime] = None
+
     def __init__(self):
         self.client_id = settings.CAMPUS_ONE_CLIENT_ID
         self.client_secret = settings.CAMPUS_ONE_CLIENT_SECRET
         self.redirect_uri = settings.CAMPUS_ONE_REDIRECT_URI
-        self._jwks_cache: Optional[Dict] = None
-        self._jwks_time: Optional[datetime] = None
 
     async def generate_authorize_url(self, prompt: str = "login") -> tuple[str, str, str]:
         """Generate PKCE-protected authorize URL.
@@ -179,13 +184,14 @@ class CampusOneOIDC:
         return pem.decode("utf-8")
 
     async def fetch_jwks(self) -> Dict[str, Any]:
-        """Fetch JWKS from Campus One (with caching)."""
-        # Cache for 1 hour
-        if self._jwks_cache and self._jwks_time:
-            age = datetime.now(timezone.utc) - self._jwks_time
+        """Fetch JWKS from Campus One (with class-level caching)."""
+        # Cache for 1 hour — stored at class level so it is shared across
+        # the per-request instances that are constructed in each endpoint.
+        if CampusOneOIDC._jwks_cache and CampusOneOIDC._jwks_time:
+            age = datetime.now(timezone.utc) - CampusOneOIDC._jwks_time
             if age < timedelta(hours=1):
                 logger.info(f"📦 Using cached JWKS (age: {age.total_seconds():.0f}s)")
-                return self._jwks_cache
+                return CampusOneOIDC._jwks_cache
 
         logger.info(f"🔄 JWKS REQUEST to {self.JWKS_URL}")
 
@@ -193,15 +199,15 @@ class CampusOneOIDC:
             response = await client.get(self.JWKS_URL, timeout=10)
             response.raise_for_status()
 
-            self._jwks_cache = response.json()
-            self._jwks_time = datetime.now(timezone.utc)
+            CampusOneOIDC._jwks_cache = response.json()
+            CampusOneOIDC._jwks_time = datetime.now(timezone.utc)
 
             logger.info(f"✅ Fetched JWKS")
-            logger.info(f"   Keys: {len(self._jwks_cache.get('keys', []))} available")
-            for i, key in enumerate(self._jwks_cache.get("keys", [])):
+            logger.info(f"   Keys: {len(CampusOneOIDC._jwks_cache.get('keys', []))} available")
+            for i, key in enumerate(CampusOneOIDC._jwks_cache.get("keys", [])):
                 logger.info(f"   [{i}] kid={key.get('kid')}, kty={key.get('kty')}, alg={key.get('alg')}")
 
-            return self._jwks_cache
+            return CampusOneOIDC._jwks_cache
 
     async def verify_and_decode_id_token(self, id_token: str) -> Dict[str, Any]:
         """Verify JWT signature and decode claims.
