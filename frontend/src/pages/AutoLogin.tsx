@@ -4,7 +4,6 @@ import { useAuth } from "@/context/AuthContext";
 import { NeonSpinner } from "@/components/NeonSpinner";
 import { hasRole } from "@/utils/roles";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 /**
  * Smart entry / auto-login landing page — the home route ("/") and the target
@@ -37,8 +36,7 @@ export default function AutoLogin() {
         navigate("/student", { replace: true });
       }
     } else {
-      // Silent SSO: treat the visitor as if Campus One may already know them.
-      window.location.href = `${API_URL}/api/auth/authorize?silent=true`;
+      navigate("/login", { replace: true });
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 

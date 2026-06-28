@@ -23,11 +23,11 @@ export default function AuthCallback() {
 
     const handleCallback = async () => {
       try {
-        // Extract token from URL fragment (#token=...)
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
-        const token = params.get("token");
-        const error = params.get("message");
+        // Extract code and state from URL query params
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const state = params.get("state");
+        const error = params.get("error") || params.get("message");
 
         // Handle error
         if (error) {
@@ -37,13 +37,49 @@ export default function AuthCallback() {
           return;
         }
 
-        // Handle missing token
-        if (!token) {
-          console.error("No token in callback");
-          toast.error("Authentication failed: No token received");
+        if (!code || !state) {
+          console.error("No code or state in callback");
+          toast.error("Authentication failed: Missing parameters");
           navigate("/login", { replace: true });
           return;
         }
+
+        const oidcState = localStorage.getItem("oidc_state");
+        const oidcCodeVerifier = localStorage.getItem("oidc_code_verifier");
+
+        if (state !== oidcState) {
+          console.error("State mismatch");
+          toast.error("Authentication failed: State mismatch");
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const response = await fetch(`${API_URL}/api/auth/exchange`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            code,
+            state,
+            code_verifier: oidcCodeVerifier,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Token exchange failed");
+        }
+
+        const responseData = await response.json();
+        if (!responseData.success || !responseData.data || !responseData.data.token) {
+          throw new Error(responseData.message || "Invalid exchange response");
+        }
+
+        const token = responseData.data.token;
+
+        localStorage.removeItem("oidc_state");
+        localStorage.removeItem("oidc_code_verifier");
 
         console.log("Token received, processing login...");
 
