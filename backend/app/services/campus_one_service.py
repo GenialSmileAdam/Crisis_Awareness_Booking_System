@@ -94,9 +94,7 @@ class CampusOneService:
         if existing_user:
             # Update with latest Campus One data
             existing_user.campus_one_id = campus_one_id
-            existing_user.full_name = full_name or existing_user.full_name
-            existing_user.email = email
-            await db.commit()
+            await CampusOneService.update_user_from_claims(db, existing_user, claims)
             return existing_user, False
 
         # Determine role, admin status, and staff type
@@ -199,6 +197,31 @@ class CampusOneService:
                 student.class_level = str(claims.get("level")) if claims.get("level") else student.class_level
                 student.year_of_study = claims.get("year_of_study") or student.year_of_study
                 student.program = (claims.get("programme") or claims.get("study_level")) or student.program
+            else:
+                # Self-healing: provision missing student record
+                campus_one_id = claims.get("sub") or str(user.id)
+                base_student_id = claims.get("student_id") or f"c1_{campus_one_id[:12]}"
+                student_id = base_student_id
+                
+                # De-duplicate student_id if it exists to avoid unique/primary key violations
+                collision_check = await db.execute(select(Student).where(Student.student_id == student_id))
+                suffix = 1
+                while collision_check.scalar_one_or_none() is not None:
+                    student_id = f"{base_student_id}_{suffix}"
+                    collision_check = await db.execute(select(Student).where(Student.student_id == student_id))
+                    suffix += 1
+
+                student = Student(
+                    student_id=student_id,
+                    user_id=user.id,
+                    faculty=claims.get("faculty_id"),
+                    department=claims.get("department_id"),
+                    class_level=str(claims.get("level")) if claims.get("level") else None,
+                    year_of_study=claims.get("year_of_study"),
+                    program=claims.get("programme") or claims.get("study_level"),
+                )
+                db.add(student)
+                logger.info(f"Self-healed student user {user.id} by creating missing Student record: {student_id}")
 
         # If staff, update staff record
         elif user.role == UserRole.staff and staff_type:
@@ -210,5 +233,32 @@ class CampusOneService:
             if staff:
                 staff.staff_type = staff_type
                 staff.department = claims.get("department") or claims.get("department_id") or staff.department
+            else:
+                # Self-healing: provision missing staff record
+                campus_one_id = claims.get("sub") or str(user.id)
+                base_staff_id = claims.get("staff_id") or f"st_{campus_one_id[:12]}"
+                staff_id = base_staff_id
+                
+                # De-duplicate staff_id if it exists to avoid unique constraint violations
+                collision_check = await db.execute(select(Staff).where(Staff.staff_id == staff_id))
+                suffix = 1
+                while collision_check.scalar_one_or_none() is not None:
+                    staff_id = f"{base_staff_id}_{suffix}"
+                    collision_check = await db.execute(select(Staff).where(Staff.staff_id == staff_id))
+                    suffix += 1
+
+                staff = Staff(
+                    user_id=user.id,
+                    staff_id=staff_id,
+                    staff_type=staff_type,
+                    department=claims.get("department") or claims.get("department_id"),
+                    specialization=claims.get("specialization"),
+                )
+                db.add(staff)
+                logger.info(f"Self-healed staff user {user.id} by creating missing Staff record: {staff_id}")
+                await db.flush()
+                if staff_type == StaffType.psychologist:
+                    from app.services.staff_service import StaffService
+                    await StaffService._seed_default_availability(db, user.id)
 
         await db.commit()

@@ -59,6 +59,34 @@ def _cookie_kwargs(max_age: int) -> dict:
 # CAMPUS ONE OIDC FLOW
 # ============================================================================
 
+@router.get("/api/auth/authorize")
+async def authorize(request: Request, silent: bool = False):
+    """Initiate Campus One OIDC login.
+
+    Generates PKCE parameters and redirects to Campus One.
+
+    When ``silent=true`` the request uses ``prompt=none`` so that a user who
+    already has an active Campus One session is signed in WITHOUT seeing a login
+    screen (seamless SSO). If there is no active Campus One session, Campus One
+    returns a ``login_required`` error which the callback turns into a redirect
+    to the interactive sign-in page.
+    """
+    oidc = CampusOneOIDC()
+    auth_url, state, code_verifier = await oidc.generate_authorize_url(
+        prompt="none" if silent else "login"
+    )
+
+    # Store PKCE params in secure cookies. These must survive the cross-site
+    # top-level redirect back from Campus One, so use the shared cookie policy
+    # (SameSite=None; Secure in production).
+    response = Response()
+    response.set_cookie(key="oidc_state", value=state, **_cookie_kwargs(max_age=600))
+    response.set_cookie(key="oidc_code_verifier", value=code_verifier, **_cookie_kwargs(max_age=600))
+    response.status_code = 302
+    response.headers["location"] = auth_url
+    return response
+
+
 from pydantic import BaseModel
 
 class TokenExchangeRequest(BaseModel):
@@ -69,6 +97,7 @@ class TokenExchangeRequest(BaseModel):
 @router.post("/api/auth/exchange")
 async def exchange(
     payload: TokenExchangeRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange code for tokens directly using PKCE parameters."""
@@ -160,10 +189,16 @@ async def exchange(
         ))
         await db.commit()
 
+        # Set refresh token as HTTP-only cookie
+        response.set_cookie(
+            "refresh_token",
+            ss_refresh_token,
+            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
+        )
+
         logger.info(f"✓ Exchange successful for {user.email}")
         return success("Exchange successful", {
             "token": jwt_token,
-            "refresh_token": ss_refresh_token
         })
 
     except Exception as e:
@@ -184,34 +219,6 @@ async def generate_pkce():
     })
 
 
-@router.get("/api/auth/authorize")
-async def authorize(request: Request, silent: bool = False):
-    """Initiate Campus One OIDC login.
-
-    Generates PKCE parameters and redirects to Campus One.
-
-    When ``silent=true`` the request uses ``prompt=none`` so that a user who
-    already has an active Campus One session is signed in WITHOUT seeing a login
-    screen (seamless SSO). If there is no active Campus One session, Campus One
-    returns a ``login_required`` error which the callback turns into a redirect
-    to the interactive sign-in page.
-    """
-    oidc = CampusOneOIDC()
-    auth_url, state, code_verifier = await oidc.generate_authorize_url(
-        prompt="none" if silent else "login"
-    )
-
-    # Store PKCE params in secure cookies. These must survive the cross-site
-    # top-level redirect back from Campus One, so use the shared cookie policy
-    # (SameSite=None; Secure in production).
-    response = Response()
-    response.set_cookie(key="oidc_state", value=state, **_cookie_kwargs(max_age=600))
-    response.set_cookie(key="oidc_code_verifier", value=code_verifier, **_cookie_kwargs(max_age=600))
-    response.status_code = 302
-    response.headers["location"] = auth_url
-    return response
-
-
 @router.get("/api/api/auth/callback")
 @router.get("/api/auth/callback")
 async def callback(
@@ -221,24 +228,11 @@ async def callback(
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle Campus One OIDC callback.
-
-    1. Validate state (CSRF protection)
-    2. Exchange code for tokens
-    3. Verify JWT signature
-    4. Create/update user
-    5. Create session
-    6. Redirect to frontend
-    """
+    """Handle Campus One OIDC callback by redirecting to frontend callback page."""
     frontend_url = settings.FRONTEND_URL
-    is_dev = request.url.hostname in ("localhost", "127.0.0.1")
 
     # Handle errors
     if error:
-        # Silent authentication (prompt=none) returns one of these when the user
-        # has no active Campus One session. That's not a real failure — it just
-        # means we need an interactive sign-in. Send them to the Login page rather
-        # than the scary error screen, and avoid a silent-retry loop.
         SILENT_NEEDS_INTERACTION = {
             "login_required",
             "interaction_required",
@@ -262,42 +256,12 @@ async def callback(
             status_code=302,
         )
 
-    try:
-        logger.info(f"=" * 70)
-        logger.info(f"🎯 STARTING OIDC CALLBACK FLOW")
-        logger.info(f"=" * 70)
-
-        # Step 1: Validate state
-        logger.info(f"STEP 1️⃣: Validate CSRF state")
-        stored_state = request.cookies.get("oidc_state")
-        logger.info(f"   Stored state: {stored_state[:30]}..." if stored_state else "   Stored state: MISSING")
-        logger.info(f"   Callback state: {state[:30]}...")
-        if not stored_state or stored_state != state:
-            raise ValueError("State mismatch - CSRF protection failed")
-        logger.info(f"   ✅ State validated")
-
-        # Step 2: Get code verifier
-        logger.info(f"STEP 2️⃣: Get PKCE code verifier")
-        code_verifier = request.cookies.get("oidc_code_verifier")
-        logger.info(f"   Code verifier: {code_verifier[:30]}..." if code_verifier else "   Code verifier: MISSING")
-        if not code_verifier:
-            raise ValueError("Missing code verifier")
-        logger.info(f"   ✅ Code verifier found")
-
-        # Redirect back to frontend callback with code and state
-        logger.info(f"   ✅ Redirecting to frontend callback")
-        return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'code': code, 'state': state})}",
-            status_code=302,
-        )
-
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Callback error: {error_msg}", exc_info=True)
-        return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': error_msg})}",
-            status_code=302,
-        )
+    # Redirect back to frontend callback with code and state
+    logger.info(f"   ✅ Redirecting to frontend callback")
+    return RedirectResponse(
+        url=f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'code': code, 'state': state})}",
+        status_code=302,
+    )
 
 
 # ============================================================================

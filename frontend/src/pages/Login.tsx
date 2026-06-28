@@ -33,12 +33,12 @@ export default function Login() {
       if (!json.success || !json.data) {
         throw new Error(json.message || "Invalid PKCE response");
       }
-      
+
       const { auth_url, state, code_verifier } = json.data;
-      
+
       localStorage.setItem("oidc_state", state);
       localStorage.setItem("oidc_code_verifier", code_verifier);
-      
+
       window.location.href = auth_url;
     } catch (error) {
       console.error("Failed to initiate login:", error);
