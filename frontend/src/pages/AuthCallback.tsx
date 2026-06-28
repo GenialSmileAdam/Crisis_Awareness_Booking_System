@@ -65,6 +65,7 @@ export default function AuthCallback() {
             state,
             code_verifier: oidcCodeVerifier,
           }),
+          credentials: "include",
         });
 
         if (!response.ok) {

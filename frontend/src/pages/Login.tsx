@@ -25,7 +25,9 @@ export default function Login() {
 
   const handleSignIn = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/auth/pkce`);
+      const response = await fetch(`${API_URL}/api/auth/pkce`, {
+        credentials: "include",
+      });
       if (!response.ok) {
         throw new Error("Failed to fetch PKCE parameters");
       }

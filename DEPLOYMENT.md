@@ -76,8 +76,11 @@ SMS_ENABLED=false
 Set these in Vercel Dashboard (Project Settings → Environment Variables):
 
 ```
-VITE_API_BASE_URL=https://crisis-awareness-booking-system.onrender.com
+VITE_API_BASE_URL=/api
 ```
+
+> [!IMPORTANT]
+> Do NOT set `VITE_API_BASE_URL` to the absolute Render URL in production! Setting it to `/api` routes all backend requests through Vercel's same-origin rewrite proxy (configured in `vercel.json`). This ensures the browser treats cookies as same-origin, avoiding cross-site (third-party) cookie blocking policies that break the `refresh_token` session storage.
 
 ### Automatic Deployment
 The frontend automatically deploys when you push to main:
