@@ -337,5 +337,83 @@ async def test_jwt_auto_provisioning_collisions(client, db_session):
     assert student_2.student_id == "STUD_COLLIDE_1"
 
 
+@pytest.mark.anyio
+async def test_oidc_exchange_and_healing(client, db_session):
+    import uuid
+    from unittest.mock import patch, AsyncMock
+    from app.models.users import User, UserRole
+    from app.models.students import Student
+    from sqlalchemy import select
+
+    # Mock CampusOneOIDC
+    mock_exchange = AsyncMock(return_value={
+        "id_token": "fake_id_token",
+        "access_token": "fake_access_token",
+        "refresh_token": "fake_refresh_token"
+    })
+    
+    mock_verify = AsyncMock(return_value={
+        "sub": "c1_user_healed_student",
+        "email": "healed_student@nileuniversity.edu.ng",
+        "name": "Healed Student",
+        "role": "student",
+        "roles": ["student"],
+        "student_id": "ST_HEALED_01",
+        "level": 300,
+        "faculty_id": "fac_eng",
+        "department_id": "dept_cs"
+    })
+
+    with patch("app.routers.auth.CampusOneOIDC") as MockOIDC:
+        instance = MockOIDC.return_value
+        instance.exchange_code_for_tokens = mock_exchange
+        instance.verify_and_decode_id_token = mock_verify
+
+        # 1. Test OIDC exchange for a new user (creates User and Student records)
+        exchange_payload = {
+            "code": "test_code",
+            "state": "test_state",
+            "code_verifier": "test_verifier"
+        }
+        response = await client.post("/api/auth/exchange", json=exchange_payload)
+        assert response.status_code == 200
+        res_data = response.json()
+        assert res_data["success"] is True
+        assert "token" in res_data["data"]
+
+        # Verify refresh token cookie is set
+        assert "refresh_token" in response.cookies
+        assert response.cookies["refresh_token"] is not None
+
+        # Verify Student record was created
+        student_stmt = select(Student).where(Student.student_id == "ST_HEALED_01")
+        student_res = await db_session.execute(student_stmt)
+        db_student = student_res.scalar_one_or_none()
+        assert db_student is not None
+        assert db_student.class_level == "300"
+        assert db_student.faculty == "fac_eng"
+
+        # 2. Test OIDC exchange for an existing user who is missing their Student record (Self-healing)
+        # We manually delete the student record from DB first
+        from sqlalchemy import delete
+        await db_session.execute(delete(Student).where(Student.student_id == "ST_HEALED_01"))
+        await db_session.commit()
+
+        # Verify Student record is gone
+        student_res = await db_session.execute(student_stmt)
+        assert student_res.scalar_one_or_none() is None
+
+        # Call exchange again (which matches existing user but triggers update_user_from_claims and heals the Student record)
+        response2 = await client.post("/api/auth/exchange", json=exchange_payload)
+        assert response2.status_code == 200
+        
+        # Verify Student record was auto-provisioned/healed
+        db_session.expire_all()
+        student_res2 = await db_session.execute(student_stmt)
+        db_student2 = student_res2.scalar_one_or_none()
+        assert db_student2 is not None
+        assert db_student2.student_id == "ST_HEALED_01"
+
+
 
 

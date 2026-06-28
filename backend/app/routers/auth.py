@@ -87,6 +87,139 @@ async def authorize(request: Request, silent: bool = False):
     return response
 
 
+from pydantic import BaseModel
+
+class TokenExchangeRequest(BaseModel):
+    code: str
+    state: str
+    code_verifier: str
+
+@router.post("/api/auth/exchange")
+async def exchange(
+    payload: TokenExchangeRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Exchange code for tokens directly using PKCE parameters."""
+    try:
+        logger.info("=" * 70)
+        logger.info("🎯 STARTING OIDC EXCHANGE FLOW")
+        logger.info("=" * 70)
+
+        # Step 3: Exchange code for tokens
+        logger.info("STEP 3️⃣: Exchange authorization code for tokens")
+        oidc = CampusOneOIDC()
+        token_response = await oidc.exchange_code_for_tokens(payload.code, payload.code_verifier)
+        id_token = token_response.get("id_token")
+        access_token = token_response.get("access_token")
+        refresh_token = token_response.get("refresh_token")
+
+        if not id_token:
+            raise ValueError("No ID token from Campus One")
+
+        # Step 4: Verify ID token
+        logger.info("STEP 4️⃣: Verify and decode ID token")
+        claims = await oidc.verify_and_decode_id_token(id_token)
+
+        # Step 5: Get or create user
+        logger.info("STEP 5️⃣: Get or create user in database")
+        user, is_new = await CampusOneService.get_or_create_user_from_oidc_claims(db, claims)
+
+        # Store Campus One tokens
+        logger.info("STEP 6️⃣: Store Campus One tokens")
+        user.campus_one_access_token = access_token
+        if refresh_token:
+            user.campus_one_refresh_token = refresh_token
+        await db.commit()
+
+        # Step 7: Generate JWT access token
+        logger.info("STEP 7️⃣: Generate JWT access token")
+        campus_roles = claims.get("roles", []) or []
+
+        from app.models.staff import Staff as StaffModel
+        staff_record = (await db.execute(
+            select(StaffModel).where(StaffModel.user_id == user.id)
+        )).scalar_one_or_none()
+        staff_type_val = staff_record.staff_type.value if staff_record and staff_record.staff_type else None
+        staff_id_val = staff_record.staff_id if staff_record else None
+
+        from app.models.students import Student as StudentModel
+        student_record = (await db.execute(
+            select(StudentModel).where(StudentModel.user_id == user.id)
+        )).scalar_one_or_none()
+        student_id_val = student_record.student_id if student_record else None
+
+        if user.is_admin or staff_type_val == "administrator":
+            db_roles = ["unit_head"]
+        elif staff_type_val in ("psychologist", "counselor"):
+            db_roles = ["psychologist"]
+        elif user.role.value == "student":
+            db_roles = ["student"]
+        else:
+            db_roles = []
+        roles = list(dict.fromkeys([*campus_roles, *db_roles]))
+
+        jwt_token = create_access_token(
+            user_id=str(user.id),
+            user_type=user.role,
+            full_name=user.full_name,
+            roles=roles,
+            is_admin=user.is_admin,
+            staff_type=staff_type_val,
+            staff_id=staff_id_val,
+            student_id=student_id_val,
+        )
+
+        # Step 8: Create SafeSpace refresh token
+        logger.info("STEP 8️⃣: Create SafeSpace refresh token")
+        ss_refresh_token = create_refresh_token(str(user.id))
+        tok_hash = hash_token(ss_refresh_token)
+        tok_expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked == False)
+            .values(revoked=True)
+        )
+        db.add(RefreshToken(
+            user_id=user.id,
+            token_hash=tok_hash,
+            expires_at=tok_expires,
+        ))
+        await db.commit()
+
+        # Set refresh token as HTTP-only cookie
+        response.set_cookie(
+            "refresh_token",
+            ss_refresh_token,
+            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
+        )
+
+        logger.info(f"✓ Exchange successful for {user.email}")
+        return success("Exchange successful", {
+            "token": jwt_token,
+        })
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Exchange error: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=400, detail=error_msg)
+
+
+@router.get("/api/auth/pkce")
+async def generate_pkce():
+    """Return PKCE parameters as JSON."""
+    oidc = CampusOneOIDC()
+    auth_url, state, code_verifier = await oidc.generate_authorize_url(prompt="login")
+    return success("PKCE parameters generated", {
+        "auth_url": auth_url,
+        "state": state,
+        "code_verifier": code_verifier
+    })
+
+
+@router.get("/api/api/auth/callback")
 @router.get("/api/auth/callback")
 async def callback(
     code: str = None,
@@ -95,24 +228,11 @@ async def callback(
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle Campus One OIDC callback.
-
-    1. Validate state (CSRF protection)
-    2. Exchange code for tokens
-    3. Verify JWT signature
-    4. Create/update user
-    5. Create session
-    6. Redirect to frontend
-    """
+    """Handle Campus One OIDC callback by redirecting to frontend callback page."""
     frontend_url = settings.FRONTEND_URL
-    is_dev = request.url.hostname in ("localhost", "127.0.0.1")
 
     # Handle errors
     if error:
-        # Silent authentication (prompt=none) returns one of these when the user
-        # has no active Campus One session. That's not a real failure — it just
-        # means we need an interactive sign-in. Send them to the Login page rather
-        # than the scary error screen, and avoid a silent-retry loop.
         SILENT_NEEDS_INTERACTION = {
             "login_required",
             "interaction_required",
@@ -136,167 +256,12 @@ async def callback(
             status_code=302,
         )
 
-    try:
-        logger.info(f"=" * 70)
-        logger.info(f"🎯 STARTING OIDC CALLBACK FLOW")
-        logger.info(f"=" * 70)
-
-        # Step 1: Validate state
-        logger.info(f"STEP 1️⃣: Validate CSRF state")
-        stored_state = request.cookies.get("oidc_state")
-        logger.info(f"   Stored state: {stored_state[:30]}..." if stored_state else "   Stored state: MISSING")
-        logger.info(f"   Callback state: {state[:30]}...")
-        if not stored_state or stored_state != state:
-            raise ValueError("State mismatch - CSRF protection failed")
-        logger.info(f"   ✅ State validated")
-
-        # Step 2: Get code verifier
-        logger.info(f"STEP 2️⃣: Get PKCE code verifier")
-        code_verifier = request.cookies.get("oidc_code_verifier")
-        logger.info(f"   Code verifier: {code_verifier[:30]}..." if code_verifier else "   Code verifier: MISSING")
-        if not code_verifier:
-            raise ValueError("Missing code verifier")
-        logger.info(f"   ✅ Code verifier found")
-
-        # Step 3: Exchange code for tokens
-        logger.info(f"STEP 3️⃣: Exchange authorization code for tokens")
-        logger.info(f"   Authorization code: {code[:30]}...")
-        oidc = CampusOneOIDC()
-        token_response = await oidc.exchange_code_for_tokens(code, code_verifier)
-        id_token = token_response.get("id_token")
-        access_token = token_response.get("access_token")
-        refresh_token = token_response.get("refresh_token")
-
-        if not id_token:
-            raise ValueError("No ID token from Campus One")
-
-        # Step 4: Verify ID token
-        logger.info(f"STEP 4️⃣: Verify and decode ID token")
-        claims = await oidc.verify_and_decode_id_token(id_token)
-        logger.info(f"   ✅ Authentication successful: {claims.get('sub')} ({claims.get('email')})")
-
-        # Step 5: Get or create user
-        logger.info(f"STEP 5️⃣: Get or create user in database")
-        user, is_new = await CampusOneService.get_or_create_user_from_oidc_claims(db, claims)
-        logger.info(f"   User ID: {user.id}")
-        logger.info(f"   Email: {user.email}")
-        logger.info(f"   Role: {user.role}")
-        logger.info(f"   Is Admin: {user.is_admin}")
-        logger.info(f"   Status: {'✅ NEW USER CREATED' if is_new else '✅ EXISTING USER UPDATED'}")
-
-        # Store Campus One tokens
-        logger.info(f"STEP 6️⃣: Store Campus One tokens")
-        user.campus_one_access_token = access_token
-        if refresh_token:
-            user.campus_one_refresh_token = refresh_token
-        await db.commit()
-        logger.info(f"   ✅ Tokens stored")
-
-        # Step 7: Create our access token. Roles must combine the Campus One claims
-        # with SafeSpace's OWN role model from the database, because "psychologist"
-        # and "unit_head" are SafeSpace concepts that Campus One does not send in
-        # its roles claim. The token-refresh path (AuthService._get_identity_claims)
-        # already derives roles from the DB this way — so if login used only the
-        # Campus One claims, a psychologist would have NO access right after login
-        # and only gain it after the first token refresh (and our app refreshes on
-        # mount). Deriving here makes login and refresh agree. This is what locked
-        # new psychologists out.
-        logger.info(f"STEP 7️⃣: Generate JWT access token")
-        campus_roles = claims.get("roles", []) or []
-        logger.info(f"   Roles from Campus One: {campus_roles}")
-
-        # Fetch staff_type from Staff record so JWT has correct role string
-        from app.models.staff import Staff as StaffModel
-        staff_record = (await db.execute(
-            select(StaffModel).where(StaffModel.user_id == user.id)
-        )).scalar_one_or_none()
-        staff_type_val = staff_record.staff_type.value if staff_record and staff_record.staff_type else None
-        staff_id_val = staff_record.staff_id if staff_record else None
-
-        # Fetch student_id if student
-        from app.models.students import Student as StudentModel
-        student_record = (await db.execute(
-            select(StudentModel).where(StudentModel.user_id == user.id)
-        )).scalar_one_or_none()
-        student_id_val = student_record.student_id if student_record else None
-
-        # SafeSpace authorization roles, derived from our own DB (source of truth),
-        # unioned with the Campus One roles. Mirrors _get_identity_claims so the
-        # role set is stable across login and every subsequent refresh.
-        if user.is_admin or staff_type_val == "administrator":
-            db_roles = ["unit_head"]
-        elif staff_type_val in ("psychologist", "counselor"):
-            # Counselors are clinical staff and share the counselor workspace
-            # (gated to "psychologist"/"unit_head"); without this they'd derive to
-            # no roles and be locked out — the same bug that hit psychologists.
-            db_roles = ["psychologist"]
-        elif user.role.value == "student":
-            db_roles = ["student"]
-        else:
-            db_roles = []
-        roles = list(dict.fromkeys([*campus_roles, *db_roles]))
-        logger.info(f"   Final roles (Campus One ∪ DB): {roles}")
-
-        jwt_token = create_access_token(
-            user_id=str(user.id),
-            user_type=user.role,
-            full_name=user.full_name,
-            roles=roles,
-            is_admin=user.is_admin,
-            staff_type=staff_type_val,
-            staff_id=staff_id_val,
-            student_id=student_id_val,
-        )
-        logger.info(f"   staff_type={staff_type_val}, student_id={student_id_val}")
-        logger.info(f"   ✅ JWT generated")
-
-        # Step 8: Create and store our own refresh token, set as HTTP-only cookie
-        logger.info(f"STEP 8️⃣: Create SafeSpace refresh token")
-        ss_refresh_token = create_refresh_token(str(user.id))
-        tok_hash = hash_token(ss_refresh_token)
-        tok_expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        # Revoke any existing refresh tokens for this user first
-        from sqlalchemy import update as sa_update
-        await db.execute(
-            sa_update(RefreshToken)
-            .where(RefreshToken.user_id == user.id, RefreshToken.revoked == False)
-            .values(revoked=True)
-        )
-        db.add(RefreshToken(
-            user_id=user.id,
-            token_hash=tok_hash,
-            expires_at=tok_expires,
-        ))
-        await db.commit()
-        logger.info(f"   ✅ Refresh token stored (expires {tok_expires})")
-
-        # Build response with token in fragment (safer than query param)
-        response = RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/callback#{urlencode({'token': jwt_token})}",
-            status_code=302,
-        )
-
-        # Set refresh token as HTTP-only cookie (30 days)
-        response.set_cookie(
-            "refresh_token",
-            ss_refresh_token,
-            **_cookie_kwargs(max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600),
-        )
-
-        # Clean up OIDC cookies
-        response.delete_cookie("oidc_state", path="/")
-        response.delete_cookie("oidc_code_verifier", path="/")
-
-        logger.info(f"✓ Auth successful for {user.email}")
-        return response
-
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Callback error: {error_msg}", exc_info=True)
-        return RedirectResponse(
-            url=f"{frontend_url.rstrip('/')}/auth/error?{urlencode({'message': error_msg})}",
-            status_code=302,
-        )
+    # Redirect back to frontend callback with code and state
+    logger.info(f"   ✅ Redirecting to frontend callback")
+    return RedirectResponse(
+        url=f"{frontend_url.rstrip('/')}/auth/callback?{urlencode({'code': code, 'state': state})}",
+        status_code=302,
+    )
 
 
 # ============================================================================

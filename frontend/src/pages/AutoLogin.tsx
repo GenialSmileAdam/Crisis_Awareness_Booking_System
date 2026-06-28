@@ -37,8 +37,7 @@ export default function AutoLogin() {
         navigate("/student", { replace: true });
       }
     } else {
-      // Silent SSO: treat the visitor as if Campus One may already know them.
-      window.location.href = `${API_URL}/api/auth/authorize?silent=true`;
+      navigate("/login", { replace: true });
     }
   }, [isAuthenticated, isLoading, user, navigate]);
 
