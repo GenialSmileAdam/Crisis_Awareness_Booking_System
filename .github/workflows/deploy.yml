@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.0
@@ -22,18 +22,44 @@ jobs:
           script: |
             set -e
 
+            echo "=== Navigating to project directory ==="
             cd /home/ubuntu/Crisis_Awareness_Booking_System
 
-            git pull origin main
+            echo "=== Fetching and resetting repository to main branch ==="
+            git fetch origin main
+            git reset --hard origin/main
 
-            source venv/bin/activate
+            echo "=== Activating virtual environment ==="
+            if [ -f venv/bin/activate ]; then
+                source venv/bin/activate
+            elif [ -f venv/Scripts/activate ]; then
+                source venv/Scripts/activate
+            else
+                echo "Warning: venv activation script not found. Trying to create one..."
+                python3 -m venv venv
+                source venv/bin/activate
+            fi
 
+            echo "=== Upgrading pip and installing requirements ==="
             pip install --upgrade pip
             pip install -r backend/requirements.txt
 
+            echo "=== Running database migrations ==="
             cd backend
             ../venv/bin/alembic upgrade head
 
-            sudo systemctl restart psyunit
+            echo "=== Restarting application service ==="
+            if ! sudo systemctl restart psyunit; then
+                echo "Error: Failed to restart psyunit service. Printing systemd logs:"
+                sudo journalctl -u psyunit -n 50 --no-pager
+                exit 1
+            fi
 
-            sudo systemctl status psyunit --no-pager
+            echo "=== Checking service status ==="
+            if ! sudo systemctl status psyunit --no-pager; then
+                echo "Error: psyunit service is not running properly. Printing systemd logs:"
+                sudo journalctl -u psyunit -n 50 --no-pager
+                exit 1
+            fi
+
+            echo "=== Deployment completed successfully! ==="
