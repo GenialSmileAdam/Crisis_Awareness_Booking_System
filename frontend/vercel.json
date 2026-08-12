@@ -1,12 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/api/:path*",
-      "destination": "https://safespace-api.duckdns.org/api/:path*"
-    },
-    {
       "source": "/api/:path*",
-      "destination": "https://safespace-api.duckdns.org/:path*"
+      "destination": "https://safespace-api.duckdns.org/api/:path*"
     },
     {
       "source": "/(.*)",
