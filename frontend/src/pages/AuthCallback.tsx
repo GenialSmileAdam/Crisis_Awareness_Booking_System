@@ -55,7 +55,7 @@ export default function AuthCallback() {
         }
 
         const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-        const response = await fetch(`${API_URL}/api/auth/exchange`, {
+        const response = await fetch(`${API_URL}/auth/exchange`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
