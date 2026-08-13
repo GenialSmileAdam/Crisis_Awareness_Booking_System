@@ -35,3 +35,4 @@ backend/.env.*
 
 # Claude Code worktrees and temporary files
 .claude/worktrees/
+venv/

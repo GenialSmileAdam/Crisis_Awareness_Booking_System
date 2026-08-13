@@ -29,20 +29,16 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== Activating virtual environment ==="
-            if [ -f venv/bin/activate ]; then
-                source venv/bin/activate
-            elif [ -f venv/Scripts/activate ]; then
-                source venv/Scripts/activate
-            else
-                echo "Warning: venv activation script not found. Trying to create one..."
+            echo "=== Ensuring virtual environment exists ==="
+            if [ ! -f venv/bin/python ]; then
+                echo "venv missing or broken, recreating..."
+                rm -rf venv
                 python3 -m venv venv
-                source venv/bin/activate
             fi
 
             echo "=== Upgrading pip and installing requirements ==="
-            pip install --upgrade pip
-            pip install -r backend/requirements.txt
+            venv/bin/pip install --upgrade pip
+            venv/bin/pip install -r backend/requirements.txt
 
             echo "=== Running database migrations ==="
             cd backend
