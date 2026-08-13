@@ -9,7 +9,7 @@ export function useAdminResetPassword(): UseMutationResult<{ message: string }, 
     mutationFn: async (staffId: string) => {
       const response = await apiRequest<{ success: boolean; data: null }>(
         "POST",
-        "/api/auth/admin/reset-staff-password",
+        "/auth/admin/reset-staff-password",
         { staff_id: staffId }
       );
       return { message: `Password reset link sent` };
@@ -28,7 +28,7 @@ export function useRequestPasswordReset(): UseMutationResult<{ message: string }
     mutationFn: async (email: string) => {
       const response = await apiRequest<{ success: boolean; data: null }>(
         "POST",
-        "/api/auth/request-password-reset",
+        "/auth/request-password-reset",
         { email }
       );
       return { message: "Password reset link sent if account exists" };
@@ -47,7 +47,7 @@ export function useResetPassword(): UseMutationResult<{ message: string }, Error
     mutationFn: async (data: { token: string; new_password: string }) => {
       const response = await apiRequest<{ success: boolean; data: null }>(
         "POST",
-        "/api/auth/reset-password",
+        "/auth/reset-password",
         data
       );
       return { message: "Password reset successfully" };

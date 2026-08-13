@@ -14,7 +14,7 @@ export function useCrisisHotlineConfig(): UseQueryResult<CrisisHotlineConfig> {
   return useQuery({
     queryKey: ["public", "crisis-hotline"],
     queryFn: async () => {
-      return apiRequest<CrisisHotlineConfig>("GET", "/api/public/crisis-hotline");
+      return apiRequest<CrisisHotlineConfig>("GET", "/public/crisis-hotline");
     },
     staleTime: 1000 * 60 * 60, // 1 hour
     gcTime: 1000 * 60 * 60 * 24, // 24 hours
