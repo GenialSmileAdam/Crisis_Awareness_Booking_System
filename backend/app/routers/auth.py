@@ -219,7 +219,6 @@ async def generate_pkce():
     })
 
 
-@router.get("/api/api/auth/callback")
 @router.get("/api/auth/callback")
 async def callback(
     code: str = None,
