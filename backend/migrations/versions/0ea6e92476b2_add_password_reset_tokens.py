@@ -35,7 +35,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_password_reset_tokens_user_id'), 'password_reset_tokens', ['user_id'], unique=False)
     op.drop_index(op.f('ix_consent_student_id'), table_name='consent')
     op.create_index(op.f('ix_consent_student_id'), 'consent', ['student_id'], unique=True)
-    op.drop_index(op.f('idx_availability_psychologist_date'), table_name='psychologist_availability')
+    op.execute("DROP INDEX IF EXISTS idx_availability_psychologist_date")
     op.drop_constraint(op.f('uq_safety_plans_student_id'), 'safety_plans', type_='unique')
     op.drop_index(op.f('ix_safety_plans_student_id'), table_name='safety_plans')
     op.create_index(op.f('ix_safety_plans_student_id'), 'safety_plans', ['student_id'], unique=True)
