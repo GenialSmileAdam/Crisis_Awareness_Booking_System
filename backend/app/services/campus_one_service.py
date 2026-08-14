@@ -51,11 +51,15 @@ class CampusOneService:
             staff_type = StaffType.psychologist
         elif primary_role == "therapist" or "therapist" in roles:
             staff_type = StaffType.psychologist
+        elif "mentor" in custom_roles or "mentor" in roles:
+            staff_type = StaffType.psychologist
         elif "counselor" in custom_roles or "counselor" in roles:
-            staff_type = StaffType.counselor
+            staff_type = StaffType.psychologist
         elif "unit_head" in roles or "unit_admin" in roles or "unit_head" in custom_roles or "unit_admin" in custom_roles:
             staff_type = StaffType.administrator
         elif primary_role == "administrator" or "administrator" in roles:
+            staff_type = StaffType.administrator
+        elif "admin" in roles or primary_role == "admin" or "admin" in custom_roles:
             staff_type = StaffType.administrator
         else:
             staff_type = StaffType.support_staff
